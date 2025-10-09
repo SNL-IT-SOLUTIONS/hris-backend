@@ -18,6 +18,7 @@ class DepartmentController extends Controller
             'head:id,first_name,last_name,email,role_id',
             'head.role:id,role_name'
         ])
+            ->withCount('employees') // ✅ adds total employees count
             ->where('is_archived', 0)
             ->paginate($perPage);
 
@@ -28,7 +29,7 @@ class DepartmentController extends Controller
             ], 404);
         }
 
-        // Map departments with head details
+        // Map departments with head details and employee count
         $formattedDepartments = $departments->map(function ($dept) {
             return [
                 'id'              => $dept->id,
@@ -41,7 +42,7 @@ class DepartmentController extends Controller
                     'email'      => $dept->head->email,
                     'role_name'  => $dept->head->role ? $dept->head->role->role_name : null,
                 ] : null,
-
+                'total_employees' => $dept->employees_count, // ✅ total employees
                 'is_active'  => $dept->is_active,
                 'is_archived' => $dept->is_archived,
                 'created_at' => $dept->created_at,
@@ -60,6 +61,7 @@ class DepartmentController extends Controller
             ],
         ]);
     }
+
 
     /**
      * Get a single department by ID
