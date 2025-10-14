@@ -15,17 +15,78 @@ class EmployeeController extends Controller
     // ✅ Get all employees
     public function getEmployees(Request $request)
     {
-        $employees = Employee::with(['department', 'position', 'manager', 'supervisor'])
-            ->where('is_archived', false)
-            ->orderBy('last_name')
-            ->get();
+        $query = Employee::with(['department', 'position', 'manager', 'supervisor'])
+            ->where('is_archived', false);
 
+        // 🔎 Search
+        if ($request->has('search') && $request->search != '') {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'LIKE', "%$search%")
+                    ->orWhere('last_name', 'LIKE', "%$search%")
+                    ->orWhere('email', 'LIKE', "%$search%")
+                    ->orWhereHas('department', function ($dq) use ($search) {
+                        $dq->where('department_name', 'LIKE', "%$search%");
+                    })
+                    ->orWhereHas('position', function ($pq) use ($search) {
+                        $pq->where('position_name', 'LIKE', "%$search%");
+                    });
+            });
+        }
+
+        //  Filter by department
+        if ($request->has('department_id')) {
+            $query->where('department_id', $request->department_id);
+        }
+
+        //  Filter by position
+        if ($request->has('position_id')) {
+            $query->where('position_id', $request->position_id);
+        }
+
+        // 🔢 Normal Pagination (default: 10 per page)
+        $perPage = $request->input('per_page', 10);
+        $employees = $query->paginate($perPage);
+
+        if ($employees->isEmpty()) {
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'No employees found.',
+            ], 404);
+        }
+
+        // 🖼️ Add full URL for 201_file
+        $employees->getCollection()->transform(function ($emp) {
+            $emp->{'201_file'} = $emp->{'201_file'}
+                ? asset('storage/' . $emp->{'201_file'})
+                : null;
+            return $emp;
+        });
+
+        // 📊 Summary counts
+        $totalEmployees = Employee::where('is_archived', false)->count();
+        $activeEmployees = Employee::where('is_archived', false)->where('is_active', true)->count();
+        $inactiveEmployees = Employee::where('is_archived', false)->where('is_active', false)->count();
+
+        // ✅ Final Response
         return response()->json([
             'isSuccess' => true,
-            'message' => 'Employees retrieved successfully.',
-            'employees' => $employees
+            'message'   => 'Employees retrieved successfully.',
+            'employees' => $employees->items(),
+            'summary'   => [
+                'total_employees'    => $totalEmployees,
+                'active_employees'   => $activeEmployees,
+                'inactive_employees' => $inactiveEmployees,
+            ],
+            'pagination' => [
+                'current_page' => $employees->currentPage(),
+                'per_page'     => $employees->perPage(),
+                'total'        => $employees->total(),
+                'last_page'    => $employees->lastPage(),
+            ],
         ]);
     }
+
 
 
 
