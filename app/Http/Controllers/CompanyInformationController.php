@@ -8,10 +8,6 @@ use Illuminate\Support\Facades\Auth;
 
 class CompanyInformationController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth:sanctum');
-    }
 
     /**
      * Get the company information (single record).

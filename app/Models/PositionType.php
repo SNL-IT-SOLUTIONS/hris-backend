@@ -14,6 +14,7 @@ class PositionType extends Model
     protected $fillable = [
         'position_name',
         'description',
+        'department_id',
         'is_active',
         'is_archived',
     ];
@@ -22,4 +23,10 @@ class PositionType extends Model
         'is_active' => 'boolean',
         'is_archived' => 'boolean',
     ];
+
+    // PositionType.php
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
 }

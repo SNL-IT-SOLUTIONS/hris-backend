@@ -10,6 +10,9 @@ use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\PositionTypeController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\BenefitTypeController;
+use App\Http\Controllers\EmploymentTypeController;
+use App\Http\Controllers\WorkLocationController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -26,7 +29,7 @@ Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanct
 
 
 //COMPANY INFORMATION
-Route::controller(CompanyInformationController::class)->middleware(['auth:sanctum'])->group(function () {
+Route::controller(CompanyInformationController::class)->group(function () {
     Route::get('company-information', 'getCompanyInformation');
     Route::post('company-information/save', 'saveCompanyInformation');
 });
@@ -41,8 +44,33 @@ Route::controller(EmployeeController::class)->middleware(['auth:sanctum'])->grou
 });
 
 
+//SETUP Work Locations
+Route::controller(WorkLocationController::class)->group(function () {
+    Route::get('work-locations', 'getAllWorkLocations');
+    Route::get('work-locations/{id}', 'getWorkLocationById');
+    Route::post('create/work-locations', 'createWorkLocation');
+    Route::post('update/work-locations/{id}', 'updateWorkLocation');
+    Route::post('work-locations/{id}/archive', 'archiveWorkLocation');
+});
 
 
+//SETUP - EMPLOYMENT TYPES
+Route::controller(EmploymentTypeController::class)->group(function () {
+    Route::get('employment-types', 'getAllEmploymentTypes');
+    Route::get('employment-types/{id}', 'getEmploymentTypeById');
+    Route::post('create/employment-types', 'createEmploymentType');
+    Route::post('update/employment-types/{id}', 'updateEmploymentType');
+    Route::post('employment-types/{id}/archive', 'archiveEmploymentType');
+});
+
+//SETUP - BENEFIT TYPES
+Route::controller(BenefitTypeController::class)->group(function () {
+    Route::get('benefit-types', 'getBenefitTypes');
+    Route::get('benefit-types/{id}', 'getBenefitType');
+    Route::post('create/benefit-types', 'createBenefitType');
+    Route::post('update/benefit-types/{id}', 'updateBenefitType');
+    Route::post('benefit-types/{id}/archive', 'archiveBenefitType');
+});
 
 //SETUP - ROLES
 Route::controller(RoleController::class)->group(function () {

@@ -14,6 +14,7 @@ class Employee extends Authenticatable
     use HasApiTokens, Notifiable;
 
     protected $fillable = [
+        '201_file',
         'first_name',
         'last_name',
         'email',
@@ -22,6 +23,7 @@ class Employee extends Authenticatable
         'position_id',
         'base_salary',
         'hire_date',
+        'supervisor_id',
         'manager_id',
         'password',
         'is_active',
@@ -50,5 +52,10 @@ class Employee extends Authenticatable
     public function manager()
     {
         return $this->belongsTo(Employee::class, 'manager_id');
+    }
+
+    public function supervisor()
+    {
+        return $this->belongsTo(Employee::class, 'supervisor_id');
     }
 }

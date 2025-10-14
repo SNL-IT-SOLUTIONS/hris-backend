@@ -14,7 +14,8 @@ class PositionTypeController extends Controller
     {
         $perPage = $request->input('per_page', 10);
 
-        $positions = PositionType::where('is_archived', 0)
+        $positions = PositionType::with('department')
+            ->where('is_archived', 0)
             ->paginate($perPage);
 
         if ($positions->isEmpty()) {
@@ -66,6 +67,7 @@ class PositionTypeController extends Controller
         try {
             $validated = $request->validate([
                 'position_name' => 'required|string|max:150|unique:position_types,position_name',
+                'department_id' => 'required|exists:departments,id',
                 'description'   => 'nullable|string',
                 'is_active'     => 'nullable|boolean',
             ]);
@@ -106,6 +108,7 @@ class PositionTypeController extends Controller
             $validated = $request->validate([
                 'position_name' => 'sometimes|string|max:150|unique:position_types,position_name,' . $id,
                 'description'   => 'sometimes|nullable|string',
+                'department_id' => 'sometimes|exists:departments,id',
                 'is_active'     => 'sometimes|boolean',
             ]);
 

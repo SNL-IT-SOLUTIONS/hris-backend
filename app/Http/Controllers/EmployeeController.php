@@ -15,7 +15,7 @@ class EmployeeController extends Controller
     // ✅ Get all employees
     public function getEmployees(Request $request)
     {
-        $employees = Employee::with(['department', 'position', 'manager'])
+        $employees = Employee::with(['department', 'position', 'manager', 'supervisor'])
             ->where('is_archived', false)
             ->orderBy('last_name')
             ->get();
@@ -23,7 +23,7 @@ class EmployeeController extends Controller
         return response()->json([
             'isSuccess' => true,
             'message' => 'Employees retrieved successfully.',
-            'data' => $employees
+            'employees' => $employees
         ]);
     }
 
@@ -33,6 +33,7 @@ class EmployeeController extends Controller
     public function createEmployee(Request $request)
     {
         $validated = $request->validate([
+            '201_file' => 'required|file|mimes:pdf,doc,docx,jpg,png|max:2048', // updated to handle file upload
             'first_name' => 'required|string|max:100',
             'last_name' => 'required|string|max:100',
             'email' => 'required|email|unique:employees,email',
@@ -41,9 +42,16 @@ class EmployeeController extends Controller
             'position_id' => 'nullable|exists:position_types,id',
             'base_salary' => 'nullable|numeric|min:0',
             'hire_date' => 'nullable|date',
-            'manager_id' => 'nullable|exists:users,id',
+            'manager_id' => 'nullable|exists:employees,id',
+            'supervisor_id' => 'nullable|exists:employees,id',
             'password' => 'required|string|min:8',
         ]);
+
+        // Save file if uploaded
+        $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
+        if ($filePath) {
+            $validated['201_file'] = $filePath;
+        }
 
         // Hash the password before saving
         $plainPassword = $validated['password'];
@@ -58,11 +66,10 @@ class EmployeeController extends Controller
             Log::error('Employee email failed: ' . $e->getMessage());
         }
 
-
         return response()->json([
             'isSuccess' => true,
             'message' => 'Employee created successfully and email sent.',
-            'data' => $employee
+            'employees' => $employee
         ], 201);
     }
 
@@ -77,6 +84,7 @@ class EmployeeController extends Controller
         }
 
         $validated = $request->validate([
+            '201_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,png|max:2048',
             'first_name' => 'sometimes|string|max:100',
             'last_name' => 'sometimes|string|max:100',
             'email' => 'sometimes|email|unique:employees,email,' . $employee->id,
@@ -86,16 +94,32 @@ class EmployeeController extends Controller
             'base_salary' => 'nullable|numeric|min:0',
             'hire_date' => 'nullable|date',
             'manager_id' => 'nullable|exists:employees,id',
+            'supervisor_id' => 'nullable|exists:employees,id',
             'password' => 'nullable|string|min:8',
             'is_active' => 'boolean',
         ]);
+
+        // If a new file is uploaded, save and replace the old one
+        $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
+        if ($filePath) {
+            // Delete old file if exists
+            if ($employee->{'201_file'} && file_exists(public_path($employee->{'201_file'}))) {
+                unlink(public_path($employee->{'201_file'}));
+            }
+            $validated['201_file'] = $filePath;
+        }
+
+        // Update password if provided
+        if (!empty($validated['password'])) {
+            $validated['password'] = Hash::make($validated['password']);
+        }
 
         $employee->update($validated);
 
         return response()->json([
             'isSuccess' => true,
             'message' => 'Employee updated successfully.',
-            'data' => $employee
+            'employees' => $employee
         ]);
     }
 
@@ -114,5 +138,30 @@ class EmployeeController extends Controller
             'isSuccess' => true,
             'message' => 'Employee archived successfully.'
         ]);
+    }
+
+    //HELPERS
+    private function saveFileToPublic(Request $request, $field, $prefix)
+    {
+        if ($request->hasFile($field)) {
+            $file = $request->file($field);
+
+            // Directory inside /public
+            $directory = public_path('hris_files');
+            if (!file_exists($directory)) {
+                mkdir($directory, 0755, true);
+            }
+
+            // Generate filename: prefix + unique id + original extension
+            $filename = $prefix . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+
+            // Move file to public/hris_files
+            $file->move($directory, $filename);
+
+            // Return relative path (to store in DB)
+            return 'hris_files/' . $filename;
+        }
+
+        return null;
     }
 }
