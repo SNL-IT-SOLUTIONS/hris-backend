@@ -18,6 +18,7 @@ class JobPosting extends Model
         'status',
         'posted_date',
         'deadline_date',
+        'is_archived',
     ];
 
     // Relationships

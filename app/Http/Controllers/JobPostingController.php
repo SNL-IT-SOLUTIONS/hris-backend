@@ -33,10 +33,10 @@ class JobPostingController extends Controller
                 'data' => $job,
             ], 201);
         } catch (\Exception $e) {
-            Log::error('Error creating job posting: ' . $e->getMessage());
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to create job posting.',
+                'error' => $e->getMessage(), // 👈 Show actual cause
             ], 500);
         }
     }

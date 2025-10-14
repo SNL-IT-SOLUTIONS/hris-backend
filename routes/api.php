@@ -13,6 +13,8 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\BenefitTypeController;
 use App\Http\Controllers\EmploymentTypeController;
 use App\Http\Controllers\WorkLocationController;
+use App\Http\Controllers\JobPostingController;
+use App\Http\Controllers\ApplicantController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -26,6 +28,26 @@ use App\Http\Controllers\WorkLocationController;
 //AUTHENTICATION
 Route::post('login', [AuthController::class, 'login']);
 Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+
+
+//RECRUITMENT - JOB POSTINGS
+Route::controller(JobPostingController::class)->group(function () {
+    Route::get('job-postings', 'getJobPostings');
+    Route::post('create/job-postings', 'createJobPosting');
+    Route::post('update/job-postings/{id}', 'updateJobPosting');
+    Route::post('archive/job-postings/{id}', 'archiveJobPosting');
+});
+
+
+//APPLICANTS
+Route::controller(ApplicantController::class)->group(function () {
+    Route::post('create/applicants', 'createApplicant');
+    Route::get('applicants', 'getApplicants');
+    Route::get('applicants/{id}', 'getApplicantById');
+    Route::post('applicants/{id}/move', 'moveStage');
+    Route::post('update/applicants/{id}', 'updateApplicant');
+    Route::post('applicants/{id}/archive', 'archiveApplicant');
+});
 
 
 //COMPANY INFORMATION
