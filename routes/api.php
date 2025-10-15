@@ -15,6 +15,7 @@ use App\Http\Controllers\EmploymentTypeController;
 use App\Http\Controllers\WorkLocationController;
 use App\Http\Controllers\JobPostingController;
 use App\Http\Controllers\ApplicantController;
+use App\Http\Controllers\InterviewController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -36,6 +37,15 @@ Route::controller(JobPostingController::class)->group(function () {
     Route::post('create/job-postings', 'createJobPosting');
     Route::post('update/job-postings/{id}', 'updateJobPosting');
     Route::post('archive/job-postings/{id}', 'archiveJobPosting');
+});
+
+//RECRUITMENT - INTERVIEWS
+Route::controller(InterviewController::class)->group(function () {
+    Route::post('applicants/{applicantId}/schedule-interview', 'scheduleInterview');
+    Route::get('interviews', 'getAllInterviews');
+    Route::get('applicants/{applicantId}/interviews', 'getInterviews');
+    Route::post('interviews/{id}/update', 'updateInterview');
+    Route::post('interviews/{id}/cancel', 'cancelInterview');
 });
 
 

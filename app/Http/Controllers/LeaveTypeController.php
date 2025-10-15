@@ -58,7 +58,7 @@ class LeaveTypeController extends Controller
     }
 
     // ================================
-    // ✅ Create Leave Type
+    // Create Leave Type
     // ================================
     public function createLeaveType(Request $request)
     {
