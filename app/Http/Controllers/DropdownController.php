@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Department;
 use App\Models\WorkLocation;
 use App\Models\Employee;
+use App\Models\PositionType;
 
 class DropdownController extends Controller
 {
@@ -69,6 +70,35 @@ class DropdownController extends Controller
                     return [
                         'id' => $emp->id,
                         'name' => "{$emp->first_name} {$emp->last_name}"
+                    ];
+                });
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Employee dropdown retrieved successfully.',
+                'data' => $employees
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load employees dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function getPostionTypesDropdown()
+    {
+        try {
+            $employees = PositionType::select('id', 'position_name')
+                ->where('is_archived', 0)
+                ->orderBy('position_name', 'asc')
+                ->get()
+                ->map(function ($position) {
+                    return [
+                        'id' => $position->id,
+                        'position_name' => "$position->position_name"
                     ];
                 });
 
