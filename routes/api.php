@@ -82,8 +82,8 @@ Route::controller(EmployeeController::class)->middleware(['auth:sanctum'])->grou
 
 //SETUP Work Locations
 Route::controller(WorkLocationController::class)->group(function () {
-    Route::get('work-locations', 'getAllWorkLocations');
-    Route::get('work-locations/{id}', 'getWorkLocationById');
+    Route::get('work-locations', 'getWorkLocations');
+    Route::get('work-locations/{id}', 'getWorkLocation');
     Route::post('create/work-locations', 'createWorkLocation');
     Route::post('update/work-locations/{id}', 'updateWorkLocation');
     Route::post('work-locations/{id}/archive', 'archiveWorkLocation');
@@ -92,8 +92,8 @@ Route::controller(WorkLocationController::class)->group(function () {
 
 //SETUP - EMPLOYMENT TYPES
 Route::controller(EmploymentTypeController::class)->group(function () {
-    Route::get('employment-types', 'getAllEmploymentTypes');
-    Route::get('employment-types/{id}', 'getEmploymentTypeById');
+    Route::get('employment-types', 'getEmploymentTypes');
+    Route::get('employment-types/{id}', 'getEmploymentType');
     Route::post('create/employment-types', 'createEmploymentType');
     Route::post('update/employment-types/{id}', 'updateEmploymentType');
     Route::post('employment-types/{id}/archive', 'archiveEmploymentType');
