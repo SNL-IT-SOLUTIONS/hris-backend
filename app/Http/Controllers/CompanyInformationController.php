@@ -15,8 +15,15 @@ class CompanyInformationController extends Controller
     public function getCompanyInformation()
     {
         $info = CompanyInformation::first(); // Only one record
+
+        if ($info && $info->company_logo) {
+            // Convert to full URL using asset() since it's saved under /public/hris_files
+            $info->company_logo = asset($info->company_logo);
+        }
+
         return response()->json($info);
     }
+
 
     /**
      * Create or Update the company information (single record).
