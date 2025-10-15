@@ -6,6 +6,10 @@ use App\Models\Applicant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Employee;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\EmployeeCreated;
+use Illuminate\Support\Facades\Hash;
 
 class ApplicantController extends Controller
 {
@@ -56,7 +60,7 @@ class ApplicantController extends Controller
 
 
     /**
-     * ✅ Get all applicants
+     *  Get all applicants
      */
     public function getApplicants(Request $request)
     {
@@ -81,7 +85,7 @@ class ApplicantController extends Controller
     }
 
     /**
-     * ✅ Get a single applicant by ID
+     *  Get a single applicant by ID
      */
     public function getApplicantById($id)
     {
@@ -108,7 +112,122 @@ class ApplicantController extends Controller
 
 
     /**
-     * ✅ Update applicant status (Pending → Reviewed → Interview → etc.)
+     * Get all hired applicants
+     */
+    public function getHiredApplicants()
+    {
+        try {
+            $hiredApplicants = Applicant::with('jobPosting')
+                ->where('stage', 'hired')
+                ->where('is_archived', false)
+                ->orderBy('updated_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Hired applicants retrieved successfully.',
+                'data'      => $hiredApplicants,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching hired applicants: ' . $e->getMessage());
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to retrieve hired applicants.',
+            ], 500);
+        }
+    }
+
+
+    public function getHiredApplicantById($id)
+    {
+        try {
+            $applicant = Applicant::with('jobPosting')
+                ->where('id', $id)
+                ->where('stage', 'hired')
+                ->where('is_archived', false)
+                ->firstOrFail();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Hired applicant retrieved successfully.',
+                'data'      => $applicant,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching hired applicant: ' . $e->getMessage());
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to retrieve hired applicant.',
+            ], 500);
+        }
+    }
+
+    public function hireApplicant(Request $request, $applicantId)
+    {
+        try {
+            // Validate form data
+            $validated = $request->validate([
+                '201_file'       => 'nullable|file|mimes:pdf,doc,docx,jpg,png|max:2048',
+                'department_id'  => 'required|exists:departments,id',
+                'position_id'    => 'required|exists:position_types,id',
+                'base_salary'    => 'required|numeric|min:0',
+                'hire_date'      => 'required|date',
+                'password'       => 'required|string|min:8',
+                'manager_id'     => 'nullable|exists:employees,id',
+                'supervisor_id'  => 'nullable|exists:employees,id',
+            ]);
+
+            // Find applicant record
+            $applicant = Applicant::findOrFail($applicantId);
+
+            // Save 201 file if provided
+            $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
+            if ($filePath) {
+                $validated['201_file'] = $filePath;
+            }
+
+            // ✅ Copy applicant's resume
+            $validated['resume'] = $applicant->resume;
+
+            // Auto-fill from applicant
+            $validated['first_name'] = $applicant->first_name;
+            $validated['last_name']  = $applicant->last_name;
+            $validated['email']      = $applicant->email;
+            $validated['phone']      = $applicant->phone_number;
+            $validated['password']   = Hash::make($validated['password']);
+
+            // Create employee
+            $employee = Employee::create($validated);
+
+            // Update applicant stage/status
+            $applicant->update(['stage' => 'hired']);
+
+            // Send welcome email
+            try {
+                Mail::to($employee->email)->send(new EmployeeCreated($employee, $request->password));
+            } catch (\Exception $e) {
+                Log::warning('Failed to send hire email: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Applicant successfully hired and added to employee list.',
+                'data'      => $employee
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Error hiring applicant: ' . $e->getMessage());
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to hire applicant.'
+            ], 500);
+        }
+    }
+
+
+
+
+
+    /**
+     * Update applicant status (Pending → Reviewed → Interview → etc.)
      */
     public function updateApplicantStatus(Request $request, $id)
     {
@@ -135,7 +254,7 @@ class ApplicantController extends Controller
     }
 
     /**
-     * ✅ Move applicant to another recruitment stage
+     * Move applicant to another recruitment stage
      */
     public function moveStage(Request $request, $id)
     {
@@ -162,7 +281,7 @@ class ApplicantController extends Controller
     }
 
     /**
-     * ✅ Archive (not delete) an applicant
+     *  Archive (not delete) an applicant
      */
     public function archiveApplicant($id)
     {

@@ -16,6 +16,7 @@ use App\Http\Controllers\WorkLocationController;
 use App\Http\Controllers\JobPostingController;
 use App\Http\Controllers\ApplicantController;
 use App\Http\Controllers\InterviewController;
+use App\Http\Controllers\DropdownController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -44,8 +45,10 @@ Route::controller(InterviewController::class)->group(function () {
     Route::post('applicants/{applicantId}/schedule-interview', 'scheduleInterview');
     Route::get('interviews', 'getAllInterviews');
     Route::get('applicants/{applicantId}/interviews', 'getInterviews');
+    Route::post('interviews/{id}/feedback', 'submitFeedback');
     Route::post('interviews/{id}/update', 'updateInterview');
     Route::post('interviews/{id}/cancel', 'cancelInterview');
+    Route::post('interviews/{id}/noshow', 'noshowInterview');
 });
 
 
@@ -55,6 +58,7 @@ Route::controller(ApplicantController::class)->group(function () {
     Route::get('applicants', 'getApplicants');
     Route::get('applicants/{id}', 'getApplicantById');
     Route::post('applicants/{id}/move', 'moveStage');
+    Route::post('applicants/{id}/hire', 'hireApplicant');
     Route::post('update/applicants/{id}', 'updateApplicant');
     Route::post('applicants/{id}/archive', 'archiveApplicant');
 });
@@ -147,4 +151,12 @@ Route::controller(PositionTypeController::class)->group(function () {
     Route::post('create/position-types', 'createPositionType');
     Route::post('update/position-types/{id}', 'updatePositionType');
     Route::post('position-types/{id}/archive', 'archivePositionType');
+});
+
+
+//DROPDOWNS
+Route::controller(DropdownController::class)->group(function () {
+    Route::get('dropdown/departments', 'getDepartments');
+    Route::get('dropdown/work-locations', 'getWorkLocations');
+    Route::get('dropdown/employees', 'getEmployeesDropdown');
 });

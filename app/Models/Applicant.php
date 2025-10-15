@@ -24,6 +24,7 @@ class Applicant extends Model
         'experience_years',
         'rating',
         'stage',
+        'resume',
         'status',
         'is_archived',
     ];

@@ -3,8 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Interview;
+use App\Models\Applicant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Models\Employee;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\EmployeeCreated;
+use Illuminate\Support\Facades\Hash;
 
 class InterviewController extends Controller
 {
@@ -15,33 +20,45 @@ class InterviewController extends Controller
     {
         try {
             $validated = $request->validate([
-                'interviewer'   => 'required|string|max:150',
-                'scheduled_at'  => 'required|date|after:now',
-                'mode'          => 'nullable|in:online,in-person',
-                'notes'         => 'nullable|string',
+                'interviewer_id' => 'required|exists:employees,id',
+                'scheduled_at'   => 'required|date|after:now',
+                'mode'           => 'nullable|in:online,in-person',
+                'notes'          => 'nullable|string',
+                'location_link'  => 'nullable|string',
             ]);
 
+            // Fetch applicant to get stage and position
+            $applicant = Applicant::findOrFail($applicantId);
+
             $validated['applicant_id'] = $applicantId;
+            $validated['stage'] = $applicant->stage;
+            $validated['position'] = optional($applicant->jobPosting)->title ?? 'N/A';
+            $validated['status'] = 'scheduled';
 
             $interview = Interview::create($validated);
 
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Interview scheduled successfully!',
-                'data'      => $interview,
+                'data'      => $interview->load(['applicant', 'interviewer']),
             ], 201);
         } catch (\Exception $e) {
             Log::error('Error scheduling interview: ' . $e->getMessage());
             return response()->json([
                 'isSuccess' => false,
                 'message'   => 'Failed to schedule interview.',
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }
+
+    /**
+     * Retrieve all interviews with applicant and interviewer details
+     */
     public function getAllInterviews()
     {
         try {
-            $interviews = Interview::with('applicant') // optional if you have a relation
+            $interviews = Interview::with(['applicant', 'interviewer'])
                 ->orderBy('scheduled_at', 'desc')
                 ->get();
 
@@ -59,14 +76,14 @@ class InterviewController extends Controller
         }
     }
 
-
     /**
      * Get all interviews for a specific applicant
      */
     public function getInterviews($applicantId)
     {
         try {
-            $interviews = Interview::where('applicant_id', $applicantId)
+            $interviews = Interview::with('interviewer')
+                ->where('applicant_id', $applicantId)
                 ->orderBy('scheduled_at', 'desc')
                 ->get();
 
@@ -91,11 +108,12 @@ class InterviewController extends Controller
     {
         try {
             $validated = $request->validate([
-                'interviewer'   => 'nullable|string|max:150',
-                'scheduled_at'  => 'nullable|date|after:now',
-                'mode'          => 'nullable|in:online,in-person',
-                'notes'         => 'nullable|string',
-                'status'        => 'nullable|in:scheduled,completed,cancelled',
+                'interviewer_id' => 'nullable|exists:employees,id',
+                'scheduled_at'   => 'nullable|date|after:now',
+                'mode'           => 'nullable|in:online,in-person',
+                'notes'          => 'nullable|string',
+                'status'         => 'nullable|in:scheduled,completed,cancelled',
+                'location_link'  => 'nullable|string',
             ]);
 
             $interview = Interview::findOrFail($id);
@@ -104,7 +122,7 @@ class InterviewController extends Controller
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Interview updated successfully.',
-                'data'      => $interview,
+                'data'      => $interview->load(['applicant', 'interviewer']),
             ]);
         } catch (\Exception $e) {
             Log::error('Error updating interview: ' . $e->getMessage());
@@ -115,8 +133,67 @@ class InterviewController extends Controller
         }
     }
 
+
+    public function submitFeedback(Request $request, $interviewId)
+    {
+        try {
+            $validated = $request->validate([
+                'overall_rating'       => 'required|in:1,2,3,4,5',
+                'technical_skills'     => 'required|in:1,2,3,4,5',
+                'communication'        => 'required|in:1,2,3,4,5',
+                'cultural_fit'         => 'required|in:1,2,3,4,5',
+                'problem_solving'      => 'required|in:1,2,3,4,5',
+                'experience_level'     => 'required|in:1,2,3,4,5',
+                'recommendation'       => 'required|in:hire,hold,reject',
+                'key_strengths'        => 'nullable|string',
+                'areas_for_improvement' => 'nullable|string',
+                'detailed_notes'       => 'nullable|string',
+            ]);
+
+            $interview = Interview::findOrFail($interviewId);
+
+            // Mark interview as completed when feedback is submitted
+            $interview->update(['status' => 'completed']);
+
+            $feedback = $interview->feedback()->create($validated);
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Interview feedback submitted successfully.',
+                'data'      => $feedback,
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Error submitting feedback: ' . $e->getMessage());
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to submit feedback.',
+            ], 500);
+        }
+    }
+
+
+
+    public function noshowInterview($id)
+    {
+        try {
+            $interview = Interview::findOrFail($id);
+            $interview->update(['status' => 'no show']);
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Interview cancelled successfully.',
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error cancelling interview: ' . $e->getMessage());
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to cancel interview.',
+            ], 500);
+        }
+    }
+
     /**
-     * Delete (or cancel) an interview
+     * Cancel an interview (soft cancel via status)
      */
     public function cancelInterview($id)
     {

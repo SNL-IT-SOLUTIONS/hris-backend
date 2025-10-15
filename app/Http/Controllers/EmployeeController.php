@@ -55,11 +55,18 @@ class EmployeeController extends Controller
             ], 404);
         }
 
-        // 🖼️ Add full URL for 201_file
+        // 🖼️ Add full URLs for file paths
         $employees->getCollection()->transform(function ($emp) {
+            // Convert 201_file to full URL
             $emp->{'201_file'} = $emp->{'201_file'}
                 ? asset('storage/' . $emp->{'201_file'})
                 : null;
+
+            // Convert resume to full URL
+            $emp->resume = $emp->resume
+                ? asset('storage/' . $emp->resume)
+                : null;
+
             return $emp;
         });
 

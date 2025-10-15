@@ -25,6 +25,7 @@ class Employee extends Authenticatable
         'hire_date',
         'supervisor_id',
         'manager_id',
+        'resume',
         'password',
         'is_active',
         'is_archived',
