@@ -12,6 +12,8 @@ class JobPosting extends Model
     protected $fillable = [
         'title',
         'department_id',
+        'work_type',
+        'employment_type',
         'location',
         'salary_range',
         'description',
