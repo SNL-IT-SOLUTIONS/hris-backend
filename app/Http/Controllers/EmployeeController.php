@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\EmployeeCreated;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use App\Models\Leave;
 
 class EmployeeController extends Controller
 {
@@ -209,6 +210,45 @@ class EmployeeController extends Controller
             'message' => 'Employee archived successfully.'
         ]);
     }
+
+
+    //Request Leave
+    public function requestLeave(Request $request)
+    {
+        try {
+            // ✅ Validate input
+            $validated = $request->validate([
+                'employee_id'   => 'required|exists:employees,id',
+                'leave_type'    => 'required|string|max:100', // e.g., Vacation, Sick, Emergency
+                'start_date'    => 'required|date|after_or_equal:today',
+                'end_date'      => 'required|date|after_or_equal:start_date',
+                'reason'        => 'nullable|string|max:500',
+            ]);
+
+            // Optional: Calculate number of days
+            $days = (new \DateTime($validated['start_date']))->diff(new \DateTime($validated['end_date']))->days + 1;
+            $validated['total_days'] = $days;
+            $validated['status'] = 'Pending'; // default status
+
+            // ✅ Save to DB (assuming you have a Leave model + table)
+            $leave = Leave::create($validated);
+
+            Log::info("Leave request created for employee ID {$validated['employee_id']} ({$days} days)");
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Leave request submitted successfully.',
+                'leave'     => $leave,
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Error submitting leave request: ' . $e->getMessage());
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to submit leave request.',
+            ], 500);
+        }
+    }
+
 
     //HELPERS
     private function saveFileToPublic(Request $request, $field, $prefix)
