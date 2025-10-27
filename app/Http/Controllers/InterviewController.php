@@ -6,10 +6,7 @@ use App\Models\Interview;
 use App\Models\Applicant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use App\Models\Employee;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\EmployeeCreated;
-use Illuminate\Support\Facades\Hash;
+
 
 class InterviewController extends Controller
 {

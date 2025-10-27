@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\Department;
 use App\Models\WorkLocation;
 use App\Models\Employee;
