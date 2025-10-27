@@ -6,15 +6,34 @@ use App\Models\Attendance;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class AttendanceController extends Controller
 {
     /**
+     * Display a listing of all attendance records.
+     */
+    public function getAllAttendances()
+    {
+        $attendances = Attendance::all();
+        return response()->json([
+            'isSuccess' => true,
+            'data' => $attendances,
+        ]);
+    }
+
+
+
+
+
+    /**
      * Clock In
      */
+
+
     public function clockIn(Request $request)
     {
-        $employeeId = $request->employee_id;
+        $employeeId = Auth::id(); // ✅ Get the logged-in user's ID
 
         $existing = Attendance::where('employee_id', $employeeId)
             ->whereDate('clock_in', Carbon::today())
@@ -36,12 +55,9 @@ class AttendanceController extends Controller
         ]);
     }
 
-    /**
-     * Clock Out
-     */
     public function clockOut(Request $request)
     {
-        $employeeId = $request->employee_id;
+        $employeeId = Auth::id(); // ✅ Logged-in user again
 
         $attendance = Attendance::where('employee_id', $employeeId)
             ->whereDate('clock_in', Carbon::today())
@@ -49,6 +65,10 @@ class AttendanceController extends Controller
 
         if (!$attendance) {
             return response()->json(['message' => 'You have not clocked in yet.'], 400);
+        }
+
+        if ($attendance->clock_out) {
+            return response()->json(['message' => 'Already clocked out today.'], 400);
         }
 
         $attendance->clock_out = Carbon::now();
@@ -60,6 +80,7 @@ class AttendanceController extends Controller
             'data' => $attendance,
         ]);
     }
+
 
     /**
      * Dashboard Summary
