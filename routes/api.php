@@ -59,6 +59,8 @@ Route::controller(ApplicantController::class)->group(function () {
     Route::post('create/applicants', 'createApplicant');
     Route::get('applicants', 'getApplicants');
     Route::get('applicants/{id}', 'getApplicantById');
+    Route::get('hired-applicants', 'getHiredApplicants');
+    Route::get('hired-applicants/{id}', 'getHiredApplicantById');
     Route::post('applicants/{id}/move', 'moveStage');
     Route::post('applicants/{id}/hire', 'hireApplicant');
     Route::post('update/applicants/{id}', 'updateApplicant');
