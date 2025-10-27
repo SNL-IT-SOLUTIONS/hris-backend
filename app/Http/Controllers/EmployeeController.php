@@ -120,13 +120,20 @@ class EmployeeController extends Controller
         $plainPassword = $validated['password'];
         $validated['password'] = Hash::make($plainPassword);
 
+        // ✅ Generate automatic employee_id (e.g. EMP-2025-0001)
+        $latestEmployee = Employee::latest('id')->first();
+        $nextNumber = $latestEmployee ? $latestEmployee->id + 1 : 1;
+        $year = date('Y');
+        $employeeID = 'EMP-' . $year . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+        $validated['employee_id'] = $employeeID;
+
         // ✅ Create employee record
         $employee = Employee::create($validated);
 
         // ✅ Handle multiple 201 files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
-                // use your existing saveFileToPublic() method
+                // Use your existing saveFileToPublic() method
                 $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
 
                 EmployeeFile::create([
@@ -156,6 +163,7 @@ class EmployeeController extends Controller
 
 
 
+
     public function updateEmployee(Request $request, $id)
     {
         $employee = Employee::find($id);
@@ -164,40 +172,33 @@ class EmployeeController extends Controller
             return response()->json(['isSuccess' => false, 'message' => 'Employee not found.'], 404);
         }
 
-        $validated = $request->validate([
-            '201_file.*'     => 'file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
-            'first_name'     => 'sometimes|string|max:100',
-            'last_name'      => 'sometimes|string|max:100',
-            'email'          => 'sometimes|email|unique:employees,email,' . $employee->id,
-            'phone'          => 'nullable|string|max:50',
-            'department_id'  => 'nullable|exists:departments,id',
-            'position_id'    => 'nullable|exists:position_types,id',
-            'base_salary'    => 'nullable|numeric|min:0',
-            'hire_date'      => 'nullable|date',
-            'manager_id'     => 'nullable|exists:employees,id',
-            'supervisor_id'  => 'nullable|exists:employees,id',
-            'password'       => 'nullable|string|min:8',
-            'is_active'      => 'boolean',
+        // 🔹 Validate only critical fields (email uniqueness, ID existence, etc.)
+        $request->validate([
+            'email'         => 'sometimes|email|unique:employees,email,' . $employee->id,
+            'department_id' => 'nullable|exists:departments,id',
+            'position_id'   => 'nullable|exists:position_types,id',
+            'password'      => 'nullable|string|min:8',
+            '201_file.*'    => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
         ]);
 
-        // ✅ Update password if provided
-        if (!empty($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
+        $data = $request->except('201_file', 'password');
+
+        // 🔹 Handle password (hash if provided)
+        if ($request->filled('password')) {
+            $data['password'] = Hash::make($request->password);
         }
 
-        // ✅ Update the main employee info first (no file column)
-        $employee->update(collect($validated)->except('201_file')->toArray());
+        // Update everything else dynamically
+        $employee->update($data);
 
-        // ✅ If new 201 files are uploaded
+        // 🔹 Handle uploaded 201 files
         if ($request->hasFile('201_file')) {
-            $files = $request->file('201_file');
-            $filePaths = $this->saveFileToPublic($files, 'employee_201');
+            foreach ($request->file('201_file') as $file) {
+                $filePath = $file->store('employee_201', 'public');
 
-            foreach ((array) $filePaths as $index => $path) {
-                $file = is_array($files) ? $files[$index] : $files;
                 EmployeeFile::create([
                     'employee_id' => $employee->id,
-                    'file_path'   => $path,
+                    'file_path'   => $filePath,
                     'file_name'   => $file->getClientOriginalName(),
                     'file_type'   => $file->getClientOriginalExtension(),
                 ]);
@@ -210,6 +211,7 @@ class EmployeeController extends Controller
             'employee' => $employee->load('files'),
         ]);
     }
+
 
 
 
