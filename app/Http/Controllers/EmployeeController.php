@@ -191,6 +191,8 @@ class EmployeeController extends Controller
         ]);
     }
 
+
+
     // ✅ Archive employee
     public function archiveEmployee($id)
     {

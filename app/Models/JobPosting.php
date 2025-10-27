@@ -28,4 +28,9 @@ class JobPosting extends Model
     {
         return $this->belongsTo(Department::class);
     }
+
+    public function jobPosting()
+    {
+        return $this->belongsTo(JobPosting::class);
+    }
 }

@@ -118,7 +118,7 @@ class ApplicantController extends Controller
     public function getHiredApplicants()
     {
         try {
-            $hiredApplicants = Applicant::with('jobPosting')
+            $hiredApplicants = Applicant::with(['jobPosting.department']) // 👈 include department
                 ->where('stage', 'hired')
                 ->where('is_archived', false)
                 ->orderBy('updated_at', 'desc')
@@ -127,7 +127,31 @@ class ApplicantController extends Controller
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Hired applicants retrieved successfully.',
-                'data'      => $hiredApplicants,
+                'data'      => $hiredApplicants->map(function ($applicant) {
+                    return [
+                        'id'                    => $applicant->id,
+                        'first_name'            => $applicant->first_name,
+                        'last_name'             => $applicant->last_name,
+                        'email'                 => $applicant->email,
+                        'phone_number'          => $applicant->phone_number,
+                        'resume'                => $applicant->resume ? asset('storage/' . $applicant->resume) : null,
+                        'cover_letter'          => $applicant->cover_letter,
+                        'linkedin_profile'      => $applicant->linkedin_profile,
+                        'portfolio_website'     => $applicant->portfolio_website,
+                        'salary_expectations'   => $applicant->salary_expectations,
+                        'available_start_date'  => $applicant->available_start_date,
+                        'experience_years'      => $applicant->experience_years,
+                        'stage'                 => $applicant->stage,
+                        'created_at'            => $applicant->created_at,
+                        'updated_at'            => $applicant->updated_at,
+
+                        // 🔥 Include department name here
+                        'department_name'       => optional($applicant->jobPosting->department)->department_name,
+
+                        // Optional: still include job posting details
+                        'job_posting'           => $applicant->jobPosting,
+                    ];
+                }),
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching hired applicants: ' . $e->getMessage());
@@ -137,6 +161,7 @@ class ApplicantController extends Controller
             ], 500);
         }
     }
+
 
 
     public function getHiredApplicantById($id)
