@@ -24,6 +24,12 @@ class Attendance extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    public function attendances()
+    {
+        return $this->hasMany(Attendance::class, 'leave_id');
+    }
+
+
     public function calculateHoursWorked()
     {
         if ($this->clock_in && $this->clock_out) {

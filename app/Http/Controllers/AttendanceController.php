@@ -31,12 +31,16 @@ class AttendanceController extends Controller
 
     public function getAllLeaves()
     {
-        $leaves = Leave::all();
+        $leaves = Leave::with(['employee', 'leaveType'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return response()->json([
             'isSuccess' => true,
             'data' => $leaves,
         ]);
     }
+
 
 
 
