@@ -101,7 +101,7 @@ class EmployeeController extends Controller
     public function createEmployee(Request $request)
     {
         $validated = $request->validate([
-            '201_file' => 'required|file|mimes:pdf,doc,docx,jpg,png|max:2048', // updated to handle file upload
+            '201_file' => 'required|file|mimes:pdf,doc,docx,jpg,png|max:2048', // Handle file upload
             'first_name' => 'required|string|max:100',
             'last_name' => 'required|string|max:100',
             'email' => 'required|email|unique:employees,email',
@@ -115,19 +115,18 @@ class EmployeeController extends Controller
             'password' => 'required|string|min:8',
         ]);
 
-        // Save file if uploaded
+        // ✅ Save uploaded 201 file
         $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
-        if ($filePath) {
-            $validated['201_file'] = $filePath;
-        }
+        $validated['201_file'] = $filePath;
 
-        // Hash the password before saving
+        // ✅ Hash the password before saving
         $plainPassword = $validated['password'];
         $validated['password'] = Hash::make($plainPassword);
 
+        // ✅ Create employee record
         $employee = Employee::create($validated);
 
-        // Send welcome email
+        // ✅ Send welcome email (fail-safe)
         try {
             Mail::to($employee->email)->send(new EmployeeCreated($employee, $plainPassword));
         } catch (\Exception $e) {
@@ -137,12 +136,10 @@ class EmployeeController extends Controller
         return response()->json([
             'isSuccess' => true,
             'message' => 'Employee created successfully and email sent.',
-            'employees' => $employee
+            'employee' => $employee
         ], 201);
     }
 
-
-    // ✅ Update employee
     public function updateEmployee(Request $request, $id)
     {
         $employee = Employee::find($id);
@@ -167,17 +164,20 @@ class EmployeeController extends Controller
             'is_active' => 'boolean',
         ]);
 
-        // If a new file is uploaded, save and replace the old one
-        $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
-        if ($filePath) {
-            // Delete old file if exists
-            if ($employee->{'201_file'} && file_exists(public_path($employee->{'201_file'}))) {
-                unlink(public_path($employee->{'201_file'}));
+        // ✅ Replace 201 file if a new one is uploaded
+        if ($request->hasFile('201_file')) {
+            // Save new file
+            $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
+
+            // Delete old file (if it exists)
+            if (!empty($employee->{"201_file"}) && file_exists(public_path($employee->{"201_file"}))) {
+                @unlink(public_path($employee->{"201_file"})); // use @ to suppress warning if file missing
             }
+
             $validated['201_file'] = $filePath;
         }
 
-        // Update password if provided
+        // ✅ Update password if provided
         if (!empty($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
         }
@@ -187,9 +187,10 @@ class EmployeeController extends Controller
         return response()->json([
             'isSuccess' => true,
             'message' => 'Employee updated successfully.',
-            'employees' => $employee
+            'employee' => $employee
         ]);
     }
+
 
 
 

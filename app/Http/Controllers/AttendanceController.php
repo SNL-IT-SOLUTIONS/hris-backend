@@ -18,12 +18,16 @@ class AttendanceController extends Controller
      */
     public function getAllAttendances()
     {
-        $attendances = Attendance::all();
+        $attendances = Attendance::with(['employee:id,first_name,last_name,email,department_id,position_id'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return response()->json([
             'isSuccess' => true,
             'data' => $attendances,
         ]);
     }
+
 
     public function getAllLeaves()
     {
