@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Leave;
 
 class AttendanceController extends Controller
 {
@@ -19,6 +20,15 @@ class AttendanceController extends Controller
         return response()->json([
             'isSuccess' => true,
             'data' => $attendances,
+        ]);
+    }
+
+    public function getAllLeaves()
+    {
+        $leaves = Leave::all();
+        return response()->json([
+            'isSuccess' => true,
+            'data' => $leaves,
         ]);
     }
 
