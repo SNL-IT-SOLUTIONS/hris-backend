@@ -9,6 +9,7 @@ use App\Mail\EmployeeCreated;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use App\Models\Leave;
+use App\Models\EmployeeFile;
 
 class EmployeeController extends Controller
 {
@@ -97,34 +98,45 @@ class EmployeeController extends Controller
 
 
 
-
+    //Create Employee
     public function createEmployee(Request $request)
     {
         $validated = $request->validate([
-            '201_file' => 'required|file|mimes:pdf,doc,docx,jpg,png|max:2048', // Handle file upload
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
-            'email' => 'required|email|unique:employees,email',
-            'phone' => 'nullable|string|max:50',
+            '201_file.*'   => 'required|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
+            'first_name'   => 'required|string|max:100',
+            'last_name'    => 'required|string|max:100',
+            'email'        => 'required|email|unique:employees,email',
+            'phone'        => 'nullable|string|max:50',
             'department_id' => 'nullable|exists:departments,id',
-            'position_id' => 'nullable|exists:position_types,id',
-            'base_salary' => 'nullable|numeric|min:0',
-            'hire_date' => 'nullable|date',
-            'manager_id' => 'nullable|exists:employees,id',
+            'position_id'  => 'nullable|exists:position_types,id',
+            'base_salary'  => 'nullable|numeric|min:0',
+            'hire_date'    => 'nullable|date',
+            'manager_id'   => 'nullable|exists:employees,id',
             'supervisor_id' => 'nullable|exists:employees,id',
-            'password' => 'required|string|min:8',
+            'password'     => 'required|string|min:8',
         ]);
 
-        // ✅ Save uploaded 201 file
-        $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
-        $validated['201_file'] = $filePath;
-
-        // ✅ Hash the password before saving
+        // ✅ Hash password before saving
         $plainPassword = $validated['password'];
         $validated['password'] = Hash::make($plainPassword);
 
         // ✅ Create employee record
         $employee = Employee::create($validated);
+
+        // ✅ Handle multiple 201 files
+        if ($request->hasFile('201_file')) {
+            foreach ($request->file('201_file') as $file) {
+                // use your existing saveFileToPublic() method
+                $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
+
+                EmployeeFile::create([
+                    'employee_id' => $employee->id,
+                    'file_path'   => $filePath,
+                    'file_name'   => $file->getClientOriginalName(),
+                    'file_type'   => $file->getClientOriginalExtension(),
+                ]);
+            }
+        }
 
         // ✅ Send welcome email (fail-safe)
         try {
@@ -135,10 +147,14 @@ class EmployeeController extends Controller
 
         return response()->json([
             'isSuccess' => true,
-            'message' => 'Employee created successfully and email sent.',
-            'employee' => $employee
+            'message'   => 'Employee created successfully and email sent.',
+            'employee'  => $employee
         ], 201);
     }
+
+
+
+
 
     public function updateEmployee(Request $request, $id)
     {
@@ -149,47 +165,52 @@ class EmployeeController extends Controller
         }
 
         $validated = $request->validate([
-            '201_file' => 'nullable|file|mimes:pdf,doc,docx,jpg,png|max:2048',
-            'first_name' => 'sometimes|string|max:100',
-            'last_name' => 'sometimes|string|max:100',
-            'email' => 'sometimes|email|unique:employees,email,' . $employee->id,
-            'phone' => 'nullable|string|max:50',
-            'department_id' => 'nullable|exists:departments,id',
-            'position_id' => 'nullable|exists:position_types,id',
-            'base_salary' => 'nullable|numeric|min:0',
-            'hire_date' => 'nullable|date',
-            'manager_id' => 'nullable|exists:employees,id',
-            'supervisor_id' => 'nullable|exists:employees,id',
-            'password' => 'nullable|string|min:8',
-            'is_active' => 'boolean',
+            '201_file.*'     => 'file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
+            'first_name'     => 'sometimes|string|max:100',
+            'last_name'      => 'sometimes|string|max:100',
+            'email'          => 'sometimes|email|unique:employees,email,' . $employee->id,
+            'phone'          => 'nullable|string|max:50',
+            'department_id'  => 'nullable|exists:departments,id',
+            'position_id'    => 'nullable|exists:position_types,id',
+            'base_salary'    => 'nullable|numeric|min:0',
+            'hire_date'      => 'nullable|date',
+            'manager_id'     => 'nullable|exists:employees,id',
+            'supervisor_id'  => 'nullable|exists:employees,id',
+            'password'       => 'nullable|string|min:8',
+            'is_active'      => 'boolean',
         ]);
-
-        // ✅ Replace 201 file if a new one is uploaded
-        if ($request->hasFile('201_file')) {
-            // Save new file
-            $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
-
-            // Delete old file (if it exists)
-            if (!empty($employee->{"201_file"}) && file_exists(public_path($employee->{"201_file"}))) {
-                @unlink(public_path($employee->{"201_file"})); // use @ to suppress warning if file missing
-            }
-
-            $validated['201_file'] = $filePath;
-        }
 
         // ✅ Update password if provided
         if (!empty($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
         }
 
-        $employee->update($validated);
+        // ✅ Update the main employee info first (no file column)
+        $employee->update(collect($validated)->except('201_file')->toArray());
+
+        // ✅ If new 201 files are uploaded
+        if ($request->hasFile('201_file')) {
+            $files = $request->file('201_file');
+            $filePaths = $this->saveFileToPublic($files, 'employee_201');
+
+            foreach ((array) $filePaths as $index => $path) {
+                $file = is_array($files) ? $files[$index] : $files;
+                EmployeeFile::create([
+                    'employee_id' => $employee->id,
+                    'file_path'   => $path,
+                    'file_name'   => $file->getClientOriginalName(),
+                    'file_type'   => $file->getClientOriginalExtension(),
+                ]);
+            }
+        }
 
         return response()->json([
             'isSuccess' => true,
             'message' => 'Employee updated successfully.',
-            'employee' => $employee
+            'employee' => $employee->load('files'),
         ]);
     }
+
 
 
 
@@ -251,25 +272,31 @@ class EmployeeController extends Controller
 
 
     //HELPERS
-    private function saveFileToPublic(Request $request, $field, $prefix)
+    private function saveFileToPublic($fileInput, $prefix)
     {
-        if ($request->hasFile($field)) {
-            $file = $request->file($field);
+        $directory = public_path('hris_files');
+        if (!file_exists($directory)) {
+            mkdir($directory, 0755, true);
+        }
 
-            // Directory inside /public
-            $directory = public_path('hris_files');
-            if (!file_exists($directory)) {
-                mkdir($directory, 0755, true);
-            }
-
-            // Generate filename: prefix + unique id + original extension
+        $saveSingleFile = function ($file) use ($directory, $prefix) {
             $filename = $prefix . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-
-            // Move file to public/hris_files
             $file->move($directory, $filename);
-
-            // Return relative path (to store in DB)
             return 'hris_files/' . $filename;
+        };
+
+        // 🔹 Case 1: Multiple files
+        if (is_array($fileInput)) {
+            $paths = [];
+            foreach ($fileInput as $file) {
+                $paths[] = $saveSingleFile($file);
+            }
+            return $paths; // Return array of paths
+        }
+
+        // 🔹 Case 2: Single file
+        if ($fileInput instanceof \Illuminate\Http\UploadedFile) {
+            return $saveSingleFile($fileInput);
         }
 
         return null;
