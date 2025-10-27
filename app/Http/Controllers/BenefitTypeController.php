@@ -26,6 +26,7 @@ class BenefitTypeController extends Controller
             'benefit_name' => 'required|string|max:150|unique:benefit_types,benefit_name',
             'category' => 'nullable|string|max:100', // varchar category
             'description' => 'nullable|string',
+            'rate' => 'nullable|decimal:10,2',
             'is_active' => 'boolean',
         ]);
 
@@ -73,6 +74,7 @@ class BenefitTypeController extends Controller
             'benefit_name' => 'sometimes|string|max:150|unique:benefit_types,benefit_name,' . $benefit->id,
             'category' => 'nullable|string|max:100',
             'description' => 'nullable|string',
+            'rate' => 'nullable|decimal:10,2',
             'is_active' => 'boolean',
         ]);
 
