@@ -67,7 +67,7 @@ class ApplicantController extends Controller
         try {
             $applicants = Applicant::with('jobPosting')
                 ->where('is_archived', false)
-                ->where('stage', '!=', 'hired') // exclude hired applicants
+                ->where('stage', '!=', 'hired')
                 ->orderBy('created_at', 'desc')
                 ->get();
 
