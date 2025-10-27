@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Leave;
 use Exception;
 
+
 class AttendanceController extends Controller
 {
     /**
