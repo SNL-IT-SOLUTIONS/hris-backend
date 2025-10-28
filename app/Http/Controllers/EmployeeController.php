@@ -287,7 +287,7 @@ class EmployeeController extends Controller
             return 'hris_files/' . $filename;
         };
 
-        // 🔹 Case 1: Multiple files
+        //  Case 1: Multiple files
         if (is_array($fileInput)) {
             $paths = [];
             foreach ($fileInput as $file) {
@@ -296,7 +296,7 @@ class EmployeeController extends Controller
             return $paths; // Return array of paths
         }
 
-        // 🔹 Case 2: Single file
+        // Case 2: Single file
         if ($fileInput instanceof \Illuminate\Http\UploadedFile) {
             return $saveSingleFile($fileInput);
         }
