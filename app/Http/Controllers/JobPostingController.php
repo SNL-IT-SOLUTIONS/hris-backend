@@ -118,8 +118,6 @@ class JobPostingController extends Controller
             $validated = $request->validate([
                 'title'          => 'sometimes|string|max:255',
                 'department_id'  => 'sometimes|exists:departments,id',
-                'work_type'      => 'sometimes|string|max:100',
-                'employment_type' => 'sometimes|string|max:100',
                 'location'       => 'nullable|string|max:255',
                 'salary_range'   => 'nullable|string|max:100',
                 'description'    => 'nullable|string',
