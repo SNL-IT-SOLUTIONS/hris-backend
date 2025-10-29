@@ -16,7 +16,7 @@ class EmployeeController extends Controller
     // ✅ Get all employees
     public function getEmployees(Request $request)
     {
-        $query = Employee::with(['department', 'position', 'manager', 'supervisor'])
+        $query = Employee::with(['department', 'position', 'manager', 'supervisor', 'files'])
             ->where('is_archived', false);
 
         // 🔎 Search
@@ -35,17 +35,17 @@ class EmployeeController extends Controller
             });
         }
 
-        //  Filter by department
+        // 🏢 Filter by department
         if ($request->has('department_id')) {
             $query->where('department_id', $request->department_id);
         }
 
-        //  Filter by position
+        // 🧑‍💼 Filter by position
         if ($request->has('position_id')) {
             $query->where('position_id', $request->position_id);
         }
 
-        // 🔢 Normal Pagination (default: 10 per page)
+        // 🔢 Pagination
         $perPage = $request->input('per_page', 10);
         $employees = $query->paginate($perPage);
 
@@ -56,17 +56,16 @@ class EmployeeController extends Controller
             ], 404);
         }
 
-        // 🖼️ Add full URLs for file paths
+        // 🖼️ Convert file paths for each employee
         $employees->getCollection()->transform(function ($emp) {
-            // Convert 201_file to full URL
-            $emp->{'201_file'} = $emp->{'201_file'}
-                ? asset('storage/' . $emp->{'201_file'})
-                : null;
+            // Attach full file URLs
+            $emp->files->transform(function ($file) {
+                $file->file_path = asset($file->file_path);
+                return $file;
+            });
 
-            // Convert resume to full URL
-            $emp->resume = $emp->resume
-                ? asset('storage/' . $emp->resume)
-                : null;
+            // Convert resume if present
+            $emp->resume = $emp->resume ? asset($emp->resume) : null;
 
             return $emp;
         });
