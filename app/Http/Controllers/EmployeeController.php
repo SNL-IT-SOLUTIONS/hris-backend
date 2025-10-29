@@ -102,38 +102,125 @@ class EmployeeController extends Controller
     public function createEmployee(Request $request)
     {
         $validated = $request->validate([
-            '201_file.*'   => 'required|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
-            'first_name'   => 'required|string|max:100',
-            'last_name'    => 'required|string|max:100',
-            'email'        => 'required|email|unique:employees,email',
-            'phone'        => 'nullable|string|max:50',
+            // 🔹 File Upload
+            '201_file.*' => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
+            'resume' => 'nullable|file|mimes:pdf,doc,docx|max:2048',
+
+            // 🔹 Basic Info
+            'first_name' => 'required|string|max:100',
+            'middle_name' => 'nullable|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'suffix' => 'nullable|string|max:10',
+            'email' => 'required|email|unique:employees,email',
+            'phone' => 'nullable|string|max:50',
+            'date_of_birth' => 'nullable|date',
+            'place_of_birth' => 'nullable|string|max:255',
+            'sex' => 'nullable|in:Male,Female,Other',
+            'civil_status' => 'nullable|string|max:50',
+            'height_m' => 'nullable|numeric|min:0',
+            'weight_kg' => 'nullable|numeric|min:0',
+            'blood_type' => 'nullable|string|max:5',
+            'citizenship' => 'nullable|string|max:100',
+
+            // 🔹 Government IDs
+            'gsis_no' => 'nullable|string|max:50',
+            'pagibig_no' => 'nullable|string|max:50',
+            'philhealth_no' => 'nullable|string|max:50',
+            'sss_no' => 'nullable|string|max:50',
+            'tin_no' => 'nullable|string|max:50',
+            'agency_employee_no' => 'nullable|string|max:50',
+
+            // 🔹 Address Info
+            'residential_address' => 'nullable|string|max:255',
+            'residential_zipcode' => 'nullable|string|max:10',
+            'residential_tel_no' => 'nullable|string|max:50',
+            'permanent_address' => 'nullable|string|max:255',
+            'permanent_zipcode' => 'nullable|string|max:10',
+            'permanent_tel_no' => 'nullable|string|max:50',
+
+            // 🔹 Family Info
+            'spouse_name' => 'nullable|string|max:255',
+            'spouse_occupation' => 'nullable|string|max:255',
+            'spouse_employer' => 'nullable|string|max:255',
+            'spouse_business_address' => 'nullable|string|max:255',
+            'spouse_tel_no' => 'nullable|string|max:50',
+            'father_name' => 'nullable|string|max:255',
+            'mother_name' => 'nullable|string|max:255',
+            'parents_address' => 'nullable|string|max:255',
+
+            // 🔹 Education (Elementary → Graduate)
+            'elementary_school_name' => 'nullable|string|max:255',
+            'elementary_degree_course' => 'nullable|string|max:255',
+            'elementary_year_graduated' => 'nullable|string|max:10',
+            'elementary_highest_level' => 'nullable|string|max:100',
+            'elementary_inclusive_dates' => 'nullable|string|max:50',
+            'elementary_honors' => 'nullable|string|max:255',
+
+            'secondary_school_name' => 'nullable|string|max:255',
+            'secondary_degree_course' => 'nullable|string|max:255',
+            'secondary_year_graduated' => 'nullable|string|max:10',
+            'secondary_highest_level' => 'nullable|string|max:100',
+            'secondary_inclusive_dates' => 'nullable|string|max:50',
+            'secondary_honors' => 'nullable|string|max:255',
+
+            'vocational_school_name' => 'nullable|string|max:255',
+            'vocational_degree_course' => 'nullable|string|max:255',
+            'vocational_year_graduated' => 'nullable|string|max:10',
+            'vocational_highest_level' => 'nullable|string|max:100',
+            'vocational_inclusive_dates' => 'nullable|string|max:50',
+            'vocational_honors' => 'nullable|string|max:255',
+
+            'college_school_name' => 'nullable|string|max:255',
+            'college_degree_course' => 'nullable|string|max:255',
+            'college_year_graduated' => 'nullable|string|max:10',
+            'college_highest_level' => 'nullable|string|max:100',
+            'college_inclusive_dates' => 'nullable|string|max:50',
+            'college_honors' => 'nullable|string|max:255',
+
+            'graduate_school_name' => 'nullable|string|max:255',
+            'graduate_degree_course' => 'nullable|string|max:255',
+            'graduate_year_graduated' => 'nullable|string|max:10',
+            'graduate_highest_level' => 'nullable|string|max:100',
+            'graduate_inclusive_dates' => 'nullable|string|max:50',
+            'graduate_honors' => 'nullable|string|max:255',
+
+            // 🔹 Employment
             'department_id' => 'nullable|exists:departments,id',
-            'position_id'  => 'nullable|exists:position_types,id',
-            'base_salary'  => 'nullable|numeric|min:0',
-            'hire_date'    => 'nullable|date',
-            'manager_id'   => 'nullable|exists:employees,id',
+            'position_id' => 'nullable|exists:position_types,id',
+            'employment_type_id' => 'nullable|exists:employment_types,id',
+            'manager_id' => 'nullable|exists:employees,id',
             'supervisor_id' => 'nullable|exists:employees,id',
-            'password'     => 'required|string|min:8',
+            'base_salary' => 'nullable|numeric|min:0',
+            'hire_date' => 'nullable|date',
+
+            // 🔹 Emergency Contact
+            'emergency_contact_name' => 'nullable|string|max:255',
+            'emergency_contact_number' => 'nullable|string|max:50',
+            'emergency_contact_relation' => 'nullable|string|max:100',
+
+            // 🔹 Auth / System
+            'password' => 'required|string|min:8',
+            'role' => 'nullable|string|max:50',
+            'is_active' => 'nullable|boolean',
+            'is_archived' => 'nullable|boolean',
         ]);
 
-        // ✅ Hash password before saving
+        // ✅ Hash password
         $plainPassword = $validated['password'];
         $validated['password'] = Hash::make($plainPassword);
 
-        // ✅ Generate automatic employee_id (e.g. EMP-2025-0001)
-        $latestEmployee = Employee::latest('id')->first();
-        $nextNumber = $latestEmployee ? $latestEmployee->id + 1 : 1;
+        // ✅ Generate employee_id (EMP-2025-0001)
+        $latest = Employee::latest('id')->first();
+        $next = $latest ? $latest->id + 1 : 1;
         $year = date('Y');
-        $employeeID = 'EMP-' . $year . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
-        $validated['employee_id'] = $employeeID;
+        $validated['employee_id'] = 'EMP-' . $year . '-' . str_pad($next, 4, '0', STR_PAD_LEFT);
 
-        // Create employee record
+        // ✅ Create record
         $employee = Employee::create($validated);
 
-        // Handle multiple 201 files
+        // ✅ Handle 201 files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
-                // Use your existing saveFileToPublic() method
                 $filePath = $this->saveFileToPublic($request, '201_file', 'employee_201');
 
                 EmployeeFile::create([
@@ -145,7 +232,7 @@ class EmployeeController extends Controller
             }
         }
 
-        // Send welcome email (fail-safe)
+        // ✅ Send Welcome Email
         try {
             Mail::to($employee->email)->send(new EmployeeCreated($employee, $plainPassword));
         } catch (\Exception $e) {
@@ -154,10 +241,11 @@ class EmployeeController extends Controller
 
         return response()->json([
             'isSuccess' => true,
-            'message'   => 'Employee created successfully and email sent.',
-            'employee'  => $employee
+            'message' => 'Employee created successfully.',
+            'employee' => $employee,
         ], 201);
     }
+
 
 
 
