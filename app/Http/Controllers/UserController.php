@@ -190,9 +190,9 @@ class UserController extends Controller
         ]);
     }
 
-    // ==========================
-    // 🔧 File Upload Helper
-    // ==========================
+    /**
+     * File upload helper
+     */
     private function saveFileToPublic(Request $request, $field, $prefix)
     {
         if ($request->hasFile($field)) {
