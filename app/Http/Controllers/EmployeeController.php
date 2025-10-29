@@ -247,11 +247,6 @@ class EmployeeController extends Controller
     }
 
 
-
-
-
-
-
     public function updateEmployee(Request $request, $id)
     {
         $employee = Employee::find($id);
