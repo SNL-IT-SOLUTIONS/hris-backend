@@ -127,10 +127,10 @@ class EmployeeController extends Controller
         $employeeID = 'EMP-' . $year . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
         $validated['employee_id'] = $employeeID;
 
-        // ✅ Create employee record
+        // Create employee record
         $employee = Employee::create($validated);
 
-        // ✅ Handle multiple 201 files
+        // Handle multiple 201 files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
                 // Use your existing saveFileToPublic() method
@@ -145,7 +145,7 @@ class EmployeeController extends Controller
             }
         }
 
-        // ✅ Send welcome email (fail-safe)
+        // Send welcome email (fail-safe)
         try {
             Mail::to($employee->email)->send(new EmployeeCreated($employee, $plainPassword));
         } catch (\Exception $e) {
@@ -172,7 +172,7 @@ class EmployeeController extends Controller
             return response()->json(['isSuccess' => false, 'message' => 'Employee not found.'], 404);
         }
 
-        // 🔹 Validate only critical fields (email uniqueness, ID existence, etc.)
+        // Validate only critical fields (email uniqueness, ID existence, etc.)
         $request->validate([
             'email'         => 'sometimes|email|unique:employees,email,' . $employee->id,
             'department_id' => 'nullable|exists:departments,id',
@@ -211,9 +211,6 @@ class EmployeeController extends Controller
             'employee' => $employee->load('files'),
         ]);
     }
-
-
-
 
 
 

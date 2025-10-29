@@ -42,7 +42,28 @@ class AttendanceController extends Controller
     }
 
 
+    public function confirmleave(Request $request, $id)
+    {
+        $leave = Leave::find($id);
 
+        if (!$leave) {
+            return response()->json(['isSuccess' => false, 'message' => 'Leave request not found.'], 404);
+        }
+
+        // Validate status input
+        $request->validate([
+            'status' => 'required|in:Approved,Rejected',
+        ]);
+
+        $leave->status = $request->status;
+        $leave->save();
+
+        return response()->json([
+            'isSuccess' => true,
+            'message'   => 'Leave request ' . strtolower($request->status) . ' successfully.',
+            'leave'     => $leave,
+        ]);
+    }
 
 
 
