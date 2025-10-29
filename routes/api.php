@@ -90,6 +90,7 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
     Route::get('attendances', 'getAllAttendances');
     Route::get('leaves', 'getAllLeaves');
+    Route::post('confirm-leave/{leaveId}', 'confirmLeave');
 });
 
 
