@@ -360,7 +360,7 @@ class EmployeeController extends Controller
             // ✅ Validate input
             $validated = $request->validate([
                 'employee_id'   => 'required|exists:employees,id',
-                'leave_type'    => 'required|string|max:100', // e.g., Vacation, Sick, Emergency
+                'leave_type'    => 'required|string|max:100',
                 'start_date'    => 'required|date|after_or_equal:today',
                 'end_date'      => 'required|date|after_or_equal:start_date',
                 'reason'        => 'nullable|string|max:500',

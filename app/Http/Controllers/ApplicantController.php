@@ -9,6 +9,7 @@ use App\Models\Employee;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\EmployeeCreated;
 use Illuminate\Support\Facades\Hash;
+use Exception;
 
 class ApplicantController extends Controller
 {
