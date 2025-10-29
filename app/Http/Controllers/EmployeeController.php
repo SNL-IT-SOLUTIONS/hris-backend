@@ -73,7 +73,7 @@ class EmployeeController extends Controller
         //  Summary counts
         $totalEmployees = Employee::where('is_archived', false)->count();
         $activeEmployees = Employee::where('is_archived', false)->where('is_active', true)->count();
-        $inactiveEmployees = Employee::where('is_archived', false)->where('is_active', false)->count();
+        $inactiveEmployees = Employee::where('is_archived', true)->count();
 
         //  Final Response
         return response()->json([
