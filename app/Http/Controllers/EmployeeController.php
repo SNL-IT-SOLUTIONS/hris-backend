@@ -201,7 +201,6 @@ class EmployeeController extends Controller
             // 🔹 Auth / System
             'password' => 'required|string|min:8',
             'role' => 'nullable|string|max:50',
-            'is_active' => 'nullable|boolean',
             'is_archived' => 'nullable|boolean',
         ]);
 
