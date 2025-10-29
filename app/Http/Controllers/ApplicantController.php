@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\EmployeeCreated;
 use Illuminate\Support\Facades\Hash;
 use Exception;
+use Illuminate\Validation\ValidationException;
 
 
 class ApplicantController extends Controller
@@ -322,7 +323,7 @@ class ApplicantController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message'   => 'An unexpected error occurred while moving the applicant stage.',
-                'error'     => $e->getMessage(), // Optional: remove in production if too verbose
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }
