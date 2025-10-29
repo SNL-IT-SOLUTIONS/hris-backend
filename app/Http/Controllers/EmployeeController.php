@@ -13,7 +13,7 @@ use App\Models\EmployeeFile;
 
 class EmployeeController extends Controller
 {
-    // ✅ Get all employees
+    //  Get all employees
     public function getEmployees(Request $request)
     {
         $query = Employee::with(['department', 'position', 'manager', 'supervisor', 'files'])
@@ -35,17 +35,17 @@ class EmployeeController extends Controller
             });
         }
 
-        // 🏢 Filter by department
+        // Filter by department
         if ($request->has('department_id')) {
             $query->where('department_id', $request->department_id);
         }
 
-        // 🧑‍💼 Filter by position
+        //  Filter by position
         if ($request->has('position_id')) {
             $query->where('position_id', $request->position_id);
         }
 
-        // 🔢 Pagination
+        //  Pagination
         $perPage = $request->input('per_page', 10);
         $employees = $query->paginate($perPage);
 
@@ -56,7 +56,7 @@ class EmployeeController extends Controller
             ], 404);
         }
 
-        // 🖼️ Convert file paths for each employee
+        //  Convert file paths for each employee
         $employees->getCollection()->transform(function ($emp) {
             // Attach full file URLs
             $emp->files->transform(function ($file) {
@@ -70,12 +70,12 @@ class EmployeeController extends Controller
             return $emp;
         });
 
-        // 📊 Summary counts
+        //  Summary counts
         $totalEmployees = Employee::where('is_archived', false)->count();
         $activeEmployees = Employee::where('is_archived', false)->where('is_active', true)->count();
         $inactiveEmployees = Employee::where('is_archived', false)->where('is_active', false)->count();
 
-        // ✅ Final Response
+        //  Final Response
         return response()->json([
             'isSuccess' => true,
             'message'   => 'Employees retrieved successfully.',
@@ -108,7 +108,7 @@ class EmployeeController extends Controller
             ], 404);
         }
 
-        // 🖼️ Convert file paths
+        //  Convert file paths
         $employee->files->transform(function ($file) {
             $file->file_path = asset($file->file_path);
             return $file;
@@ -117,7 +117,7 @@ class EmployeeController extends Controller
         // Convert resume path if exists
         $employee->resume = $employee->resume ? asset($employee->resume) : null;
 
-        // ✅ Final Response
+        //  Final Response
         return response()->json([
             'isSuccess' => true,
             'message'   => 'Employee retrieved successfully.',
