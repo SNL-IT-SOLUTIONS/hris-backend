@@ -83,6 +83,7 @@ Route::controller(EmployeeController::class)->middleware(['auth:sanctum'])->grou
     Route::post('employees/{id}/archive', 'archiveEmployee');
 });
 
+//ATTENDANCE & LEAVES
 Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->group(function () {
     Route::post('attendance/clock-in', 'clockIn');
     Route::post('attendance/clock-out', 'clockOut');
