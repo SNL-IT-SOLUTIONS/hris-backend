@@ -115,7 +115,7 @@ class EmployeeController extends Controller
             'phone'        => 'nullable|string|max:50',
             'date_of_birth' => 'nullable|date',
             'place_of_birth' => 'nullable|string|max:255',
-            'sex'          => 'nullable|in:Male,Female,Other',
+            'sex'          => 'nullable|string|max:10',
             'civil_status' => 'nullable|string|max:50',
             'height_m'     => 'nullable|numeric|min:0',
             'weight_kg'    => 'nullable|numeric|min:0',
