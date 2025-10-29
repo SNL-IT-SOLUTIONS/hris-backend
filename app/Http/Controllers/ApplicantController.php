@@ -11,6 +11,7 @@ use App\Mail\EmployeeCreated;
 use Illuminate\Support\Facades\Hash;
 use Exception;
 
+
 class ApplicantController extends Controller
 {
     /**
@@ -285,23 +286,43 @@ class ApplicantController extends Controller
     public function moveStage(Request $request, $id)
     {
         try {
+            // ✅ Validation
             $validated = $request->validate([
                 'stage' => 'required|in:new_application,screening,phone_screening,assessment,technical_interview,final_interview,offer_extended,hired',
             ]);
 
+            // ✅ Update applicant
             $applicant = Applicant::findOrFail($id);
             $applicant->update(['stage' => $validated['stage']]);
 
             return response()->json([
                 'isSuccess' => true,
-                'message' => 'Applicant moved to the next stage successfully.',
-                'data' => $applicant,
+                'message'   => 'Applicant moved to the next stage successfully.',
+                'data'      => $applicant,
             ]);
-        } catch (\Exception $e) {
-            Log::error('Error moving applicant stage: ' . $e->getMessage());
+        } catch (ValidationException $e) {
+            // ⚠️ Specific validation errors
             return response()->json([
                 'isSuccess' => false,
-                'message' => 'Failed to move applicant stage.',
+                'message'   => 'Validation failed.',
+                'errors'    => $e->errors(),
+            ], 422);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            // ⚠️ Applicant not found
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Applicant not found.',
+            ], 404);
+        } catch (\Exception $e) {
+            // ⚠️ Unexpected error
+            Log::error('Error moving applicant stage: ' . $e->getMessage(), [
+                'stack' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'An unexpected error occurred while moving the applicant stage.',
+                'error'     => $e->getMessage(), // Optional: remove in production if too verbose
             ], 500);
         }
     }

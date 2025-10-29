@@ -61,7 +61,7 @@ Route::controller(ApplicantController::class)->group(function () {
     Route::get('applicants/{id}', 'getApplicantById');
     Route::get('hired', 'getHiredApplicants');
     Route::get('hired/{id}', 'getHiredApplicantById');
-    Route::patch('applicants/{id}/move', 'moveStage');
+    Route::post('applicants/{id}/move', 'moveStage');
     Route::post('applicants/{id}/hire', 'hireApplicant');
     Route::post('update/applicants/{id}', 'updateApplicant');
     Route::post('applicants/{id}/archive', 'archiveApplicant');
