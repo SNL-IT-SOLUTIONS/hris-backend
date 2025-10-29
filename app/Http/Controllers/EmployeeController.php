@@ -95,6 +95,38 @@ class EmployeeController extends Controller
     }
 
 
+    public function getEmployeeById($id)
+    {
+        $employee = Employee::with(['department', 'position', 'manager', 'supervisor', 'files'])
+            ->where('is_archived', false)
+            ->find($id);
+
+        if (!$employee) {
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Employee not found.',
+            ], 404);
+        }
+
+        // 🖼️ Convert file paths
+        $employee->files->transform(function ($file) {
+            $file->file_path = asset($file->file_path);
+            return $file;
+        });
+
+        // Convert resume path if exists
+        $employee->resume = $employee->resume ? asset($employee->resume) : null;
+
+        // ✅ Final Response
+        return response()->json([
+            'isSuccess' => true,
+            'message'   => 'Employee retrieved successfully.',
+            'employee'  => $employee,
+        ]);
+    }
+
+
+
 
 
     //Create Employee
