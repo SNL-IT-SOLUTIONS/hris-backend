@@ -6,6 +6,8 @@ use App\Models\Interview;
 use App\Models\Applicant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Mail\InterviewScheduledMail;
+use Illuminate\Support\Facades\Mail;
 
 
 class InterviewController extends Controller
@@ -24,7 +26,6 @@ class InterviewController extends Controller
                 'location_link'  => 'nullable|string',
             ]);
 
-            // Fetch applicant to get stage and position
             $applicant = Applicant::findOrFail($applicantId);
 
             $validated['applicant_id'] = $applicantId;
@@ -34,9 +35,14 @@ class InterviewController extends Controller
 
             $interview = Interview::create($validated);
 
+            // 📧 Send email notification
+            if (!empty($applicant->email)) {
+                Mail::to($applicant->email)->send(new InterviewScheduledMail($applicant, $interview));
+            }
+
             return response()->json([
                 'isSuccess' => true,
-                'message'   => 'Interview scheduled successfully!',
+                'message'   => 'Interview scheduled and email notification sent!',
                 'data'      => $interview->load(['applicant', 'interviewer']),
             ], 201);
         } catch (\Exception $e) {
