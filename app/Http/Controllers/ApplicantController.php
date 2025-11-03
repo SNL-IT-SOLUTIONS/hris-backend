@@ -18,9 +18,6 @@ class ApplicantController extends Controller
     /**
      * ✅ Create a new applicant (job application submission)
      */
-    use Illuminate\Validation\ValidationException;
-    use Illuminate\Support\Facades\Log;
-
     public function createApplicant(Request $request)
     {
         try {
