@@ -132,6 +132,22 @@ class PayrollController extends Controller
         ]);
     }
 
+    public function getPayrollSummary()
+    {
+        $summary = [
+            'total_periods' => DB::table('payroll_periods')->count(),
+            'processed' => DB::table('payroll_periods')->where('status', 'processed')->count(),
+            'drafts' => DB::table('payroll_periods')->where('status', 'draft')->count(),
+            'active_employees' => DB::table('employees')->where('employment_status', 'active')->count(),
+        ];
+
+        return response()->json([
+            'isSuccess' => true,
+            'data' => $summary,
+        ]);
+    }
+
+
     /**
      * View payroll details (with deductions)
      */
@@ -141,28 +157,52 @@ class PayrollController extends Controller
             ->where('payroll_period_id', $periodId)
             ->get();
 
+        // Compute total summary values
+        $totalGross = $records->sum('gross_pay');
+        $totalDeductions = $records->sum('total_deductions');
+        $totalNet = $records->sum('net_pay');
+
         return response()->json([
             'isSuccess' => true,
             'payrolldetails' => $records,
+            'summary' => [
+                'total_gross' => number_format($totalGross, 3, '.', ','),
+                'total_deductions' => number_format($totalDeductions, 3, '.', ','),
+                'total_net' => number_format($totalNet, 3, '.', ','),
+            ],
         ]);
     }
 
-    //Helper
-    private function storePayrollDeductions($payrollRecordId, $employee)
+
+    public function getPayslip($recordId)
     {
-        $benefits = BenefitType::all();
+        $record = PayrollRecord::with(['employee', 'deductions.benefitType', 'payrollPeriod'])
+            ->findOrFail($recordId);
 
-        foreach ($benefits as $benefit) {
-            $rate = $benefit->deduction_rate ?? 0;
-            $deductionAmount = $employee->daily_rate * $rate;
+        $payslip = [
+            'employee_name' => $record->employee->first_name . ' ' . $record->employee->last_name,
+            'period' => $record->payrollPeriod->period_name,
+            'daily_rate' => $record->daily_rate,
+            'days_worked' => $record->days_worked,
+            'gross_pay' => $record->gross_pay,
+            'deductions' => $record->deductions->map(function ($deduction) {
+                return [
+                    'benefit_type' => $deduction->benefitType->name ?? null,
+                    'deduction_amount' => $deduction->deduction_amount,
+                ];
+            }),
+            'total_deductions' => $record->total_deductions,
+            'net_pay' => $record->net_pay,
+            'generated_at' => now()->format('F d, Y h:i A'),
+        ];
 
-            PayrollDeduction::create([
-                'payroll_record_id' => $payrollRecordId,
-                'benefit_type_id'   => $benefit->id,
-                'deduction_name'    => $benefit->benefit_name,
-                'deduction_rate'    => $rate,
-                'deduction_amount'  => $deductionAmount,
-            ]);
-        }
+        return response()->json([
+            'isSuccess' => true,
+            'payslip' => $payslip
+        ]);
     }
+
+
+    //Helper
+
 }
