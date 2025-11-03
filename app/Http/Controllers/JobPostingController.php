@@ -48,7 +48,9 @@ class JobPostingController extends Controller
     {
         try {
             $query = JobPosting::with('department')
-                ->where('is_archived', false);
+                ->where('is_archived', false)
+                ->where('status', 'active');
+
 
             // 🔍 Search
             if ($request->has('search') && $request->search != '') {
