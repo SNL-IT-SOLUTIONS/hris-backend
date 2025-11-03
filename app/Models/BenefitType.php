@@ -14,6 +14,7 @@ class BenefitType extends Model
         'category',
         'description',
         'deduction',
+        'rate',
         'is_active',
     ];
 }
