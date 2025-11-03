@@ -13,7 +13,7 @@ class BenefitType extends Model
         'benefit_name',
         'category',
         'description',
-        'rate',
+        'deduction',
         'is_active',
     ];
 }
