@@ -18,6 +18,7 @@ use App\Http\Controllers\ApplicantController;
 use App\Http\Controllers\InterviewController;
 use App\Http\Controllers\DropdownController;
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\PayrollController;
 
 /*
 |--------------------------------------------------------------------------
@@ -166,6 +167,13 @@ Route::controller(PositionTypeController::class)->group(function () {
     Route::post('create/position-types', 'createPositionType');
     Route::post('update/position-types/{id}', 'updatePositionType');
     Route::post('position-types/{id}/archive', 'archivePositionType');
+});
+
+//PAYROLL
+Route::controller(PayrollController::class)->group(function () {
+    Route::post('payroll/generate', 'generatePayroll');
+    Route::get('payroll/periods', 'getPayrollPeriods');
+    Route::get('payroll/periods/{periodId}/details', 'getPayrollDetails');
 });
 
 

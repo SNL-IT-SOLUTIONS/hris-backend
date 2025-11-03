@@ -18,6 +18,9 @@ class ApplicantController extends Controller
     /**
      * ✅ Create a new applicant (job application submission)
      */
+    use Illuminate\Validation\ValidationException;
+    use Illuminate\Support\Facades\Log;
+
     public function createApplicant(Request $request)
     {
         try {
@@ -50,15 +53,25 @@ class ApplicantController extends Controller
                 'message' => 'Application submitted successfully!',
                 'data' => $applicant,
             ], 201);
+        } catch (ValidationException $e) {
+            // 🔍 Show validation errors in response
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
+            // 🧯 Catch all other errors
             Log::error('Error creating applicant: ' . $e->getMessage());
 
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to submit application.',
+                'error' => $e->getMessage(), // Optional for debugging
             ], 500);
         }
     }
+
 
 
     /**
