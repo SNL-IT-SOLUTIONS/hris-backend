@@ -120,6 +120,43 @@ class PayrollController extends Controller
     }
 
     /**
+     * Get list of active employees for payroll generation
+     */
+    public function getEmployees()
+    {
+        try {
+            $employees = Employee::where('is_active', 1)
+                ->select('id', 'first_name', 'last_name', 'base_salary', 'position', 'department_id')
+                ->with('department:id,department_name')
+                ->orderBy('last_name')
+                ->get()
+                ->map(function ($emp) {
+                    return [
+                        'employee_id' => $emp->id,
+                        'full_name' => "{$emp->first_name} {$emp->last_name}",
+                        'base_salary' => $emp->base_salary,
+                        'position' => $emp->position,
+                        'department' => $emp->department->department_name ?? null,
+                    ];
+                });
+
+            return response()->json([
+                'isSuccess' => true,
+                'employees' => $employees,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching employees: ' . $e->getMessage());
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to retrieve employee list.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+    /**
      * Get all payroll periods with records
      */
     public function getPayrollPeriods()
