@@ -120,7 +120,7 @@ Route::controller(BenefitTypeController::class)->group(function () {
     Route::get('benefit-types/{id}', 'getBenefitType');
     Route::post('create/benefit-types', 'createBenefitType');
     Route::post('update/benefit-types/{id}', 'updateBenefitType');
-    Route::post('benefit-types/{id}/archive', 'archiveBenefitType');
+    Route::post('benefit-types/{id}/archive', 'deleteBenefitType');
 });
 
 //SETUP - ROLES
