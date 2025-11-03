@@ -171,8 +171,9 @@ Route::controller(PositionTypeController::class)->group(function () {
 
 //PAYROLL
 Route::controller(PayrollController::class)->group(function () {
-    Route::post('payroll/generate', 'generatePayroll');
+    Route::post('payroll/generate', 'createPayrollPeriod');
     Route::get('payroll/periods', 'getPayrollPeriods');
+    Route::get('payroll/details/{periodId}', 'getPayrollDetails');
     Route::get('payroll/periods/{periodId}/details', 'getPayrollDetails');
 });
 

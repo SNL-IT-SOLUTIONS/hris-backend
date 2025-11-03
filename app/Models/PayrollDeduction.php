@@ -12,14 +12,16 @@ class PayrollDeduction extends Model
     protected $table = 'payroll_deductions';
 
     protected $fillable = [
-        'payroll_id',
+        'payroll_record_id',
         'benefit_type_id',
+        'deduction_name',
+        'deduction_rate',
         'deduction_amount',
     ];
 
     public function payrollRecord()
     {
-        return $this->belongsTo(PayrollRecord::class, 'payroll_id');
+        return $this->belongsTo(PayrollRecord::class, 'payroll_record_id');
     }
 
     public function benefitType()

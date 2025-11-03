@@ -37,6 +37,6 @@ class PayrollRecord extends Model
 
     public function deductions()
     {
-        return $this->hasMany(PayrollDeduction::class, 'payroll_id');
+        return $this->hasMany(PayrollDeduction::class, 'payroll_record_id');
     }
 }

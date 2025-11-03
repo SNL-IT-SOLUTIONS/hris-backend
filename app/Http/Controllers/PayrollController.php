@@ -9,6 +9,7 @@ use App\Models\BenefitType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Models\Employee;
 
 class PayrollController extends Controller
 {
@@ -28,7 +29,7 @@ class PayrollController extends Controller
         DB::beginTransaction();
 
         try {
-            // 🗓️ Create payroll period
+            //  Create payroll period
             $period = PayrollPeriod::create([
                 'period_name' => $request->period_name,
                 'pay_date' => $request->pay_date,
@@ -36,21 +37,22 @@ class PayrollController extends Controller
                 'cutoff_end_date' => $request->cutoff_end_date,
             ]);
 
-            // 💰 Fetch benefit rates
+            // Fetch benefit rates
             $benefits = BenefitType::whereIn('benefit_name', ['SSS', 'Philhealth', 'Pagibig'])
                 ->pluck('rate', 'benefit_name');
 
             foreach ($request->employees as $emp) {
-                $daily = $emp['daily_rate'];
+                $employee = Employee::findOrFail($emp['employee_id']);
+                $daily = $employee->base_salary; // pull from DB, not the request
                 $days = $emp['days_worked'];
                 $overtime = $emp['overtime_hours'] ?? 0;
                 $absences = $emp['absences'] ?? 0;
                 $late_deduction = $emp['late_deductions'] ?? 0;
 
-                // 💵 Compute gross pay
+                //  Compute gross pay
                 $gross = ($daily * $days) + ($overtime * ($daily / 8));
 
-                // 📉 Deductions
+                //  Deductions
                 $sss = isset($benefits['SSS']) ? $gross * ($benefits['SSS'] / 100) : 0;
                 $philhealth = isset($benefits['Philhealth']) ? $gross * ($benefits['Philhealth'] / 100) : 0;
                 $pagibig = isset($benefits['Pagibig']) ? $gross * ($benefits['Pagibig'] / 100) : 0;
@@ -58,10 +60,10 @@ class PayrollController extends Controller
                 $total_deductions = $sss + $philhealth + $pagibig + $late_deduction;
                 $net = $gross - $total_deductions;
 
-                // 🧾 Create Payroll Record
+                //  Create Payroll Record
                 $record = PayrollRecord::create([
                     'payroll_period_id' => $period->id,
-                    'employee_id' => $emp['employee_id'],
+                    'employee_id' => $employee->id,
                     'daily_rate' => $daily,
                     'days_worked' => $days,
                     'overtime_hours' => $overtime,
@@ -72,7 +74,8 @@ class PayrollController extends Controller
                     'net_pay' => $net,
                 ]);
 
-                // 🧮 Save individual deductions to payroll_deductions table
+
+                //  Save individual deductions to payroll_deductions table
                 $deductions = [
                     ['name' => 'SSS', 'amount' => $sss],
                     ['name' => 'Philhealth', 'amount' => $philhealth],
@@ -82,10 +85,16 @@ class PayrollController extends Controller
                 foreach ($deductions as $ded) {
                     if ($ded['amount'] > 0) {
                         $benefitType = BenefitType::where('benefit_name', $ded['name'])->first();
+
+                        if (!$benefitType) {
+                            Log::warning("Benefit type not found: " . $ded['name']);
+                            continue;
+                        }
+
                         PayrollDeduction::create([
                             'payroll_record_id' => $record->id,
                             'benefit_type_id' => $benefitType->id,
-                            'deduction_name' => $ded['name'],
+                            'deduction_name' => $benefitType->benefit_name,
                             'deduction_rate' => $benefitType->rate,
                             'deduction_amount' => $ded['amount'],
                         ]);
@@ -119,7 +128,7 @@ class PayrollController extends Controller
 
         return response()->json([
             'isSuccess' => true,
-            'data' => $periods,
+            'payrolls' => $periods,
         ]);
     }
 
@@ -134,7 +143,26 @@ class PayrollController extends Controller
 
         return response()->json([
             'isSuccess' => true,
-            'data' => $records,
+            'payrolldetails' => $records,
         ]);
+    }
+
+    //Helper
+    private function storePayrollDeductions($payrollRecordId, $employee)
+    {
+        $benefits = BenefitType::all();
+
+        foreach ($benefits as $benefit) {
+            $rate = $benefit->deduction_rate ?? 0;
+            $deductionAmount = $employee->daily_rate * $rate;
+
+            PayrollDeduction::create([
+                'payroll_record_id' => $payrollRecordId,
+                'benefit_type_id'   => $benefit->id,
+                'deduction_name'    => $benefit->benefit_name,
+                'deduction_rate'    => $rate,
+                'deduction_amount'  => $deductionAmount,
+            ]);
+        }
     }
 }
