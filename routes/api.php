@@ -177,6 +177,7 @@ Route::controller(PayrollController::class)->group(function () {
     Route::get('payroll/periods/{periodId}/details', 'getPayrollDetails');
     Route::get('payroll/payslip/{recordId}', 'getPayslip');
     Route::get('payroll/summary', 'getPayrollSummary');
+    Route::post('payroll/process/{periodId}', 'processPayroll')
 });
 
 

@@ -203,6 +203,33 @@ class PayrollController extends Controller
     }
 
 
+    public function processPayroll($id)
+    {
+        try {
+            $payroll = PayrollPeriod::findOrFail($id);
+
+            // Change status to processed
+            $payroll->status = 'processed';
+            $payroll->save();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Payroll period marked as processed successfully.',
+                'data' => $payroll,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error updating payroll status: ' . $e->getMessage());
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to update payroll status.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+
     //Helper
 
 }
