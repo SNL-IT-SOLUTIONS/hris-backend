@@ -114,4 +114,33 @@ class DropdownController extends Controller
             ], 500);
         }
     }
+
+    public function getInterviewersDropdown()
+    {
+        try {
+            $interviewers = Employee::select('id', 'first_name', 'last_name')
+                ->where('is_archived', 0)
+                ->where('is_interviewer', 1)
+                ->orderBy('first_name')
+                ->get()
+                ->map(function ($emp) {
+                    return [
+                        'id' => $emp->id,
+                        'interviewer_name' => "{$emp->first_name} {$emp->last_name}"
+                    ];
+                });
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Interviewers dropdown retrieved successfully.',
+                'data' => $interviewers
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load interviewers dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
