@@ -138,7 +138,7 @@ class PayrollController extends Controller
             'total_periods' => DB::table('payroll_periods')->count(),
             'processed' => DB::table('payroll_periods')->where('status', 'processed')->count(),
             'drafts' => DB::table('payroll_periods')->where('status', 'draft')->count(),
-            'active_employees' => DB::table('employees')->where('employment_status', 'active')->count(),
+            'active_employees' => DB::table('employees')->where('is_active', 1)->count(),
         ];
 
         return response()->json([
