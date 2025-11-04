@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Models\Employee;
+use App\Models\AllowanceType;
+
 
 class PayrollController extends Controller
 {
@@ -29,7 +31,7 @@ class PayrollController extends Controller
         DB::beginTransaction();
 
         try {
-            //  Create payroll period
+            // 🧾 Create payroll period
             $period = PayrollPeriod::create([
                 'period_name' => $request->period_name,
                 'pay_date' => $request->pay_date,
@@ -37,30 +39,49 @@ class PayrollController extends Controller
                 'cutoff_end_date' => $request->cutoff_end_date,
             ]);
 
-            // Fetch benefit rates
-            $benefits = BenefitType::whereIn('benefit_name', ['SSS', 'Philhealth', 'Pagibig'])
-                ->pluck('rate', 'benefit_name');
-
             foreach ($request->employees as $emp) {
                 $employee = Employee::findOrFail($emp['employee_id']);
-                $daily = $employee->base_salary; // pull from DB, not the request
+                $daily = $employee->base_salary;
                 $days = $emp['days_worked'];
                 $overtime = $emp['overtime_hours'] ?? 0;
                 $absences = $emp['absences'] ?? 0;
                 $late_deduction = $emp['late_deductions'] ?? 0;
 
-                //  Compute gross pay
+                // 🧮 Gross Pay
                 $gross = ($daily * $days) + ($overtime * ($daily / 8));
 
-                //  Deductions
-                $sss = isset($benefits['SSS']) ? $gross * ($benefits['SSS'] / 100) : 0;
-                $philhealth = isset($benefits['Philhealth']) ? $gross * ($benefits['Philhealth'] / 100) : 0;
-                $pagibig = isset($benefits['Pagibig']) ? $gross * ($benefits['Pagibig'] / 100) : 0;
+                // 🔍 Get benefits linked to this employee
+                $employeeBenefits = DB::table('employee_benefit')
+                    ->where('employee_id', $employee->id)
+                    ->pluck('benefit_type_id');
+
+                // Fetch corresponding benefit rates
+                $benefitRates = BenefitType::whereIn('id', $employeeBenefits)
+                    ->pluck('rate', 'benefit_name');
+
+                // 🔍 Get allowances linked to this employee
+                $employeeAllowances = DB::table('employee_allowance')
+                    ->where('employee_id', $employee->id)
+                    ->pluck('allowance_type_id');
+
+                // Fetch allowance values from allowance_types
+                $allowances = AllowanceType::whereIn('id', $employeeAllowances)
+                    ->pluck('value', 'type_name');
+
+                // ✅ Compute deductions
+                $sss = isset($benefitRates['SSS']) ? $gross * ($benefitRates['SSS'] / 100) : 0;
+                $philhealth = isset($benefitRates['Philhealth']) ? $gross * ($benefitRates['Philhealth'] / 100) : 0;
+                $pagibig = isset($benefitRates['Pagibig']) ? $gross * ($benefitRates['Pagibig'] / 100) : 0;
 
                 $total_deductions = $sss + $philhealth + $pagibig + $late_deduction;
-                $net = $gross - $total_deductions;
 
-                //  Create Payroll Record
+                // ✅ Total allowances
+                $total_allowances = $allowances->sum();
+
+                // 🧾 Net pay = gross + allowances - deductions
+                $net = $gross + $total_allowances - $total_deductions;
+
+                // 💾 Create Payroll Record
                 $record = PayrollRecord::create([
                     'payroll_period_id' => $period->id,
                     'employee_id' => $employee->id,
@@ -74,8 +95,7 @@ class PayrollController extends Controller
                     'net_pay' => $net,
                 ]);
 
-
-                //  Save individual deductions to payroll_deductions table
+                // 💾 Save individual deduction details
                 $deductions = [
                     ['name' => 'SSS', 'amount' => $sss],
                     ['name' => 'Philhealth', 'amount' => $philhealth],
@@ -86,31 +106,32 @@ class PayrollController extends Controller
                     if ($ded['amount'] > 0) {
                         $benefitType = BenefitType::where('benefit_name', $ded['name'])->first();
 
-                        if (!$benefitType) {
-                            Log::warning("Benefit type not found: " . $ded['name']);
-                            continue;
+                        if ($benefitType) {
+                            PayrollDeduction::create([
+                                'payroll_record_id' => $record->id,
+                                'benefit_type_id' => $benefitType->id,
+                                'deduction_name' => $benefitType->benefit_name,
+                                'deduction_rate' => $benefitType->rate,
+                                'deduction_amount' => $ded['amount'],
+                            ]);
                         }
-
-                        PayrollDeduction::create([
-                            'payroll_record_id' => $record->id,
-                            'benefit_type_id' => $benefitType->id,
-                            'deduction_name' => $benefitType->benefit_name,
-                            'deduction_rate' => $benefitType->rate,
-                            'deduction_amount' => $ded['amount'],
-                        ]);
                     }
                 }
+
+                // 🧾 Log allowances in JSON form (optional for reference)
+                Log::info("Allowances for Employee ID {$employee->id}: " . json_encode($allowances));
             }
 
             DB::commit();
 
             return response()->json([
                 'isSuccess' => true,
-                'message' => 'Payroll period and records created successfully.',
+                'message' => 'Payroll period and employee records created successfully.',
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Payroll generation failed: ' . $e->getMessage());
+
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to create payroll period.',
@@ -118,6 +139,8 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
+
 
     /**
      * Get list of active employees for payroll generation

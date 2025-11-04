@@ -127,13 +127,16 @@ class AllowanceTypeController extends Controller
             ], 404);
         }
 
-        $allowance->delete();
+        // ✅ Soft delete: mark as archived
+        $allowance->is_archived = true;
+        $allowance->save();
 
         return response()->json([
             'isSuccess' => true,
-            'message' => 'Allowance type deleted successfully.'
+            'message' => 'Allowance type archived successfully.'
         ]);
     }
+
 
     /**
      * 🔍 Get allowance type by ID
