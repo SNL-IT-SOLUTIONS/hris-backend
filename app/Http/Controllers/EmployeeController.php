@@ -22,7 +22,8 @@ class EmployeeController extends Controller
             'manager',
             'supervisor',
             'files',
-            'benefits'
+            'benefits',
+            'allowances' // ✅ added
         ])->where('is_archived', false);
 
         // 🔎 Search
@@ -32,36 +33,33 @@ class EmployeeController extends Controller
                 $q->where('first_name', 'LIKE', "%$search%")
                     ->orWhere('last_name', 'LIKE', "%$search%")
                     ->orWhere('email', 'LIKE', "%$search%")
-                    ->orWhereHas('department', function ($dq) use ($search) {
-                        $dq->where('department_name', 'LIKE', "%$search%");
-                    })
-                    ->orWhereHas('position', function ($pq) use ($search) {
-                        $pq->where('position_name', 'LIKE', "%$search%");
-                    })
-                    ->orWhereHas('benefits', function ($bq) use ($search) {
-                        $bq->where('benefit_name', 'LIKE', "%$search%");
-                    });
+                    ->orWhereHas('department', fn($dq) => $dq->where('department_name', 'LIKE', "%$search%"))
+                    ->orWhereHas('position', fn($pq) => $pq->where('position_name', 'LIKE', "%$search%"))
+                    ->orWhereHas('benefits', fn($bq) => $bq->where('benefit_name', 'LIKE', "%$search%"))
+                    ->orWhereHas('allowances', fn($aq) => $aq->where('type_name', 'LIKE', "%$search%")); // ✅ new search
             });
         }
 
         // 🔹 Filter by department
-        if ($request->has('department_id') && $request->department_id != '') {
+        if ($request->filled('department_id')) {
             $query->where('department_id', $request->department_id);
         }
 
         // 🔹 Filter by position
-        if ($request->has('position_id') && $request->position_id != '') {
+        if ($request->filled('position_id')) {
             $query->where('position_id', $request->position_id);
         }
 
-        // 🔹 Filter by benefit (optional)
-        if ($request->has('benefit_id') && $request->benefit_id != '') {
-            $query->whereHas('benefits', function ($q) use ($request) {
-                $q->where('benefit_types.id', $request->benefit_id);
-            });
+        // 🔹 Filter by benefit
+        if ($request->filled('benefit_id')) {
+            $query->whereHas('benefits', fn($q) => $q->where('benefit_types.id', $request->benefit_id));
         }
 
-        // 🔹 Pagination
+        // 🔹 Filter by allowance
+        if ($request->filled('allowance_id')) {
+            $query->whereHas('allowances', fn($q) => $q->where('allowance_types.id', $request->allowance_id));
+        }
+
         $perPage = $request->input('per_page', 5);
         $employees = $query->paginate($perPage);
 
@@ -72,44 +70,44 @@ class EmployeeController extends Controller
             ], 404);
         }
 
-        // 🔹 Transform each employee record
         $employees->getCollection()->transform(function ($emp) {
-            // ✅ Attach full file URLs
+            // ✅ Attach file URLs
             $emp->files->transform(function ($file) {
                 $file->file_path = asset($file->file_path);
                 return $file;
             });
 
-            // ✅ Convert resume path to full URL
+            // ✅ Resume URL
             $emp->resume = $emp->resume ? asset($emp->resume) : null;
 
-            // ✅ Transform benefits into readable format
-            $emp->benefits = $emp->benefits->map(function ($benefit) {
-                return [
-                    'id' => $benefit->id,
-                    'benefit_name' => $benefit->benefit_name,
-                    'category' => $benefit->category,
-                    'rate' => $benefit->rate,
-                ];
-            });
+            // ✅ Transform benefits
+            $emp->benefits = $emp->benefits->map(fn($b) => [
+                'id' => $b->id,
+                'benefit_name' => $b->benefit_name,
+                'category' => $b->category,
+                'rate' => $b->rate,
+            ]);
+
+            // ✅ Transform allowances
+            $emp->allowances = $emp->allowances->map(fn($a) => [
+                'id' => $a->id,
+                'type_name' => $a->type_name,
+                'value' => $a->value,
+                'description' => $a->description,
+            ]);
 
             return $emp;
         });
 
-        // 🔹 Summary counts
-        $totalEmployees = Employee::where('is_archived', false)->count();
-        $activeEmployees = Employee::where('is_archived', false)->where('is_active', true)->count();
-        $inactiveEmployees = Employee::where('is_archived', true)->count();
-
-        // 🔹 Final Response
+        // ✅ Summary counts
         return response()->json([
             'isSuccess' => true,
             'message'   => 'Employees retrieved successfully.',
             'employees' => $employees->items(),
             'summary'   => [
-                'total_employees'    => $totalEmployees,
-                'active_employees'   => $activeEmployees,
-                'inactive_employees' => $inactiveEmployees,
+                'total_employees'    => Employee::where('is_archived', false)->count(),
+                'active_employees'   => Employee::where('is_archived', false)->where('is_active', true)->count(),
+                'inactive_employees' => Employee::where('is_archived', true)->count(),
             ],
             'pagination' => [
                 'current_page' => $employees->currentPage(),
@@ -119,6 +117,7 @@ class EmployeeController extends Controller
             ],
         ]);
     }
+
 
 
 
@@ -260,6 +259,10 @@ class EmployeeController extends Controller
             'benefit_type_ids'   => 'nullable|array',
             'benefit_type_ids.*' => 'exists:benefit_types,id',
 
+            // 🔹 NEW Allowance field
+            'allowance_type_ids'   => 'nullable|array',
+            'allowance_type_ids.*' => 'exists:allowance_types,id',
+
             // 🔹 Auth / System
             'password'     => 'required|string|min:8',
             'role'         => 'nullable|string|max:50',
@@ -288,6 +291,11 @@ class EmployeeController extends Controller
             $employee->benefits()->sync($validated['benefit_type_ids']);
         }
 
+        if (!empty($validated['allowance_type_ids'])) {
+            $employee->allowances()->sync($validated['allowance_type_ids']);
+        }
+
+
         // ✅ Handle 201 files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
@@ -315,12 +323,6 @@ class EmployeeController extends Controller
         ], 201);
     }
 
-
-
-
-
-
-
     public function updateEmployee(Request $request, $id)
     {
         $employee = Employee::find($id);
@@ -335,11 +337,16 @@ class EmployeeController extends Controller
             'position_id'   => 'nullable|exists:position_types,id',
             'password'      => 'nullable|string|min:8',
             '201_file.*'    => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
+
             'benefits'      => 'nullable|array',
             'benefits.*'    => 'exists:benefit_types,id',
+
+            // ✅ new
+            'allowances'      => 'nullable|array',
+            'allowances.*'    => 'exists:allowance_types,id',
         ]);
 
-        $data = $request->except('201_file', 'password', 'benefits');
+        $data = $request->except('201_file', 'password', 'benefits', 'allowances');
 
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
@@ -347,7 +354,6 @@ class EmployeeController extends Controller
 
         $employee->update($data);
 
-        // 🔹 Handle files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
                 $filePath = $this->saveFileToPublic($file, 'employee_201');
@@ -360,17 +366,22 @@ class EmployeeController extends Controller
             }
         }
 
-        // 🔹 Update Benefits (sync)
         if ($request->filled('benefits')) {
             $employee->benefits()->sync($request->benefits);
+        }
+
+        // ✅ Handle Allowances
+        if ($request->filled('allowances')) {
+            $employee->allowances()->sync($request->allowances);
         }
 
         return response()->json([
             'isSuccess' => true,
             'message'   => 'Employee updated successfully.',
-            'employee'  => $employee->load(['files', 'benefits']),
+            'employee'  => $employee->load(['files', 'benefits', 'allowances']),
         ]);
     }
+
 
 
     // ✅ Archive employee

@@ -149,4 +149,9 @@ class Employee extends Authenticatable
     {
         return $this->belongsToMany(BenefitType::class, 'employee_benefit', 'employee_id', 'benefit_type_id');
     }
+    public function allowances()
+    {
+        return $this->belongsToMany(AllowanceType::class, 'employee_allowance', 'employee_id', 'allowance_type_id')
+            ->withTimestamps();
+    }
 }
