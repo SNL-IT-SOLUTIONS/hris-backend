@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Mail\InterviewScheduledMail;
 use Illuminate\Support\Facades\Mail;
+use Exception;
 
 
 class InterviewController extends Controller
@@ -180,13 +181,13 @@ class InterviewController extends Controller
     {
         try {
             $interview = Interview::findOrFail($id);
-            $interview->update(['status' => 'no show']);
+            $interview->update(['status' => 'noshow']);
 
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Interview cancelled successfully.',
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error cancelling interview: ' . $e->getMessage());
             return response()->json([
                 'isSuccess' => false,
