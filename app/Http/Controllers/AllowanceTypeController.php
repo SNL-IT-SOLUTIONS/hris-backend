@@ -114,7 +114,7 @@ class AllowanceTypeController extends Controller
     }
 
     /**
-     * ❌ Delete an allowance type
+     *  Delete an allowance type
      */
     public function deleteAllowanceType($id)
     {

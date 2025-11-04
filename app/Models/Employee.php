@@ -109,7 +109,6 @@ class Employee extends Authenticatable
     protected $hidden = ['password'];
 
     protected $casts = [
-        'is_archived' => 'boolean',
         'hire_date' => 'date',
         'date_of_birth' => 'date',
     ];

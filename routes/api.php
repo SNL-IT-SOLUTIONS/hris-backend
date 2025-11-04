@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AllowanceTypeController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CompanyInformationController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\InterviewController;
 use App\Http\Controllers\DropdownController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\PayrollController;
+use App\Models\AllowanceType;
 
 /*
 |--------------------------------------------------------------------------
@@ -182,6 +184,13 @@ Route::controller(PayrollController::class)->group(function () {
 });
 
 //Allowances
+Route::comntroller(AllowanceTypeController::class)->group(function () {
+    Route::get('allowance-types', 'getAllowanceTypes');
+    Route::get('allowance-types/{id}', 'getAllowanceTypeById');
+    Route::post('create/allowance-types', 'createAllowanceType');
+    Route::post('update/allowance-types/{id}', 'updateAllowanceType');
+    Route::post('allowance-types/{id}/archive', 'archiveAllowanceType');
+});
 
 
 //DROPDOWNS

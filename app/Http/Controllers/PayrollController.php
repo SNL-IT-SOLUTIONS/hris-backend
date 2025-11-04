@@ -169,7 +169,7 @@ class PayrollController extends Controller
                 ->select('id', 'first_name', 'last_name', 'base_salary', 'position_id', 'department_id')
                 ->with([
                     'department:id,department_name',
-                    'position:id,position_name' // ✅ Load position name
+                    'position:id,position_name' // Load position name
                 ])
                 ->orderBy('last_name')
                 ->get()
@@ -178,7 +178,7 @@ class PayrollController extends Controller
                         'employee_id' => $emp->id,
                         'full_name' => "{$emp->first_name} {$emp->last_name}",
                         'base_salary' => $emp->base_salary,
-                        'position' => $emp->position->position_name ?? null, // ✅ Use position name
+                        'position' => $emp->position->position_name ?? null, //  Use position name
                         'department' => $emp->department->department_name ?? null,
                     ];
                 });
