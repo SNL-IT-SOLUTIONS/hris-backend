@@ -62,7 +62,7 @@ class EmployeeController extends Controller
         }
 
         // 🔹 Pagination
-        $perPage = $request->input('per_page', 10);
+        $perPage = $request->input('per_page', 5);
         $employees = $query->paginate($perPage);
 
         if ($employees->isEmpty()) {
