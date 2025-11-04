@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Allowances;
+use App\Models\AllowanceType;
 use Illuminate\Support\Facades\Validator;
 
 class AllowanceTypeController extends Controller
@@ -13,7 +14,7 @@ class AllowanceTypeController extends Controller
      */
     public function getAllowanceTypes(Request $request)
     {
-        $query = Allowances::query();
+        $query = AllowanceType::query();
 
         // 🔍 Search filter
         if ($request->has('search') && $request->search != '') {
@@ -67,7 +68,7 @@ class AllowanceTypeController extends Controller
             ], 422);
         }
 
-        $allowance = Allowances::create($validator->validated());
+        $allowance = AllowanceType::create($validator->validated());
 
         return response()->json([
             'isSuccess' => true,
@@ -81,7 +82,7 @@ class AllowanceTypeController extends Controller
      */
     public function updateAllowanceType(Request $request, $id)
     {
-        $allowance = Allowances::find($id);
+        $allowance = AllowanceType::find($id);
 
         if (!$allowance) {
             return response()->json([
