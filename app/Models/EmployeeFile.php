@@ -20,4 +20,9 @@ class EmployeeFile extends Model
     {
         return $this->belongsTo(Employee::class, 'employee_id', 'id');
     }
+    public function benefits()
+    {
+        return $this->belongsToMany(BenefitType::class, 'employee_benefit', 'employee_id', 'benefit_type_id')
+            ->withTimestamps();
+    }
 }

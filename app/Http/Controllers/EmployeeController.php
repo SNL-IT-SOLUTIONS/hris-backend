@@ -148,8 +148,8 @@ class EmployeeController extends Controller
             'place_of_birth' => 'nullable|string|max:255',
             'sex'          => 'nullable|string|max:10',
             'civil_status' => 'nullable|string|max:50',
-            'height_m'  => 'nullable|numeric',
-            'weight_kg' => 'nullable|numeric',
+            'height_m'     => 'nullable|numeric',
+            'weight_kg'    => 'nullable|numeric',
             'blood_type'   => 'nullable|string|max:5',
             'citizenship'  => 'nullable|string|max:100',
 
@@ -162,12 +162,12 @@ class EmployeeController extends Controller
             'agency_employee_no' => 'nullable|string|max:50',
 
             // 🔹 Address Info
-            'residential_address'  => 'nullable|string|max:255',
-            'residential_zipcode'  => 'nullable|string|max:10',
-            'residential_tel_no'   => 'nullable|string|max:50',
-            'permanent_address'    => 'nullable|string|max:255',
-            'permanent_zipcode'    => 'nullable|string|max:10',
-            'permanent_tel_no'     => 'nullable|string|max:50',
+            'residential_address' => 'nullable|string|max:255',
+            'residential_zipcode' => 'nullable|string|max:10',
+            'residential_tel_no'  => 'nullable|string|max:50',
+            'permanent_address'   => 'nullable|string|max:255',
+            'permanent_zipcode'   => 'nullable|string|max:10',
+            'permanent_tel_no'    => 'nullable|string|max:50',
 
             // 🔹 Family Info
             'spouse_name'           => 'nullable|string|max:255',
@@ -179,41 +179,12 @@ class EmployeeController extends Controller
             'mother_name'           => 'nullable|string|max:255',
             'parents_address'       => 'nullable|string|max:255',
 
-            // 🔹 Education (Elementary → Graduate)
-            'elementary_school_name'       => 'nullable|string|max:255',
-            'elementary_degree_course'     => 'nullable|string|max:255',
-            'elementary_year_graduated'    => 'nullable|string|max:10',
-            'elementary_highest_level'     => 'nullable|string|max:100',
-            'elementary_inclusive_dates'   => 'nullable|string|max:50',
-            'elementary_honors'            => 'nullable|string|max:255',
-
-            'secondary_school_name'        => 'nullable|string|max:255',
-            'secondary_degree_course'      => 'nullable|string|max:255',
-            'secondary_year_graduated'     => 'nullable|string|max:10',
-            'secondary_highest_level'      => 'nullable|string|max:100',
-            'secondary_inclusive_dates'    => 'nullable|string|max:50',
-            'secondary_honors'             => 'nullable|string|max:255',
-
-            'vocational_school_name'       => 'nullable|string|max:255',
-            'vocational_degree_course'     => 'nullable|string|max:255',
-            'vocational_year_graduated'    => 'nullable|string|max:10',
-            'vocational_highest_level'     => 'nullable|string|max:100',
-            'vocational_inclusive_dates'   => 'nullable|string|max:50',
-            'vocational_honors'            => 'nullable|string|max:255',
-
-            'college_school_name'          => 'nullable|string|max:255',
-            'college_degree_course'        => 'nullable|string|max:255',
-            'college_year_graduated'       => 'nullable|string|max:10',
-            'college_highest_level'        => 'nullable|string|max:100',
-            'college_inclusive_dates'      => 'nullable|string|max:50',
-            'college_honors'               => 'nullable|string|max:255',
-
-            'graduate_school_name'         => 'nullable|string|max:255',
-            'graduate_degree_course'       => 'nullable|string|max:255',
-            'graduate_year_graduated'      => 'nullable|string|max:10',
-            'graduate_highest_level'       => 'nullable|string|max:100',
-            'graduate_inclusive_dates'     => 'nullable|string|max:50',
-            'graduate_honors'              => 'nullable|string|max:255',
+            // 🔹 Education
+            'elementary_school_name'     => 'nullable|string|max:255',
+            'secondary_school_name'      => 'nullable|string|max:255',
+            'vocational_school_name'     => 'nullable|string|max:255',
+            'college_school_name'        => 'nullable|string|max:255',
+            'graduate_school_name'       => 'nullable|string|max:255',
 
             // 🔹 Employment
             'department_id'        => 'nullable|exists:departments,id',
@@ -225,37 +196,42 @@ class EmployeeController extends Controller
             'hire_date'            => 'nullable|date',
 
             // 🔹 Emergency Contact
-            'emergency_contact_name'      => 'nullable|string|max:255',
-            'emergency_contact_number'    => 'nullable|string|max:50',
-            'emergency_contact_relation'  => 'nullable|string|max:100',
+            'emergency_contact_name'     => 'nullable|string|max:255',
+            'emergency_contact_number'   => 'nullable|string|max:50',
+            'emergency_contact_relation' => 'nullable|string|max:100',
 
-            // 🔹 Auth / System
+            // 🔹 Auth
             'password'     => 'required|string|min:8',
             'role'         => 'nullable|string|max:50',
             'is_archived'  => 'nullable|boolean',
+
+            // 🔹 Benefits
+            'benefit_type_ids'   => 'nullable|array',
+            'benefit_type_ids.*' => 'exists:benefit_types,id',
         ]);
 
-
-        // ✅ Hash password before saving
+        // ✅ Hash password
         $plainPassword = $validated['password'];
         $validated['password'] = Hash::make($plainPassword);
 
-        // ✅ Generate automatic employee_id (e.g. EMP-2025-0001)
+        // ✅ Auto-generate employee_id
         $latestEmployee = Employee::latest('id')->first();
         $nextNumber = $latestEmployee ? $latestEmployee->id + 1 : 1;
-        $year = date('Y');
-        $employeeID = 'EMP-' . $year . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+        $employeeID = 'EMP-' . date('Y') . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
         $validated['employee_id'] = $employeeID;
 
-        // Create employee record
+        // ✅ Create Employee
         $employee = Employee::create($validated);
 
-        // Handle multiple 201 files
-        // ✅ Handle multiple 201 files correctly
+        // ✅ Attach Benefits (if provided)
+        if (!empty($validated['benefit_type_ids'])) {
+            $employee->benefits()->sync($validated['benefit_type_ids']);
+        }
+
+        // ✅ Handle 201 Files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
-                $filePath = $this->saveFileToPublic($file, 'employee_201');
-
+                $filePath = $file->store('employee_201', 'public');
                 EmployeeFile::create([
                     'employee_id' => $employee->id,
                     'file_path'   => $filePath,
@@ -265,8 +241,7 @@ class EmployeeController extends Controller
             }
         }
 
-
-        // Send welcome email (fail-safe)
+        // ✅ Send Welcome Email (fail-safe)
         try {
             Mail::to($employee->email)->send(new EmployeeCreated($employee, $plainPassword));
         } catch (\Exception $e) {
@@ -275,8 +250,8 @@ class EmployeeController extends Controller
 
         return response()->json([
             'isSuccess' => true,
-            'message'   => 'Employee created successfully and email sent.',
-            'employee'  => $employee
+            'message'   => 'Employee created successfully.',
+            'employee'  => $employee->load('benefits', 'files'),
         ], 201);
     }
 
@@ -293,30 +268,28 @@ class EmployeeController extends Controller
             return response()->json(['isSuccess' => false, 'message' => 'Employee not found.'], 404);
         }
 
-        // Validate only critical fields (email uniqueness, ID existence, etc.)
         $request->validate([
             'email'         => 'sometimes|email|unique:employees,email,' . $employee->id,
             'department_id' => 'nullable|exists:departments,id',
             'position_id'   => 'nullable|exists:position_types,id',
             'password'      => 'nullable|string|min:8',
             '201_file.*'    => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
+            'benefits'      => 'nullable|array',
+            'benefits.*'    => 'exists:benefit_types,id',
         ]);
 
-        $data = $request->except('201_file', 'password');
+        $data = $request->except('201_file', 'password', 'benefits');
 
-        // 🔹 Handle password (hash if provided)
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
         }
 
-        // Update everything else dynamically
         $employee->update($data);
 
-        // 🔹 Handle uploaded 201 files
+        // 🔹 Handle files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
-                $filePath = $file->store('employee_201', 'public');
-
+                $filePath = $this->saveFileToPublic($file, 'employee_201');
                 EmployeeFile::create([
                     'employee_id' => $employee->id,
                     'file_path'   => $filePath,
@@ -326,13 +299,17 @@ class EmployeeController extends Controller
             }
         }
 
+        // 🔹 Update Benefits (sync)
+        if ($request->filled('benefits')) {
+            $employee->benefits()->sync($request->benefits);
+        }
+
         return response()->json([
             'isSuccess' => true,
-            'message' => 'Employee updated successfully.',
-            'employee' => $employee->load('files'),
+            'message'   => 'Employee updated successfully.',
+            'employee'  => $employee->load(['files', 'benefits']),
         ]);
     }
-
 
 
     // ✅ Archive employee

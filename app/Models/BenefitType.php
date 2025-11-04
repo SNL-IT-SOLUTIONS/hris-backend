@@ -17,4 +17,9 @@ class BenefitType extends Model
         'rate',
         'is_active',
     ];
+    public function employees()
+    {
+        return $this->belongsToMany(Employee::class, 'employee_benefit', 'benefit_type_id', 'employee_id')
+            ->withTimestamps();
+    }
 }
