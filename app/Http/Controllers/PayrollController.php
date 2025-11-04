@@ -148,7 +148,7 @@ class PayrollController extends Controller
                 'employees' => $employees,
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error fetching employees: ' . $e->getMessage());
+            Log::error('Error fetching employees: ' . $e->getMessage());
 
             return response()->json([
                 'isSuccess' => false,
