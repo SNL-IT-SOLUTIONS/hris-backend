@@ -123,32 +123,55 @@ class EmployeeController extends Controller
 
     public function getEmployeeById($id)
     {
-        $employee = Employee::with(['department', 'position', 'manager', 'supervisor', 'files'])
-            ->where('is_archived', false)
-            ->find($id);
+        try {
+            $employee = Employee::with([
+                'department:id,department_name',
+                'position:id,position_name',
+                'manager:id,first_name,last_name',
+                'supervisor:id,first_name,last_name',
+                'files',
+                'benefits:id,type_name,description',
+                'allowances:id,type_name,description,value'
+            ])
+                ->where('is_archived', false)
+                ->find($id);
 
-        if (!$employee) {
+            if (!$employee) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'Employee not found.',
+                ], 404);
+            }
+
+            // ✅ Convert file paths to full URLs
+            $employee->files->transform(function ($file) {
+                $file->file_path = asset('storage/' . $file->file_path);
+                return $file;
+            });
+
+            // ✅ Convert resume path if it exists
+            $employee->resume = $employee->resume ? asset('storage/' . $employee->resume) : null;
+
+            // ✅ Include full name for manager and supervisor
+            $employee->manager_name = $employee->manager ? "{$employee->manager->first_name} {$employee->manager->last_name}" : null;
+            $employee->supervisor_name = $employee->supervisor ? "{$employee->supervisor->first_name} {$employee->supervisor->last_name}" : null;
+
+            // ✅ Optional cleanup: hide unnecessary nested objects
+            unset($employee->manager, $employee->supervisor);
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Employee retrieved successfully.',
+                'employee'  => $employee,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching employee by ID: ' . $e->getMessage());
             return response()->json([
                 'isSuccess' => false,
-                'message'   => 'Employee not found.',
-            ], 404);
+                'message'   => 'Failed to retrieve employee details.',
+                'error'     => $e->getMessage(),
+            ], 500);
         }
-
-        //  Convert file paths
-        $employee->files->transform(function ($file) {
-            $file->file_path = asset($file->file_path);
-            return $file;
-        });
-
-        // Convert resume path if exists
-        $employee->resume = $employee->resume ? asset($employee->resume) : null;
-
-        //  Final Response
-        return response()->json([
-            'isSuccess' => true,
-            'message'   => 'Employee retrieved successfully.',
-            'employee'  => $employee,
-        ]);
     }
 
 
