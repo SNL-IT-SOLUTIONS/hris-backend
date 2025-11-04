@@ -290,7 +290,7 @@ class EmployeeController extends Controller
             'password'     => 'required|string|min:8',
             'role'         => 'nullable|string|max:50',
             'is_archived'  => 'nullable|numeric',
-            'is_interviewer' => 'nullable|numeric',
+            'is_interviewer' => 'nullable|boolean',
         ]);
 
         // ✅ Hash password
