@@ -31,7 +31,7 @@ class PayrollController extends Controller
         DB::beginTransaction();
 
         try {
-            // 🧾 Create payroll period
+            // create payroll period
             $period = PayrollPeriod::create([
                 'period_name' => $request->period_name,
                 'pay_date' => $request->pay_date,
@@ -47,41 +47,51 @@ class PayrollController extends Controller
                 $absences = $emp['absences'] ?? 0;
                 $late_deduction = $emp['late_deductions'] ?? 0;
 
-                // 🧮 Gross Pay
+                // gross
                 $gross = ($daily * $days) + ($overtime * ($daily / 8));
 
-                // 🔍 Get benefits linked to this employee
-                $employeeBenefits = DB::table('employee_benefit')
+                // === BENEFITS (only those assigned to this employee) ===
+                $employeeBenefitIds = DB::table('employee_benefit')
                     ->where('employee_id', $employee->id)
-                    ->pluck('benefit_type_id');
+                    ->pluck('benefit_type_id')
+                    ->toArray();
 
-                // Fetch corresponding benefit rates
-                $benefitRates = BenefitType::whereIn('id', $employeeBenefits)
-                    ->pluck('rate', 'benefit_name');
+                if (!empty($employeeBenefitIds)) {
+                    $benefitRates = BenefitType::whereIn('id', $employeeBenefitIds)
+                        ->get()
+                        ->pluck('rate', 'benefit_name'); // ['SSS' => 4.5, ...]
+                } else {
+                    $benefitRates = collect(); // empty collection
+                }
 
-                // 🔍 Get allowances linked to this employee
-                $employeeAllowances = DB::table('employee_allowance')
+                // === ALLOWANCES (only those assigned to this employee) ===
+                $employeeAllowanceIds = DB::table('employee_allowance')
                     ->where('employee_id', $employee->id)
-                    ->pluck('allowance_type_id');
+                    ->pluck('allowance_type_id')
+                    ->toArray();
 
-                // Fetch allowance values from allowance_types
-                $allowances = AllowanceType::whereIn('id', $employeeAllowances)
-                    ->pluck('value', 'type_name');
+                if (!empty($employeeAllowanceIds)) {
+                    $allowances = AllowanceType::whereIn('id', $employeeAllowanceIds)
+                        ->get()
+                        ->pluck('value', 'type_name'); // ['Transport' => 1500, ...]
+                } else {
+                    $allowances = collect();
+                }
 
-                // ✅ Compute deductions
-                $sss = isset($benefitRates['SSS']) ? $gross * ($benefitRates['SSS'] / 100) : 0;
-                $philhealth = isset($benefitRates['Philhealth']) ? $gross * ($benefitRates['Philhealth'] / 100) : 0;
-                $pagibig = isset($benefitRates['Pagibig']) ? $gross * ($benefitRates['Pagibig'] / 100) : 0;
+                // deductions (only if the employee has that benefit)
+                $sss = $benefitRates->has('SSS') ? ($gross * ($benefitRates['SSS'] / 100)) : 0;
+                $philhealth = $benefitRates->has('Philhealth') ? ($gross * ($benefitRates['Philhealth'] / 100)) : 0;
+                $pagibig = $benefitRates->has('Pagibig') ? ($gross * ($benefitRates['Pagibig'] / 100)) : 0;
 
                 $total_deductions = $sss + $philhealth + $pagibig + $late_deduction;
 
-                // ✅ Total allowances
+                // total allowances (sum of assigned allowance values)
                 $total_allowances = $allowances->sum();
 
-                // 🧾 Net pay = gross + allowances - deductions
+                // net pay
                 $net = $gross + $total_allowances - $total_deductions;
 
-                // 💾 Create Payroll Record
+                // create payroll record
                 $record = PayrollRecord::create([
                     'payroll_period_id' => $period->id,
                     'employee_id' => $employee->id,
@@ -95,7 +105,7 @@ class PayrollController extends Controller
                     'net_pay' => $net,
                 ]);
 
-                // 💾 Save individual deduction details
+                // save deductions (only those > 0 and present)
                 $deductions = [
                     ['name' => 'SSS', 'amount' => $sss],
                     ['name' => 'Philhealth', 'amount' => $philhealth],
@@ -105,7 +115,6 @@ class PayrollController extends Controller
                 foreach ($deductions as $ded) {
                     if ($ded['amount'] > 0) {
                         $benefitType = BenefitType::where('benefit_name', $ded['name'])->first();
-
                         if ($benefitType) {
                             PayrollDeduction::create([
                                 'payroll_record_id' => $record->id,
@@ -118,8 +127,15 @@ class PayrollController extends Controller
                     }
                 }
 
-                // 🧾 Log allowances in JSON form (optional for reference)
-                Log::info("Allowances for Employee ID {$employee->id}: " . json_encode($allowances));
+                // OPTIONAL: store allowances as JSON inside payroll_record (if you want to keep detail)
+                if ($allowances->isNotEmpty()) {
+                    $record->update([
+                        'allowances' => $allowances->toJson(), // ensure payroll_records has a nullable JSON column 'allowances'
+                    ]);
+                }
+
+                // log for debugging if needed
+                Log::info("Payroll for employee {$employee->id}: gross={$gross}, allowances={$total_allowances}, deductions={$total_deductions}, net={$net}");
             }
 
             DB::commit();
@@ -139,6 +155,7 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
 
 
 
