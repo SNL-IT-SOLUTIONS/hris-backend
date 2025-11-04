@@ -19,7 +19,6 @@ class BenefitType extends Model
     ];
     public function employees()
     {
-        return $this->belongsToMany(Employee::class, 'employee_benefit', 'benefit_type_id', 'employee_id')
-            ->withTimestamps();
+        return $this->belongsToMany(Employee::class, 'employee_benefit', 'benefit_type_id', 'employee_id');
     }
 }

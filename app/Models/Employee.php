@@ -147,6 +147,6 @@ class Employee extends Authenticatable
 
     public function benefits()
     {
-        return $this->hasMany(BenefitType::class, 'employee_id');
+        return $this->belongsToMany(BenefitType::class, 'employee_benefit', 'employee_id', 'benefit_type_id');
     }
 }
