@@ -16,8 +16,14 @@ class EmployeeController extends Controller
     //  Get all employees
     public function getEmployees(Request $request)
     {
-        $query = Employee::with(['department', 'position', 'manager', 'supervisor', 'files'])
-            ->where('is_archived', false);
+        $query = Employee::with([
+            'department',
+            'position',
+            'manager',
+            'supervisor',
+            'files',
+            'benefits'
+        ])->where('is_archived', false);
 
         // 🔎 Search
         if ($request->has('search') && $request->search != '') {
@@ -31,21 +37,31 @@ class EmployeeController extends Controller
                     })
                     ->orWhereHas('position', function ($pq) use ($search) {
                         $pq->where('position_name', 'LIKE', "%$search%");
+                    })
+                    ->orWhereHas('benefits', function ($bq) use ($search) {
+                        $bq->where('benefit_name', 'LIKE', "%$search%");
                     });
             });
         }
 
-        // Filter by department
-        if ($request->has('department_id')) {
+        // 🔹 Filter by department
+        if ($request->has('department_id') && $request->department_id != '') {
             $query->where('department_id', $request->department_id);
         }
 
-        //  Filter by position
-        if ($request->has('position_id')) {
+        // 🔹 Filter by position
+        if ($request->has('position_id') && $request->position_id != '') {
             $query->where('position_id', $request->position_id);
         }
 
-        //  Pagination
+        // 🔹 Filter by benefit (optional)
+        if ($request->has('benefit_id') && $request->benefit_id != '') {
+            $query->whereHas('benefits', function ($q) use ($request) {
+                $q->where('benefit_types.id', $request->benefit_id);
+            });
+        }
+
+        // 🔹 Pagination
         $perPage = $request->input('per_page', 10);
         $employees = $query->paginate($perPage);
 
@@ -56,26 +72,36 @@ class EmployeeController extends Controller
             ], 404);
         }
 
-        //  Convert file paths for each employee
+        // 🔹 Transform each employee record
         $employees->getCollection()->transform(function ($emp) {
-            // Attach full file URLs
+            // ✅ Attach full file URLs
             $emp->files->transform(function ($file) {
                 $file->file_path = asset($file->file_path);
                 return $file;
             });
 
-            // Convert resume if present
+            // ✅ Convert resume path to full URL
             $emp->resume = $emp->resume ? asset($emp->resume) : null;
+
+            // ✅ Transform benefits into readable format
+            $emp->benefits = $emp->benefits->map(function ($benefit) {
+                return [
+                    'id' => $benefit->id,
+                    'benefit_name' => $benefit->benefit_name,
+                    'category' => $benefit->category,
+                    'rate' => $benefit->rate,
+                ];
+            });
 
             return $emp;
         });
 
-        //  Summary counts
+        // 🔹 Summary counts
         $totalEmployees = Employee::where('is_archived', false)->count();
         $activeEmployees = Employee::where('is_archived', false)->where('is_active', true)->count();
         $inactiveEmployees = Employee::where('is_archived', true)->count();
 
-        //  Final Response
+        // 🔹 Final Response
         return response()->json([
             'isSuccess' => true,
             'message'   => 'Employees retrieved successfully.',
@@ -93,6 +119,7 @@ class EmployeeController extends Controller
             ],
         ]);
     }
+
 
 
     public function getEmployeeById($id)
