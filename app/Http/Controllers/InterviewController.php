@@ -88,6 +88,7 @@ class InterviewController extends Controller
         try {
             $interviews = Interview::with('interviewer')
                 ->where('applicant_id', $applicantId)
+                ->where('status', '!=', 'completed')
                 ->orderBy('scheduled_at', 'desc')
                 ->get();
 
