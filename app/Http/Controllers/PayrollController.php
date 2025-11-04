@@ -224,7 +224,7 @@ class PayrollController extends Controller
             'gross_pay' => $record->gross_pay,
             'deductions' => $record->deductions->map(function ($deduction) {
                 return [
-                    'benefit_type' => $deduction->benefitType->name ?? null,
+                    'benefit_type' => $deduction->benefitType->benefit_name ?? null,
                     'deduction_amount' => $deduction->deduction_amount,
                 ];
             }),

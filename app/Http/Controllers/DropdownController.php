@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\WorkLocation;
 use App\Models\Employee;
 use App\Models\PositionType;
+use App\Models\BenefitType;
 
 class DropdownController extends Controller
 {
@@ -139,6 +140,28 @@ class DropdownController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to load interviewers dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getBenefitTypesDropdown()
+    {
+        try {
+            $benefitTypes = BenefitType::select('id', 'benefit_name')
+                ->where('is_active', 1)
+                ->orderBy('benefit_name', 'asc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Benefit types dropdown retrieved successfully.',
+                'data' => $benefitTypes
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load benefit types dropdown.',
                 'error' => $e->getMessage()
             ], 500);
         }
