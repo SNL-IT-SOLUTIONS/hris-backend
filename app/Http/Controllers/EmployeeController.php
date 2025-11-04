@@ -24,7 +24,7 @@ class EmployeeController extends Controller
             'files',
             'benefits',
             'allowances' // ✅ added
-        ])->where('is_archived', false);
+        ])->where('is_archived', 0);
 
         // 🔎 Search
         if ($request->has('search') && $request->search != '') {
@@ -266,7 +266,7 @@ class EmployeeController extends Controller
             // 🔹 Auth / System
             'password'     => 'required|string|min:8',
             'role'         => 'nullable|string|max:50',
-            'is_archived'  => 'nullable|boolean',
+            'is_archived'  => 'nullable|numeric',
         ]);
 
         // ✅ Hash password
