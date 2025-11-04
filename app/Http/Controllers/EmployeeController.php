@@ -346,7 +346,7 @@ class EmployeeController extends Controller
             'allowances.*'    => 'exists:allowance_types,id',
         ]);
 
-        $data = $request->except('201_file', 'password', 'benefits', 'allowances');
+        $data = $request->except('201_file', 'password',);
 
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
