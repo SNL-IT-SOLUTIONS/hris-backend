@@ -328,7 +328,10 @@ class EmployeeController extends Controller
         $employee = Employee::find($id);
 
         if (!$employee) {
-            return response()->json(['isSuccess' => false, 'message' => 'Employee not found.'], 404);
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Employee not found.'
+            ], 404);
         }
 
         $request->validate([
@@ -338,15 +341,15 @@ class EmployeeController extends Controller
             'password'      => 'nullable|string|min:8',
             '201_file.*'    => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
 
+            // Pivot relationships
             'benefits'      => 'nullable|array',
             'benefits.*'    => 'exists:benefit_types,id',
 
-            // ✅ new
-            'allowances'      => 'nullable|array',
-            'allowances.*'    => 'exists:allowance_types,id',
+            'allowances'    => 'nullable|array',
+            'allowances.*'  => 'exists:allowance_types,id',
         ]);
 
-        $data = $request->except('201_file', 'password',);
+        $data = $request->except(['201_file', 'password', 'benefits', 'allowances']);
 
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
@@ -354,6 +357,7 @@ class EmployeeController extends Controller
 
         $employee->update($data);
 
+        // ✅ Handle 201 Files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
                 $filePath = $this->saveFileToPublic($file, 'employee_201');
@@ -366,13 +370,14 @@ class EmployeeController extends Controller
             }
         }
 
-        if ($request->filled('benefits')) {
-            $employee->benefits()->sync($request->benefits);
+        // ✅ Handle Benefits (even if empty array, clear all)
+        if ($request->has('benefits')) {
+            $employee->benefits()->sync($request->benefits ?? []);
         }
 
-        // ✅ Handle Allowances
-        if ($request->filled('allowances')) {
-            $employee->allowances()->sync($request->allowances);
+        // ✅ Handle Allowances (same logic)
+        if ($request->has('allowances')) {
+            $employee->allowances()->sync($request->allowances ?? []);
         }
 
         return response()->json([
