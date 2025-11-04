@@ -184,7 +184,7 @@ Route::controller(PayrollController::class)->group(function () {
 });
 
 //Allowances
-Route::comntroller(AllowanceTypeController::class)->group(function () {
+Route::controller(AllowanceTypeController::class)->group(function () {
     Route::get('allowance-types', 'getAllowanceTypes');
     Route::get('allowance-types/{id}', 'getAllowanceTypeById');
     Route::post('create/allowance-types', 'createAllowanceType');
