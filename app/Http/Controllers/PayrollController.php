@@ -45,7 +45,7 @@ class PayrollController extends Controller
                 $days = $emp['days_worked'];
                 $overtime = $emp['overtime_hours'] ?? 0;
                 $absences = $emp['absences'] ?? 0;
-                $late_deduction = $emp['late_deductions'] ?? 0;
+                $other_deductions = $emp['other_deductions'] ?? 0;
 
                 // gross
                 $gross = ($daily * $days) + ($overtime * ($daily / 8));
@@ -83,7 +83,7 @@ class PayrollController extends Controller
                 $philhealth = $benefitRates->has('Philhealth') ? ($gross * ($benefitRates['Philhealth'] / 100)) : 0;
                 $pagibig = $benefitRates->has('Pagibig') ? ($gross * ($benefitRates['Pagibig'] / 100)) : 0;
 
-                $total_deductions = $sss + $philhealth + $pagibig + $late_deduction;
+                $total_deductions = $sss + $philhealth + $pagibig + $other_deductions;
 
                 // total allowances (sum of assigned allowance values)
                 $total_allowances = $allowances->sum();
@@ -99,7 +99,7 @@ class PayrollController extends Controller
                     'days_worked' => $days,
                     'overtime_hours' => $overtime,
                     'absences' => $absences,
-                    'late_deductions' => $late_deduction,
+                    'other_deductions' => $other_deductions,
                     'gross_pay' => $gross,
                     'total_deductions' => $total_deductions,
                     'net_pay' => $net,

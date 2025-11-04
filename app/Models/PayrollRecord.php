@@ -18,7 +18,7 @@ class PayrollRecord extends Model
         'days_worked',
         'overtime_hours',
         'absences',
-        'late_deductions',
+        'other_deductions',
         'gross_pay',
         'total_deductions',
         'net_pay',
