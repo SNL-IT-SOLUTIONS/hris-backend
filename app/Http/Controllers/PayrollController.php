@@ -126,8 +126,11 @@ class PayrollController extends Controller
     {
         try {
             $employees = Employee::where('is_active', 1)
-                ->select('id', 'first_name', 'last_name', 'base_salary', 'position', 'department_id')
-                ->with('department:id,department_name')
+                ->select('id', 'first_name', 'last_name', 'base_salary', 'position_id', 'department_id')
+                ->with([
+                    'department:id,department_name',
+                    'position:id,position_name' // ✅ Load position name
+                ])
                 ->orderBy('last_name')
                 ->get()
                 ->map(function ($emp) {
@@ -135,7 +138,7 @@ class PayrollController extends Controller
                         'employee_id' => $emp->id,
                         'full_name' => "{$emp->first_name} {$emp->last_name}",
                         'base_salary' => $emp->base_salary,
-                        'position' => $emp->position,
+                        'position' => $emp->position->position_name ?? null, // ✅ Use position name
                         'department' => $emp->department->department_name ?? null,
                     ];
                 });
@@ -145,7 +148,7 @@ class PayrollController extends Controller
                 'employees' => $employees,
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching employees: ' . $e->getMessage());
+            \Log::error('Error fetching employees: ' . $e->getMessage());
 
             return response()->json([
                 'isSuccess' => false,

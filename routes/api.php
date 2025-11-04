@@ -181,6 +181,8 @@ Route::controller(PayrollController::class)->group(function () {
     Route::post('payroll/process/{periodId}', 'processPayroll');
 });
 
+//Allowances
+
 
 //DROPDOWNS
 Route::controller(DropdownController::class)->group(function () {
