@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AllowanceType;
 use App\Models\Department;
 use App\Models\WorkLocation;
 use App\Models\Employee;
@@ -170,9 +171,9 @@ class DropdownController extends Controller
     public function getAllowanceTypesDropdown()
     {
         try {
-            $allowanceTypes = BenefitType::select('id', 'benefit_name', 'value')
+            $allowanceTypes = AllowanceType::select('id', 'type_name', 'value')
                 ->where('is_active', 1)
-                ->orderBy('benefit_name', 'asc')
+                ->orderBy('type_name', 'asc')
                 ->get();
 
             return response()->json([
