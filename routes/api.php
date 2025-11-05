@@ -20,7 +20,7 @@ use App\Http\Controllers\InterviewController;
 use App\Http\Controllers\DropdownController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\PayrollController;
-use App\Models\AllowanceType;
+use App\Http\Controllers\LoanTypeController;
 
 /*
 |--------------------------------------------------------------------------
@@ -193,6 +193,16 @@ Route::controller(AllowanceTypeController::class)->group(function () {
 });
 
 
+//Loans
+Route::controller(LoanTypeController::class)->group(function () {
+    Route::get('loan-types', 'getLoanTypes');
+    Route::get('loan-types/{id}', 'getLoanTypeById');
+    Route::post('create/loan-types', 'createLoanType');
+    Route::post('update/loan-types/{id}', 'updateLoanType');
+    Route::post('loan-types/{id}/archive', 'archiveLoanType');
+});
+
+
 //DROPDOWNS
 Route::controller(DropdownController::class)->group(function () {
     Route::get('dropdown/departments', 'getDepartments');
@@ -201,4 +211,5 @@ Route::controller(DropdownController::class)->group(function () {
     Route::get('dropdown/position-types', 'getPostionTypesDropdown');
     Route::get('dropdown/interviewers', 'getInterviewersDropdown');
     Route::get('dropdown/benefit-types', 'getBenefitTypesDropdown');
+    Route::get('dropdown/allowance-types', 'getAllowanceTypesDropdown');
 });
