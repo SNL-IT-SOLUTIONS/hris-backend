@@ -150,6 +150,7 @@ class DropdownController extends Controller
     {
         try {
             $benefitTypes = BenefitType::select('id', 'benefit_name')
+                ->where('is_active', 1)
                 ->orderBy('benefit_name', 'asc')
                 ->get();
 
@@ -171,7 +172,7 @@ class DropdownController extends Controller
     {
         try {
             $allowanceTypes = AllowanceType::select('id', 'type_name', 'value')
-                ->where('is_active', 1)
+                ->where('is_archive', 0)
                 ->orderBy('type_name', 'asc')
                 ->get();
 
