@@ -150,9 +150,6 @@ class PayrollController extends Controller
     }
 
 
-
-
-
     /**
      * Get list of active employees for payroll generation
      */
@@ -324,9 +321,4 @@ class PayrollController extends Controller
             ], 500);
         }
     }
-
-
-
-    //Helper
-
 }
