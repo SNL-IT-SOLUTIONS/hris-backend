@@ -120,6 +120,25 @@ class LoanController extends Controller
         }
     }
 
+    public function approveLoan($id)
+    {
+        try {
+            $loan = Loan::findOrFail($id);
+            $loan->update(['status' => 'active']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Loan approved successfully.',
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error approving loan: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to approve loan.',
+            ], 500);
+        }
+    }
+
     /**
      * Cancel (soft delete) a loan.
      */

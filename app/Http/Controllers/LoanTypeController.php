@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\LoanType;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class LoanTypeController extends Controller
 {
@@ -68,8 +67,6 @@ class LoanTypeController extends Controller
 
         $loanType = LoanType::create($validated);
 
-        Log::info('Loan Type Created', ['loan_type' => $loanType]);
-
         return response()->json([
             'isSuccess' => true,
             'message' => 'Loan type created successfully.',
@@ -93,7 +90,7 @@ class LoanTypeController extends Controller
 
         $loanType->update($validated);
 
-        Log::info('Loan Type Updated', ['loan_type' => $loanType]);
+
 
         return response()->json([
             'isSuccess' => true,
@@ -110,7 +107,6 @@ class LoanTypeController extends Controller
         $loanType = LoanType::findOrFail($id);
         $loanType->update(['is_archived' => true]);
 
-        Log::info('Loan Type Archived', ['loan_type' => $loanType]);
 
         return response()->json([
             'isSuccess' => true,
