@@ -172,7 +172,7 @@ class DropdownController extends Controller
     {
         try {
             $allowanceTypes = AllowanceType::select('id', 'type_name', 'value')
-                ->where('is_archive', 0)
+                ->where('is_archived', 0)
                 ->orderBy('type_name', 'asc')
                 ->get();
 
