@@ -166,4 +166,26 @@ class DropdownController extends Controller
             ], 500);
         }
     }
+
+    public function getAllowanceTypesDropdown()
+    {
+        try {
+            $allowanceTypes = BenefitType::select('id', 'benefit_name')
+                ->where('is_active', 1)
+                ->orderBy('benefit_name', 'asc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Allowance types dropdown retrieved successfully.',
+                'data' => $allowanceTypes
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load allowance types dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

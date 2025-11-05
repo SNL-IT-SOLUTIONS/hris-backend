@@ -49,7 +49,8 @@ class JobPostingController extends Controller
         try {
             $query = JobPosting::with('department')
                 ->where('is_archived', false)
-                ->where('status', 'active');
+                ->where('status', 'active')
+                ->where('status', 'draft');
 
 
             // 🔍 Search
@@ -106,6 +107,8 @@ class JobPostingController extends Controller
         }
     }
 
+
+
     //  Update job posting
     public function updateJobPosting(Request $request, $id)
     {
@@ -127,7 +130,7 @@ class JobPostingController extends Controller
                 'location'       => 'nullable|string|max:255',
                 'salary_range'   => 'nullable|string|max:100',
                 'description'    => 'nullable|string',
-                'status'         => 'in:draft,active,closed',
+                'status'         => 'in:draft,active,open,closed',
                 'posted_date'    => 'nullable|date',
                 'deadline_date'  => 'nullable|date|after_or_equal:posted_date',
             ]);
