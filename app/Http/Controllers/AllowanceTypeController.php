@@ -10,13 +10,13 @@ use Illuminate\Support\Facades\Validator;
 class AllowanceTypeController extends Controller
 {
     /**
-     * 🧾 Get all allowance types (with optional search + pagination)
+     * Get all allowance types (with optional search + pagination)
      */
     public function getAllowanceTypes(Request $request)
     {
         $query = AllowanceType::query();
 
-        // 🔍 Search filter
+        //  Search filter
         if ($request->has('search') && $request->search != '') {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -25,7 +25,7 @@ class AllowanceTypeController extends Controller
             });
         }
 
-        // 📄 Pagination
+        //  Pagination
         $perPage = $request->input('per_page', 10);
         $allowances = $query->orderBy('id', 'desc')->paginate($perPage);
 
@@ -50,7 +50,7 @@ class AllowanceTypeController extends Controller
     }
 
     /**
-     * ➕ Create a new allowance type
+     * Create a new allowance type
      */
     public function createAllowanceType(Request $request)
     {
@@ -78,7 +78,7 @@ class AllowanceTypeController extends Controller
     }
 
     /**
-     * ✏️ Update an existing allowance type
+     *  Update an existing allowance type
      */
     public function updateAllowanceType(Request $request, $id)
     {
@@ -128,7 +128,7 @@ class AllowanceTypeController extends Controller
             ], 404);
         }
 
-        // ✅ Soft delete: mark as archived
+        // Soft delete: mark as archived
         $allowance->is_archived = true;
         $allowance->save();
 
@@ -140,7 +140,7 @@ class AllowanceTypeController extends Controller
 
 
     /**
-     * 🔍 Get allowance type by ID
+     * Get allowance type by ID
      */
     public function getAllowanceTypeById($id)
     {

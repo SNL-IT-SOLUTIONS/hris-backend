@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 
 class EmploymentTypeController extends Controller
 {
-    // ✅ Get all employment types (excluding archived)
+    //  Get all employment types (excluding archived)
     public function getEmploymentTypes()
     {
         $types = EmploymentType::where('is_archived', 0)->get();
@@ -19,7 +19,7 @@ class EmploymentTypeController extends Controller
         ]);
     }
 
-    // ✅ Create new employment type
+    //  Create new employment type
     public function createEmploymentType(Request $request)
     {
         $validated = $request->validate([
@@ -36,7 +36,7 @@ class EmploymentTypeController extends Controller
         ], 201);
     }
 
-    // ✅ Get a single employment type
+    //  Get a single employment type
     public function getEmploymentType($id)
     {
         $type = EmploymentType::find($id);
@@ -55,7 +55,7 @@ class EmploymentTypeController extends Controller
         ]);
     }
 
-    // ✅ Update employment type
+    //  Update employment type
     public function updateEmploymentType(Request $request, $id)
     {
         $type = EmploymentType::find($id);
@@ -81,7 +81,7 @@ class EmploymentTypeController extends Controller
         ]);
     }
 
-    // ✅ Archive employment type instead of deleting
+    //  Archive employment type instead of deleting
     public function deleteEmploymentType($id)
     {
         $type = EmploymentType::find($id);
@@ -103,7 +103,7 @@ class EmploymentTypeController extends Controller
         ]);
     }
 
-    // ✅ Restore archived employment type
+    // Restore archived employment type
     public function restoreEmploymentType($id)
     {
         $type = EmploymentType::find($id);

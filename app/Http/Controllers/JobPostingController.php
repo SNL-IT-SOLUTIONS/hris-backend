@@ -38,7 +38,7 @@ class JobPostingController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to create job posting.',
-                'error' => $e->getMessage(), // 👈 Show actual cause
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -64,17 +64,17 @@ class JobPostingController extends Controller
                 });
             }
 
-            // 🏢 Filter by department
+            //  Filter by department
             if ($request->filled('department_id')) {
                 $query->where('department_id', $request->department_id);
             }
 
-            // ⚙️ Optional: filter by status if provided (overrides default active+draft)
+            //  Optional: filter by status if provided (overrides default active+draft)
             if ($request->filled('status')) {
                 $query->where('status', $request->status);
             }
 
-            // 📄 Pagination
+            //  Pagination
             $perPage = $request->input('per_page', 10);
             $jobs = $query->orderBy('created_at', 'desc')->paginate($perPage);
 

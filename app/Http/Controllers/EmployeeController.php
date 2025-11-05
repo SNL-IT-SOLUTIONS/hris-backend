@@ -23,10 +23,10 @@ class EmployeeController extends Controller
             'supervisor',
             'files',
             'benefits',
-            'allowances' // ✅ added
+            'allowances' //  added
         ])->where('is_archived', 0);
 
-        // 🔎 Search
+        // Search
         if ($request->has('search') && $request->search != '') {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -36,26 +36,26 @@ class EmployeeController extends Controller
                     ->orWhereHas('department', fn($dq) => $dq->where('department_name', 'LIKE', "%$search%"))
                     ->orWhereHas('position', fn($pq) => $pq->where('position_name', 'LIKE', "%$search%"))
                     ->orWhereHas('benefits', fn($bq) => $bq->where('benefit_name', 'LIKE', "%$search%"))
-                    ->orWhereHas('allowances', fn($aq) => $aq->where('type_name', 'LIKE', "%$search%")); // ✅ new search
+                    ->orWhereHas('allowances', fn($aq) => $aq->where('type_name', 'LIKE', "%$search%")); // new search
             });
         }
 
-        // 🔹 Filter by department
+        // Filter by department
         if ($request->filled('department_id')) {
             $query->where('department_id', $request->department_id);
         }
 
-        // 🔹 Filter by position
+        //  Filter by position
         if ($request->filled('position_id')) {
             $query->where('position_id', $request->position_id);
         }
 
-        // 🔹 Filter by benefit
+        //  Filter by benefit
         if ($request->filled('benefit_id')) {
             $query->whereHas('benefits', fn($q) => $q->where('benefit_types.id', $request->benefit_id));
         }
 
-        // 🔹 Filter by allowance
+        //  Filter by allowance
         if ($request->filled('allowance_id')) {
             $query->whereHas('allowances', fn($q) => $q->where('allowance_types.id', $request->allowance_id));
         }
@@ -71,16 +71,16 @@ class EmployeeController extends Controller
         }
 
         $employees->getCollection()->transform(function ($emp) {
-            // ✅ Attach file URLs
+            //  Attach file URLs
             $emp->files->transform(function ($file) {
                 $file->file_path = asset($file->file_path);
                 return $file;
             });
 
-            // ✅ Resume URL
+            // Resume URL
             $emp->resume = $emp->resume ? asset($emp->resume) : null;
 
-            // ✅ Transform benefits
+            // Transform benefits
             $emp->benefits = $emp->benefits->map(fn($b) => [
                 'id' => $b->id,
                 'benefit_name' => $b->benefit_name,
@@ -88,7 +88,7 @@ class EmployeeController extends Controller
                 'rate' => $b->rate,
             ]);
 
-            // ✅ Transform allowances
+            //  Transform allowances
             $emp->allowances = $emp->allowances->map(fn($a) => [
                 'id' => $a->id,
                 'type_name' => $a->type_name,
@@ -99,7 +99,7 @@ class EmployeeController extends Controller
             return $emp;
         });
 
-        // ✅ Summary counts
+        // Summary counts
         return response()->json([
             'isSuccess' => true,
             'message'   => 'Employees retrieved successfully.',
@@ -143,20 +143,20 @@ class EmployeeController extends Controller
                 ], 404);
             }
 
-            // ✅ Convert file paths to full URLs
+            //  Convert file paths to full URLs
             $employee->files->transform(function ($file) {
                 $file->file_path = asset('storage/' . $file->file_path);
                 return $file;
             });
 
-            // ✅ Convert resume path if it exists
+            // Convert resume path if it exists
             $employee->resume = $employee->resume ? asset('storage/' . $employee->resume) : null;
 
-            // ✅ Include full name for manager and supervisor
+            //  Include full name for manager and supervisor
             $employee->manager_name = $employee->manager ? "{$employee->manager->first_name} {$employee->manager->last_name}" : null;
             $employee->supervisor_name = $employee->supervisor ? "{$employee->supervisor->first_name} {$employee->supervisor->last_name}" : null;
 
-            // ✅ Optional cleanup: hide unnecessary nested objects
+            //  Optional cleanup: hide unnecessary nested objects
             unset($employee->manager, $employee->supervisor);
 
             return response()->json([
@@ -182,11 +182,11 @@ class EmployeeController extends Controller
     public function createEmployee(Request $request)
     {
         $validated = $request->validate([
-            // 🔹 File Upload
+            // File Upload
             '201_file.*'   => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
             'resume'       => 'nullable|file|mimes:pdf,doc,docx|max:2048',
 
-            // 🔹 Basic Info
+            // Basic Info
             'first_name'   => 'required|string|max:100',
             'middle_name'  => 'nullable|string|max:100',
             'last_name'    => 'required|string|max:100',
@@ -202,7 +202,7 @@ class EmployeeController extends Controller
             'blood_type'   => 'nullable|string|max:5',
             'citizenship'  => 'nullable|string|max:100',
 
-            // 🔹 Government IDs
+            // Government IDs
             'gsis_no'           => 'nullable|string|max:50',
             'pagibig_no'        => 'nullable|string|max:50',
             'philhealth_no'     => 'nullable|string|max:50',
@@ -210,7 +210,7 @@ class EmployeeController extends Controller
             'tin_no'            => 'nullable|string|max:50',
             'agency_employee_no' => 'nullable|string|max:50',
 
-            // 🔹 Address Info
+            // Address Info
             'residential_address' => 'nullable|string|max:255',
             'residential_zipcode' => 'nullable|string|max:10',
             'residential_tel_no'  => 'nullable|string|max:50',
@@ -218,7 +218,7 @@ class EmployeeController extends Controller
             'permanent_zipcode'   => 'nullable|string|max:10',
             'permanent_tel_no'    => 'nullable|string|max:50',
 
-            // 🔹 Family Info
+            // Family Info
             'spouse_name'           => 'nullable|string|max:255',
             'spouse_occupation'     => 'nullable|string|max:255',
             'spouse_employer'       => 'nullable|string|max:255',
@@ -228,7 +228,7 @@ class EmployeeController extends Controller
             'mother_name'           => 'nullable|string|max:255',
             'parents_address'       => 'nullable|string|max:255',
 
-            // 🔹 Education
+            // Education
             'elementary_school_name' => 'nullable|string|max:255',
             'elementary_degree_course' => 'nullable|string|max:255',
             'elementary_year_graduated' => 'nullable|string|max:10',
@@ -264,7 +264,7 @@ class EmployeeController extends Controller
             'graduate_inclusive_dates' => 'nullable|string|max:50',
             'graduate_honors' => 'nullable|string|max:255',
 
-            // 🔹 Employment
+            // Employment
             'department_id'        => 'nullable|exists:departments,id',
             'position_id'          => 'nullable|exists:position_types,id',
             'employment_type_id'   => 'nullable|exists:employment_types,id',
@@ -273,44 +273,44 @@ class EmployeeController extends Controller
             'base_salary'          => 'nullable|numeric|min:0',
             'hire_date'            => 'nullable|date',
 
-            // 🔹 Emergency Contact
+            // Emergency Contact
             'emergency_contact_name'     => 'nullable|string|max:255',
             'emergency_contact_number'   => 'nullable|string|max:50',
             'emergency_contact_relation' => 'nullable|string|max:100',
 
-            // 🔹 Benefits
+            // Benefits
             'benefit_type_ids'   => 'nullable|array',
             'benefit_type_ids.*' => 'exists:benefit_types,id',
 
-            // 🔹 NEW Allowance field
+            // NEW Allowance field
             'allowance_type_ids'   => 'nullable|array',
             'allowance_type_ids.*' => 'exists:allowance_types,id',
 
-            // 🔹 Auth / System
+            // Auth / System
             'password'     => 'required|string|min:8',
             'role'         => 'nullable|string|max:50',
             'is_archived'  => 'nullable|numeric',
             'is_interviewer' => 'nullable|boolean',
         ]);
 
-        // ✅ Hash password
+        // Hash password
         $plainPassword = $validated['password'];
         $validated['password'] = Hash::make($plainPassword);
 
-        // ✅ Auto-generate employee ID
+        //  Auto-generate employee ID
         $latestEmployee = Employee::latest('id')->first();
         $nextNumber = $latestEmployee ? $latestEmployee->id + 1 : 1;
         $validated['employee_id'] = 'EMP-' . date('Y') . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
-        // ✅ Handle resume file upload
+        // Handle resume file upload
         if ($request->hasFile('resume')) {
             $validated['resume'] = $this->saveFileToPublic($request->file('resume'), 'employee_resumes');
         }
 
-        // ✅ Create employee record
+        // Create employee record
         $employee = Employee::create($validated);
 
-        // ✅ Attach Benefits (many-to-many pivot)
+        // Attach Benefits (many-to-many pivot)
         if (!empty($validated['benefit_type_ids'])) {
             $employee->benefits()->sync($validated['benefit_type_ids']);
         }
@@ -320,7 +320,7 @@ class EmployeeController extends Controller
         }
 
 
-        // ✅ Handle 201 files
+        // Handle 201 files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
                 $filePath = $this->saveFileToPublic($file, 'employee_201');
@@ -333,7 +333,7 @@ class EmployeeController extends Controller
             }
         }
 
-        // ✅ Send Welcome Email (fail-safe)
+        // Send Welcome Email (fail-safe)
         try {
             Mail::to($employee->email)->send(new EmployeeCreated($employee, $plainPassword));
         } catch (\Exception $e) {
@@ -381,7 +381,7 @@ class EmployeeController extends Controller
 
         $employee->update($data);
 
-        // ✅ Handle 201 Files
+        // Handle 201 Files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
                 $filePath = $this->saveFileToPublic($file, 'employee_201');
@@ -394,12 +394,12 @@ class EmployeeController extends Controller
             }
         }
 
-        // ✅ Handle Benefits (even if empty array, clear all)
+        // Handle Benefits (even if empty array, clear all)
         if ($request->has('benefits')) {
             $employee->benefits()->sync($request->benefits ?? []);
         }
 
-        // ✅ Handle Allowances (same logic)
+        // Handle Allowances (same logic)
         if ($request->has('allowances')) {
             $employee->allowances()->sync($request->allowances ?? []);
         }
@@ -413,7 +413,7 @@ class EmployeeController extends Controller
 
 
 
-    // ✅ Archive employee
+    // Archive employee
     public function archiveEmployee($id)
     {
         $employee = Employee::find($id);
@@ -435,7 +435,7 @@ class EmployeeController extends Controller
     public function requestLeave(Request $request)
     {
         try {
-            // ✅ Validate input
+            // Validate input
             $validated = $request->validate([
                 'employee_id'   => 'required|exists:employees,id',
                 'leave_type'    => 'required|string|max:100',
@@ -447,7 +447,7 @@ class EmployeeController extends Controller
             // Optional: Calculate number of days
             $days = (new \DateTime($validated['start_date']))->diff(new \DateTime($validated['end_date']))->days + 1;
             $validated['total_days'] = $days;
-            $validated['status'] = 'Pending'; // default status
+            $validated['status'] = 'Pending';
 
             // ✅ Save to DB (assuming you have a Leave model + table)
             $leave = Leave::create($validated);

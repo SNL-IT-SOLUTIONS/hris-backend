@@ -74,7 +74,7 @@ class AttendanceController extends Controller
 
     public function clockIn(Request $request)
     {
-        $employeeId = Auth::id(); // ✅ Get the logged-in user's ID
+        $employeeId = Auth::id(); // Get the logged-in user's ID
 
         $existing = Attendance::where('employee_id', $employeeId)
             ->whereDate('clock_in', Carbon::today())
@@ -98,7 +98,7 @@ class AttendanceController extends Controller
 
     public function clockOut(Request $request)
     {
-        $employeeId = Auth::id(); // ✅ Logged-in user again
+        $employeeId = Auth::id(); // Logged-in user again
 
         $attendance = Attendance::where('employee_id', $employeeId)
             ->whereDate('clock_in', Carbon::today())

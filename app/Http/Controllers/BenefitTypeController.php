@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 
 class BenefitTypeController extends Controller
 {
-    // ✅ Get all benefit types (excluding archived)
+    // Get all benefit types (excluding archived)
     public function getBenefitTypes()
     {
         $benefits = BenefitType::where('is_archived', 0)->get();
@@ -19,12 +19,12 @@ class BenefitTypeController extends Controller
         ]);
     }
 
-    // ✅ Create new benefit type
+    // Create new benefit type
     public function createBenefitType(Request $request)
     {
         $validated = $request->validate([
             'benefit_name' => 'required|string|max:150|unique:benefit_types,benefit_name',
-            'category' => 'nullable|string|max:100', // varchar category
+            'category' => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'deduction' => 'nullable|numeric',
             'rate' => 'nullable|decimal:10,2',
@@ -40,7 +40,7 @@ class BenefitTypeController extends Controller
         ], 201);
     }
 
-    // ✅ Get a single benefit type
+    // Get a single benefit type
     public function getBenefitType($id)
     {
         $benefit = BenefitType::find($id);
@@ -59,7 +59,7 @@ class BenefitTypeController extends Controller
         ]);
     }
 
-    // ✅ Update benefit type
+    // Update benefit type
     public function updateBenefitType(Request $request, $id)
     {
         $benefit = BenefitType::find($id);
@@ -89,7 +89,7 @@ class BenefitTypeController extends Controller
         ]);
     }
 
-    // ✅ Archive benefit type instead of deleting
+    // Archive benefit type instead of deleting
     public function deleteBenefitType($id)
     {
         $benefit = BenefitType::find($id);
@@ -111,7 +111,7 @@ class BenefitTypeController extends Controller
         ]);
     }
 
-    // ✅ Optional: Restore archived benefit type
+    // Optional: Restore archived benefit type
     public function restoreBenefitType($id)
     {
         $benefit = BenefitType::find($id);

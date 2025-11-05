@@ -36,7 +36,7 @@ class InterviewController extends Controller
 
             $interview = Interview::create($validated);
 
-            // 📧 Send email notification
+            // Send email notification
             if (!empty($applicant->email)) {
                 Mail::to($applicant->email)->send(new InterviewScheduledMail($applicant, $interview));
             }

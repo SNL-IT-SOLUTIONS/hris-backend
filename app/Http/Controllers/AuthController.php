@@ -30,14 +30,14 @@ class AuthController extends Controller
         $user = null;
         $role = null;
 
-        // 1️⃣ Check employees first
+        //  Check employees first
         $employee = Employee::where('email', $loginInput)->first();
         if ($employee && Hash::check($password, $employee->password)) {
             $user = $employee;
             $role = 'employee';
         }
 
-        // 2️⃣ If not found, check users
+        //  If not found, check users
         if (!$user) {
             $fieldType = filter_var($loginInput, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
             $userModel = User::where($fieldType, $loginInput)->first();
@@ -47,7 +47,7 @@ class AuthController extends Controller
             }
         }
 
-        // 3️⃣ Invalid login
+        // Invalid login
         if (!$user) {
             return response()->json([
                 'isSuccess' => false,
@@ -55,7 +55,7 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // 4️⃣ Optional: check if account is active
+        // Optional: check if account is active
         if (isset($user->is_active) && !$user->is_active) {
             return response()->json([
                 'isSuccess' => false,
@@ -63,13 +63,13 @@ class AuthController extends Controller
             ], 403);
         }
 
-        // 5️⃣ Generate token
+        // Generate token
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // 6️⃣ Fetch company info (assuming single record)
+        // Fetch company info (assuming single record)
         $company = CompanyInformation::first();
 
-        // 7️⃣ Response
+        // Response
         return response()->json([
             'isSuccess' => true,
             'message' => 'Login successful.',

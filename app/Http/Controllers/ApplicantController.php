@@ -11,12 +11,13 @@ use App\Mail\EmployeeCreated;
 use Illuminate\Support\Facades\Hash;
 use Exception;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 
 class ApplicantController extends Controller
 {
     /**
-     * ✅ Create a new applicant (job application submission)
+     * Create a new applicant (job application submission)
      */
     public function createApplicant(Request $request)
     {
@@ -36,7 +37,7 @@ class ApplicantController extends Controller
                 'experience_years'     => 'nullable|integer|min:0',
             ]);
 
-            // ✅ Upload resume using your helper
+            //  Upload resume using your helper
             $validated['resume'] = $this->saveFileToPublic($request, 'resume', 'resume');
 
             // Default values
@@ -51,20 +52,20 @@ class ApplicantController extends Controller
                 'data' => $applicant,
             ], 201);
         } catch (ValidationException $e) {
-            // 🔍 Show validation errors in response
+            //  Show validation errors in response
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Validation failed.',
                 'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
-            // 🧯 Catch all other errors
+            // Catch all other errors
             Log::error('Error creating applicant: ' . $e->getMessage());
 
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to submit application.',
-                'error' => $e->getMessage(), // Optional for debugging
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -130,7 +131,7 @@ class ApplicantController extends Controller
     public function getHiredApplicants()
     {
         try {
-            $hiredApplicants = Applicant::with(['jobPosting.department']) // 👈 include department
+            $hiredApplicants = Applicant::with(['jobPosting.department'])
                 ->where('stage', 'hired')
                 ->where('is_archived', false)
                 ->orderBy('updated_at', 'desc')
@@ -157,10 +158,8 @@ class ApplicantController extends Controller
                         'created_at'            => $applicant->created_at,
                         'updated_at'            => $applicant->updated_at,
 
-                        // 🔥 Include department name here
-                        'department_name'       => optional($applicant->jobPosting->department)->department_name,
 
-                        // Optional: still include job posting details
+                        'department_name'       => optional($applicant->jobPosting->department)->department_name,
                         'job_posting'           => $applicant->jobPosting,
                     ];
                 }),
@@ -223,7 +222,7 @@ class ApplicantController extends Controller
                 $validated['201_file'] = $filePath;
             }
 
-            // ✅ Copy applicant's resume
+            // Copy applicant's resume
             $validated['resume'] = $applicant->resume;
 
             // Auto-fill from applicant
@@ -312,14 +311,14 @@ class ApplicantController extends Controller
                 'data'      => $applicant,
             ]);
         } catch (ValidationException $e) {
-            // ⚠️ Specific validation errors
+            // Specific validation errors
             return response()->json([
                 'isSuccess' => false,
                 'message'   => 'Validation failed.',
                 'errors'    => $e->errors(),
             ], 422);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            // ⚠️ Applicant not found
+        } catch (ModelNotFoundException $e) {
+            // Applicant not found
             return response()->json([
                 'isSuccess' => false,
                 'message'   => 'Applicant not found.',

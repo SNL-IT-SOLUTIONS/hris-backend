@@ -59,9 +59,9 @@ class PayrollController extends Controller
                 if (!empty($employeeBenefitIds)) {
                     $benefitRates = BenefitType::whereIn('id', $employeeBenefitIds)
                         ->get()
-                        ->pluck('rate', 'benefit_name'); // ['SSS' => 4.5, ...]
+                        ->pluck('rate', 'benefit_name');
                 } else {
-                    $benefitRates = collect(); // empty collection
+                    $benefitRates = collect();
                 }
 
                 // === ALLOWANCES (only those assigned to this employee) ===
@@ -73,7 +73,7 @@ class PayrollController extends Controller
                 if (!empty($employeeAllowanceIds)) {
                     $allowances = AllowanceType::whereIn('id', $employeeAllowanceIds)
                         ->get()
-                        ->pluck('value', 'type_name'); // ['Transport' => 1500, ...]
+                        ->pluck('value', 'type_name');
                 } else {
                     $allowances = collect();
                 }
@@ -127,10 +127,10 @@ class PayrollController extends Controller
                     }
                 }
 
-                // OPTIONAL: store allowances as JSON inside payroll_record (if you want to keep detail)
+                // OPTIONAL: store allowances as JSON inside payroll_record (
                 if ($allowances->isNotEmpty()) {
                     $record->update([
-                        'allowances' => $allowances->toJson(), // ensure payroll_records has a nullable JSON column 'allowances'
+                        'allowances' => $allowances->toJson(),
                     ]);
                 }
 
@@ -169,7 +169,7 @@ class PayrollController extends Controller
                 ->select('id', 'first_name', 'last_name', 'base_salary', 'position_id', 'department_id')
                 ->with([
                     'department:id,department_name',
-                    'position:id,position_name' // Load position name
+                    'position:id,position_name'
                 ])
                 ->orderBy('last_name')
                 ->get()
@@ -178,7 +178,7 @@ class PayrollController extends Controller
                         'employee_id' => $emp->id,
                         'full_name' => "{$emp->first_name} {$emp->last_name}",
                         'base_salary' => $emp->base_salary,
-                        'position' => $emp->position->position_name ?? null, //  Use position name
+                        'position' => $emp->position->position_name ?? null,
                         'department' => $emp->department->department_name ?? null,
                     ];
                 });
