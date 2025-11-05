@@ -99,7 +99,7 @@ class LoanController extends Controller
                 'interest_rate' => $interestRate,
                 'start_date' => $startDate,
                 'end_date' => $validated['end_date'],
-                'status' => 'active',
+                'status' => 'pending',
                 'remarks' => $validated['remarks'] ?? null,
             ]);
 
