@@ -49,7 +49,7 @@ class JobPostingController extends Controller
         try {
             $query = JobPosting::with('department')
                 ->where('is_archived', false)
-                ->whereIn('status', ['active', 'draft']); // ✅ Fetch both active and draft
+                ->whereIn('status', ['active', 'draft,' 'open']); // ✅ Fetch both active and draft
 
             // 🔍 Search
             if ($request->filled('search')) {
