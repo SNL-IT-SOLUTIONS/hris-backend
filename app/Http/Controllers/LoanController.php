@@ -6,6 +6,7 @@ use App\Models\Loan;
 use App\Models\LoanType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class LoanController extends Controller
 {
@@ -55,23 +56,45 @@ class LoanController extends Controller
             'employee_id' => 'required|exists:employees,id',
             'loan_type_id' => 'required|exists:loan_types,id',
             'principal_amount' => 'required|numeric|min:0',
-            'start_date' => 'required|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'end_date' => 'required|date|after:today',
             'remarks' => 'nullable|string',
         ]);
 
         try {
             $loanType = LoanType::findOrFail($validated['loan_type_id']);
 
+            // 🔒 Check amount limit
+            if (!is_null($loanType->amount_limit) && $validated['principal_amount'] > $loanType->amount_limit) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "The principal amount exceeds the limit of {$loanType->amount_limit}.",
+                ], 422);
+            }
+
+            // ⏰ Use today's date as start_date
+            $startDate = now();
+            $endDate = Carbon::parse($validated['end_date']);
+
+            // 🗓️ Calculate the number of months between now and end_date
+            $months = max(1, $startDate->diffInMonths($endDate));
+
+            // 💰 Calculate interest and amortization
+            $interestRate = $loanType->interest ?? 0;
+            $principal = $validated['principal_amount'];
+            $totalWithInterest = $principal * (1 + ($interestRate / 100) * $months);
+            $monthlyAmortization = $totalWithInterest / $months;
+
+            // 🧾 Create loan record
             $loan = Loan::create([
                 'employee_id' => $validated['employee_id'],
                 'loan_type_id' => $loanType->id,
-                'principal_amount' => $validated['principal_amount'],
-                'balance_amount' => $validated['principal_amount'],
-                'monthly_amortization' => $loanType->amount ?? 0.00,
-                'interest_rate' => $loanType->interest ?? 0.00,
-                'start_date' => $validated['start_date'],
-                'end_date' => $validated['end_date'] ?? null,
+                'principal_amount' => $principal,
+                'balance_amount' => round($totalWithInterest, 2),
+
+                'monthly_amortization' => round($monthlyAmortization, 2),
+                'interest_rate' => $interestRate,
+                'start_date' => $startDate,
+                'end_date' => $validated['end_date'],
                 'status' => 'active',
                 'remarks' => $validated['remarks'] ?? null,
             ]);
@@ -86,9 +109,12 @@ class LoanController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create loan.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
+
 
     /**
      * Update an existing loan record.

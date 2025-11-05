@@ -19,6 +19,7 @@ use App\Http\Controllers\ApplicantController;
 use App\Http\Controllers\InterviewController;
 use App\Http\Controllers\DropdownController;
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\LoanController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\LoanTypeController;
 
@@ -200,6 +201,12 @@ Route::controller(LoanTypeController::class)->group(function () {
     Route::post('create/loan-types', 'createLoanType');
     Route::post('update/loan-types/{id}', 'updateLoanType');
     Route::post('loan-types/{id}/archive', 'archiveLoanType');
+});
+Route::controller(LoanController::class)->group(function () {
+    Route::post('create/loans', 'createLoan');
+    Route::post('update/loans/{id}', 'updateLoan');
+    Route::get('loans', 'getLoans');
+    Route::get('loans/{id}', 'getLoanById');
 });
 
 
