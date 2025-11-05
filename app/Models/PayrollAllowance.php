@@ -11,6 +11,7 @@ class PayrollAllowance extends Model
 
     protected $fillable = [
         'payroll_record_id',
+        'allowance_type_id',
         'allowance_name',
         'allowance_amount',
     ];
@@ -19,5 +20,10 @@ class PayrollAllowance extends Model
     public function payrollRecord()
     {
         return $this->belongsTo(PayrollRecord::class, 'payroll_record_id');
+    }
+
+    public function allowanceType()
+    {
+        return $this->belongsTo(AllowanceType::class, 'allowance_type_id');
     }
 }
