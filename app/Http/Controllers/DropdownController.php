@@ -170,7 +170,7 @@ class DropdownController extends Controller
     public function getAllowanceTypesDropdown()
     {
         try {
-            $allowanceTypes = BenefitType::select('id', 'benefit_name')
+            $allowanceTypes = BenefitType::select('id', 'benefit_name', 'value')
                 ->where('is_active', 1)
                 ->orderBy('benefit_name', 'asc')
                 ->get();
