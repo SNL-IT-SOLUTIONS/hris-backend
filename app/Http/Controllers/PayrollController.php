@@ -128,7 +128,7 @@ class PayrollController extends Controller
                     ]);
                 }
 
-                Log::info("✅ Payroll generated for Employee #{$employee->id}: Gross={$gross}, Allowances={$total_allowances}, Deductions={$total_deductions}, Net={$net}");
+                Log::info("Payroll generated for Employee #{$employee->id}: Gross={$gross}, Allowances={$total_allowances}, Deductions={$total_deductions}, Net={$net}");
             }
 
             DB::commit();
@@ -139,7 +139,7 @@ class PayrollController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('❌ Payroll generation failed: ' . $e->getMessage());
+            Log::error('Payroll generation failed: ' . $e->getMessage());
 
             return response()->json([
                 'isSuccess' => false,
