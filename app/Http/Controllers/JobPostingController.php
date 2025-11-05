@@ -49,12 +49,10 @@ class JobPostingController extends Controller
         try {
             $query = JobPosting::with('department')
                 ->where('is_archived', false)
-                ->where('status', 'active', 'draft');
-
-
+                ->whereIn('status', ['active', 'draft']); // ✅ Fetch both active and draft
 
             // 🔍 Search
-            if ($request->has('search') && $request->search != '') {
+            if ($request->filled('search')) {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('title', 'LIKE', "%$search%")
@@ -66,17 +64,17 @@ class JobPostingController extends Controller
                 });
             }
 
-            //  Filter by department
-            if ($request->has('department_id')) {
+            // 🏢 Filter by department
+            if ($request->filled('department_id')) {
                 $query->where('department_id', $request->department_id);
             }
 
-            //  Filter by status
-            if ($request->has('status')) {
+            // ⚙️ Optional: filter by status if provided (overrides default active+draft)
+            if ($request->filled('status')) {
                 $query->where('status', $request->status);
             }
 
-            //  Pagination
+            // 📄 Pagination
             $perPage = $request->input('per_page', 10);
             $jobs = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
@@ -106,6 +104,7 @@ class JobPostingController extends Controller
             ], 500);
         }
     }
+
 
 
 
