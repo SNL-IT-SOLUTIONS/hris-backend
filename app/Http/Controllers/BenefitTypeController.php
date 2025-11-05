@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\BenefitType;
 use Illuminate\Http\Request;
 
+
 class BenefitTypeController extends Controller
 {
     // Get all benefit types (excluding archived)
@@ -27,7 +28,8 @@ class BenefitTypeController extends Controller
             'category' => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'deduction' => 'nullable|numeric',
-            'rate' => 'nullable|decimal:10,2',
+            'rate' => 'nullable|numeric',
+
             'is_active' => 'boolean',
         ]);
 
