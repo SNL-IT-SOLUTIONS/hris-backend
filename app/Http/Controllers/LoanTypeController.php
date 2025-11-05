@@ -35,6 +35,25 @@ class LoanTypeController extends Controller
         ]);
     }
 
+
+    public function getLoanTypeById($id)
+    {
+        $loanType = LoanType::find($id);
+
+        if (!$loanType) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Loan type not found.'
+            ], 404);
+        }
+
+        return response()->json([
+            'isSuccess' => true,
+            'message' => 'Loan type retrieved successfully.',
+            'data' => $loanType
+        ]);
+    }
+
     /**
      * Create a new loan type
      */
