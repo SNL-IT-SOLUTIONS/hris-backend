@@ -49,8 +49,8 @@ class JobPostingController extends Controller
         try {
             $query = JobPosting::with('department')
                 ->where('is_archived', false)
-                ->where('status', 'active')
-                ->where('status', 'draft');
+                ->where('status', 'active', 'draft');
+
 
 
             // 🔍 Search
