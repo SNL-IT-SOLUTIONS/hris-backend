@@ -225,20 +225,31 @@ class PayrollController extends Controller
     /**
      * View payroll details (with deductions)
      */
-    public function getPayrollDetails($periodId)
+    public function getPayrollDetails(Request $request, $periodId)
     {
+        // Number of records per page (default: 10)
+        $perPage = $request->get('per_page', 5);
+
+        // Paginate records with relationships
         $records = PayrollRecord::with(['employee', 'deductions.benefitType'])
             ->where('payroll_period_id', $periodId)
-            ->get();
+            ->paginate($perPage);
 
-        // Compute total summary values
-        $totalGross = $records->sum('gross_pay');
-        $totalDeductions = $records->sum('total_deductions');
-        $totalNet = $records->sum('net_pay');
+        // Compute total summary for the entire payroll period
+        $allRecords = PayrollRecord::where('payroll_period_id', $periodId)->get();
+        $totalGross = $allRecords->sum('gross_pay');
+        $totalDeductions = $allRecords->sum('total_deductions');
+        $totalNet = $allRecords->sum('net_pay');
 
         return response()->json([
             'isSuccess' => true,
-            'payrolldetails' => $records,
+            'payrolldetails' => $records->items(), // just the current page’s records
+            'pagination' => [
+                'current_page' => $records->currentPage(),
+                'per_page' => $records->perPage(),
+                'total' => $records->total(),
+                'last_page' => $records->lastPage(),
+            ],
             'summary' => [
                 'total_gross' => number_format($totalGross, 3, '.', ','),
                 'total_deductions' => number_format($totalDeductions, 3, '.', ','),
@@ -246,6 +257,7 @@ class PayrollController extends Controller
             ],
         ]);
     }
+
 
 
     public function getPayslip($recordId)
