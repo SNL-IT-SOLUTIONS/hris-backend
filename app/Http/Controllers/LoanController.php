@@ -76,21 +76,25 @@ class LoanController extends Controller
             $endDate = Carbon::parse($validated['end_date']);
 
             // 🗓️ Calculate the number of months between now and end_date
-            $months = max(1, $startDate->diffInMonths($endDate));
+            $months = max(1, $startDate->diffInMonths($endDate) + 1);
 
-            // 💰 Calculate interest and amortization
+
+            // 💰 Calculate monthly interest and amortization
             $interestRate = $loanType->interest ?? 0;
             $principal = $validated['principal_amount'];
+
+            // 🧮 Total with interest (monthly simple interest, not compounded)
             $totalWithInterest = $principal * (1 + ($interestRate / 100) * $months);
+
+            // 🧾 Monthly amortization (divide evenly by number of months)
             $monthlyAmortization = $totalWithInterest / $months;
 
-            // 🧾 Create loan record
+            // 📝 Create loan record
             $loan = Loan::create([
                 'employee_id' => $validated['employee_id'],
                 'loan_type_id' => $loanType->id,
                 'principal_amount' => $principal,
                 'balance_amount' => round($totalWithInterest, 2),
-
                 'monthly_amortization' => round($monthlyAmortization, 2),
                 'interest_rate' => $interestRate,
                 'start_date' => $startDate,
@@ -113,6 +117,7 @@ class LoanController extends Controller
             ], 500);
         }
     }
+
 
 
 
