@@ -39,4 +39,9 @@ class PayrollRecord extends Model
     {
         return $this->hasMany(PayrollDeduction::class, 'payroll_record_id');
     }
+
+    public function allowances()
+    {
+        return $this->hasMany(PayrollAllowance::class, 'payroll_record_id')->with('allowanceType');
+    }
 }

@@ -47,51 +47,41 @@ class PayrollController extends Controller
                 $absences = $emp['absences'] ?? 0;
                 $other_deductions = $emp['other_deductions'] ?? 0;
 
-                // gross
+                // GROSS PAY
                 $gross = ($daily * $days) + ($overtime * ($daily / 8));
 
-                // === BENEFITS (only those assigned to this employee) ===
+                // === BENEFITS (deductions) ===
                 $employeeBenefitIds = DB::table('employee_benefit')
                     ->where('employee_id', $employee->id)
                     ->pluck('benefit_type_id')
                     ->toArray();
 
-                if (!empty($employeeBenefitIds)) {
-                    $benefitRates = BenefitType::whereIn('id', $employeeBenefitIds)
-                        ->get()
-                        ->pluck('rate', 'benefit_name');
-                } else {
-                    $benefitRates = collect();
-                }
+                $benefitRates = !empty($employeeBenefitIds)
+                    ? BenefitType::whereIn('id', $employeeBenefitIds)->get()->pluck('rate', 'benefit_name')
+                    : collect();
 
-                // === ALLOWANCES (only those assigned to this employee) ===
-                $employeeAllowanceIds = DB::table('employee_allowance')
-                    ->where('employee_id', $employee->id)
-                    ->pluck('allowance_type_id')
-                    ->toArray();
-
-                if (!empty($employeeAllowanceIds)) {
-                    $allowances = AllowanceType::whereIn('id', $employeeAllowanceIds)
-                        ->get()
-                        ->pluck('value', 'type_name');
-                } else {
-                    $allowances = collect();
-                }
-
-                // deductions (only if the employee has that benefit)
                 $sss = $benefitRates->has('SSS') ? ($gross * ($benefitRates['SSS'] / 100)) : 0;
                 $philhealth = $benefitRates->has('Philhealth') ? ($gross * ($benefitRates['Philhealth'] / 100)) : 0;
                 $pagibig = $benefitRates->has('Pagibig') ? ($gross * ($benefitRates['Pagibig'] / 100)) : 0;
 
                 $total_deductions = $sss + $philhealth + $pagibig + $other_deductions;
 
-                // total allowances (sum of assigned allowance values)
-                $total_allowances = $allowances->sum();
+                // === ALLOWANCES ===
+                $employeeAllowanceIds = DB::table('employee_allowance')
+                    ->where('employee_id', $employee->id)
+                    ->pluck('allowance_type_id')
+                    ->toArray();
 
-                // net pay
+                $allowanceValues = !empty($employeeAllowanceIds)
+                    ? AllowanceType::whereIn('id', $employeeAllowanceIds)->get()
+                    : collect();
+
+                $total_allowances = $allowanceValues->sum('value');
+
+                // NET PAY
                 $net = $gross + $total_allowances - $total_deductions;
 
-                // create payroll record
+                // === CREATE PAYROLL RECORD ===
                 $record = PayrollRecord::create([
                     'payroll_period_id' => $period->id,
                     'employee_id' => $employee->id,
@@ -105,7 +95,7 @@ class PayrollController extends Controller
                     'net_pay' => $net,
                 ]);
 
-                // save deductions (only those > 0 and present)
+                // === SAVE DEDUCTIONS ===
                 $deductions = [
                     ['name' => 'SSS', 'amount' => $sss],
                     ['name' => 'Philhealth', 'amount' => $philhealth],
@@ -127,15 +117,16 @@ class PayrollController extends Controller
                     }
                 }
 
-                // OPTIONAL: store allowances as JSON inside payroll_record (
-                if ($allowances->isNotEmpty()) {
-                    $record->update([
-                        'allowances' => $allowances->toJson(),
+                // === SAVE ALLOWANCES ===
+                foreach ($allowanceValues as $allowance) {
+                    PayrollAllowance::create([
+                        'payroll_record_id' => $record->id,
+                        'allowance_type_id' => $allowance->id,
+                        'allowance_amount' => $allowance->value,
                     ]);
                 }
 
-                // log for debugging if needed
-                Log::info("Payroll for employee {$employee->id}: gross={$gross}, allowances={$total_allowances}, deductions={$total_deductions}, net={$net}");
+                Log::info("✅ Payroll generated for Employee #{$employee->id}: Gross={$gross}, Allowances={$total_allowances}, Deductions={$total_deductions}, Net={$net}");
             }
 
             DB::commit();
@@ -146,7 +137,7 @@ class PayrollController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Payroll generation failed: ' . $e->getMessage());
+            Log::error('❌ Payroll generation failed: ' . $e->getMessage());
 
             return response()->json([
                 'isSuccess' => false,
@@ -155,6 +146,7 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
 
 
 
@@ -256,8 +248,12 @@ class PayrollController extends Controller
 
     public function getPayslip($recordId)
     {
-        $record = PayrollRecord::with(['employee', 'deductions.benefitType', 'payrollPeriod'])
-            ->findOrFail($recordId);
+        $record = PayrollRecord::with([
+            'employee',
+            'deductions.benefitType',
+            'payrollPeriod',
+            'allowances.allowanceType'
+        ])->findOrFail($recordId);
 
         $payslip = [
             'employee_name' => $record->employee->first_name . ' ' . $record->employee->last_name,
@@ -265,6 +261,13 @@ class PayrollController extends Controller
             'daily_rate' => $record->daily_rate,
             'days_worked' => $record->days_worked,
             'gross_pay' => $record->gross_pay,
+            'allowances' => $record->allowances->map(function ($allowance) {
+                return [
+                    'allowance_type' => $allowance->allowanceType->type_name ?? null,
+                    'allowance_amount' => $allowance->allowance_amount,
+                ];
+            }),
+            'total_allowances' => $record->allowances->sum('allowance_amount'),
             'deductions' => $record->deductions->map(function ($deduction) {
                 return [
                     'benefit_type' => $deduction->benefitType->benefit_name ?? null,
