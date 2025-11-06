@@ -17,6 +17,7 @@ class PayrollDeduction extends Model
         'deduction_name',
         'deduction_rate',
         'deduction_amount',
+        'loan_id',
     ];
 
     public function payrollRecord()
@@ -27,5 +28,10 @@ class PayrollDeduction extends Model
     public function benefitType()
     {
         return $this->belongsTo(BenefitType::class, 'benefit_type_id');
+    }
+
+    public function loan()
+    {
+        return $this->belongsTo(Loan::class, 'loan_id');
     }
 }
