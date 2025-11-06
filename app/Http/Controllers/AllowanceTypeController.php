@@ -117,9 +117,9 @@ class AllowanceTypeController extends Controller
     /**
      *  Delete an allowance type
      */
-    public function deleteAllowanceType($id)
+    public function archiveAllowanceType($id)
     {
-        $allowance = Allowances::find($id);
+        $allowance = AllowanceType::find($id);
 
         if (!$allowance) {
             return response()->json([
@@ -128,7 +128,7 @@ class AllowanceTypeController extends Controller
             ], 404);
         }
 
-        // Soft delete: mark as archived
+        // ✅ Mark as archived (soft delete)
         $allowance->is_archived = true;
         $allowance->save();
 
