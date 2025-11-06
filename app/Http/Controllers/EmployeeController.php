@@ -367,13 +367,11 @@ class EmployeeController extends Controller
 
             // Pivot relationships
             'benefits'      => 'nullable|array',
-            'benefits.*'    => 'exists:benefit_types,id',
+            'benefits.*'    => 'sometimes|exists:benefit_types,id',
 
             'allowances'    => 'nullable|array',
-            'allowances.*'  => 'exists:allowance_types,id',
+            'allowances.*'  => 'sometimes|exists:allowance_types,id',
 
-            'benefits_na' => 'nullable|boolean',
-            'allowances_na' => 'nullable|boolean',
         ]);
 
         $data = $request->except(['201_file', 'password', 'benefits', 'allowances']);
