@@ -326,7 +326,7 @@ class PayrollController extends Controller
         $record = PayrollRecord::with([
             'employee',
             'deductions.benefitType',
-            'deductions.loan.loanType', // nested: loan + loanType
+            'deductions.loan.loanType',
             'payrollPeriod',
             'allowances.allowanceType'
         ])->findOrFail($recordId);

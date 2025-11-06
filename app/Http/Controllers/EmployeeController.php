@@ -371,6 +371,9 @@ class EmployeeController extends Controller
 
             'allowances'    => 'nullable|array',
             'allowances.*'  => 'exists:allowance_types,id',
+
+            'benefits_na' => 'nullable|boolean',
+            'allowances_na' => 'nullable|boolean',
         ]);
 
         $data = $request->except(['201_file', 'password', 'benefits', 'allowances']);

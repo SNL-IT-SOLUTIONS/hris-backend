@@ -104,6 +104,8 @@ class Employee extends Authenticatable
         'is_archived',
         'role',
         'is_interviewer',
+        'benefits_na',
+        'allowances_na',
     ];
 
     protected $hidden = ['password'];
