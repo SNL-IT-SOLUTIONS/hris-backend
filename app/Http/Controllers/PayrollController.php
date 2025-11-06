@@ -50,14 +50,23 @@ class PayrollController extends Controller
                 $absences = $emp['absences'] ?? 0;
                 $other_deductions = $emp['other_deductions'] ?? 0;
 
+                // === BASE GROSS PAY ===
+                $gross = ($daily * $days) + ($overtime * ($daily / 8));
+
+                // === ALLOWANCES ===
+                $employeeAllowanceIds = DB::table('employee_allowance')
+                    ->where('employee_id', $employee->id)
+                    ->pluck('allowance_type_id')
+                    ->toArray();
+
                 $allowanceValues = !empty($employeeAllowanceIds)
                     ? AllowanceType::whereIn('id', $employeeAllowanceIds)->get()
                     : collect();
 
                 $total_allowances = $allowanceValues->sum('value');
 
-                // === GROSS PAY ===
-                $gross = ($daily * $days) + ($overtime * ($daily / 8)) + $total_allowances;
+                // Add allowances to gross (if your definition of “gross” includes them)
+                $gross_with_allowances = $gross + $total_allowances;
 
                 // === BENEFITS (deductions) ===
                 $employeeBenefitIds = DB::table('employee_benefit')
@@ -69,30 +78,22 @@ class PayrollController extends Controller
                     ? BenefitType::whereIn('id', $employeeBenefitIds)->get()->pluck('rate', 'benefit_name')
                     : collect();
 
-                $sss = $benefitRates->has('SSS') ? ($gross * ($benefitRates['SSS'] / 100)) : 0;
-                $philhealth = $benefitRates->has('Philhealth') ? ($gross * ($benefitRates['Philhealth'] / 100)) : 0;
-                $pagibig = $benefitRates->has('Pagibig') ? ($gross * ($benefitRates['Pagibig'] / 100)) : 0;
+                $sss = $benefitRates->has('SSS') ? ($gross_with_allowances * ($benefitRates['SSS'] / 100)) : 0;
+                $philhealth = $benefitRates->has('Philhealth') ? ($gross_with_allowances * ($benefitRates['Philhealth'] / 100)) : 0;
+                $pagibig = $benefitRates->has('Pagibig') ? ($gross_with_allowances * ($benefitRates['Pagibig'] / 100)) : 0;
 
                 // === LOANS (deductions) ===
-                // use Eloquent instead of query builder to get proper models
                 $activeLoans = Loan::where('employee_id', $employee->id)
                     ->where('status', 'active')
                     ->get();
 
                 $total_loan_deductions = $activeLoans->sum('monthly_amortization');
 
-                // === ALLOWANCES ===
-                $employeeAllowanceIds = DB::table('employee_allowance')
-                    ->where('employee_id', $employee->id)
-                    ->pluck('allowance_type_id')
-                    ->toArray();
-
-
                 // === TOTAL DEDUCTIONS ===
                 $total_deductions = $sss + $philhealth + $pagibig + $other_deductions + $total_loan_deductions;
 
                 // === NET PAY ===
-                $net = $gross + $total_allowances - $total_deductions;
+                $net = $gross_with_allowances - $total_deductions;
 
                 // === CREATE PAYROLL RECORD ===
                 $record = PayrollRecord::create([
@@ -103,7 +104,7 @@ class PayrollController extends Controller
                     'overtime_hours' => $overtime,
                     'absences' => $absences,
                     'other_deductions' => $other_deductions,
-                    'gross_pay' => $gross,
+                    'gross_pay' => $gross_with_allowances,
                     'total_deductions' => $total_deductions,
                     'net_pay' => $net,
                 ]);
@@ -125,7 +126,7 @@ class PayrollController extends Controller
                                 'deduction_name' => $benefitType->benefit_name,
                                 'deduction_rate' => $benefitType->rate,
                                 'deduction_amount' => $ded['amount'],
-                                'loan_id' => null, // ensure not set for benefits
+                                'loan_id' => null,
                             ]);
                         }
                     }
@@ -136,7 +137,6 @@ class PayrollController extends Controller
                     $amortization = $loan->monthly_amortization;
                     $newBalance = max($loan->balance_amount - $amortization, 0);
 
-                    // update loan balance and status
                     $loan->update([
                         'balance_amount' => $newBalance,
                         'status' => $newBalance <= 0 ? 'paid' : 'active',
@@ -146,7 +146,7 @@ class PayrollController extends Controller
                     PayrollDeduction::create([
                         'payroll_record_id' => $record->id,
                         'benefit_type_id' => null,
-                        'loan_id' => $loan->id, // 
+                        'loan_id' => $loan->id,
                         'deduction_name' => 'Loan Payment',
                         'deduction_rate' => $loan->interest_rate,
                         'deduction_amount' => $amortization,
@@ -162,14 +162,14 @@ class PayrollController extends Controller
                     ]);
                 }
 
-                Log::info("Payroll generated for Employee #{$employee->id}: Gross={$gross}, Allowances={$total_allowances}, Deductions={$total_deductions}, Net={$net}");
+                Log::info("Payroll generated for Employee #{$employee->id}: Gross={$gross_with_allowances}, Allowances={$total_allowances}, Deductions={$total_deductions}, Net={$net}");
             }
 
             DB::commit();
 
             return response()->json([
                 'isSuccess' => true,
-                'message' => 'Payroll period and employee records created successfully with proper loan IDs.',
+                'message' => 'Payroll period and employee records created successfully with proper loan IDs and allowances included in gross.',
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -182,6 +182,7 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
 
 
 
