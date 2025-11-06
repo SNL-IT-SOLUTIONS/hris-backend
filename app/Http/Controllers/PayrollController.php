@@ -145,7 +145,7 @@ class PayrollController extends Controller
                     PayrollDeduction::create([
                         'payroll_record_id' => $record->id,
                         'benefit_type_id' => null,
-                        'loan_id' => $loan->id, // ✅ FIXED: now properly linked
+                        'loan_id' => $loan->id, // 
                         'deduction_name' => 'Loan Payment',
                         'deduction_rate' => $loan->interest_rate,
                         'deduction_amount' => $amortization,
@@ -287,9 +287,10 @@ class PayrollController extends Controller
             $payrollDetails = $query->paginate($perPage);
 
             // Compute summary
-            $totalGross = $payrollDetails->sum('gross_pay');
-            $totalDeductions = $payrollDetails->sum('total_deductions');
-            $totalNet = $payrollDetails->sum('net_pay');
+            $totalGross = collect($payrollDetails->items())->sum('gross_pay');
+            $totalDeductions = collect($payrollDetails->items())->sum('total_deductions');
+            $totalNet = collect($payrollDetails->items())->sum('net_pay');
+
 
             // Format response
             return response()->json([
