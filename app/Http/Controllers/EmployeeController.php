@@ -395,15 +395,39 @@ class EmployeeController extends Controller
             }
         }
 
-        // Handle Benefits (even if empty array, clear all)
+        // Handle Benefits
         if ($request->has('benefits')) {
-            $employee->benefits()->sync($request->benefits ?? []);
-        }
+            $benefits = $request->benefits;
 
-        // Handle Allowances (same logic)
-        if ($request->has('allowances')) {
-            $employee->allowances()->sync($request->allowances ?? []);
+            // If benefits is empty array or contains only 0, clear all benefits
+            if (empty($benefits) || (count($benefits) === 1 && $benefits[0] == 0)) {
+                $employee->benefits()->sync([]);
+            } else {
+                // Filter out any zeros and sync the valid IDs
+                $validBenefits = array_filter($benefits, function ($benefit) {
+                    return $benefit != 0;
+                });
+                $employee->benefits()->sync($validBenefits);
+            }
         }
+        // If benefits is not sent, preserve existing
+
+        // Handle Allowances - same logic
+        if ($request->has('allowances')) {
+            $allowances = $request->allowances;
+
+            // If allowances is empty array or contains only 0, clear all allowances
+            if (empty($allowances) || (count($allowances) === 1 && $allowances[0] == 0)) {
+                $employee->allowances()->sync([]);
+            } else {
+                // Filter out any zeros and sync the valid IDs
+                $validAllowances = array_filter($allowances, function ($allowance) {
+                    return $allowance != 0;
+                });
+                $employee->allowances()->sync($validAllowances);
+            }
+        }
+        // If allowances is not sent, preserve existing
 
         return response()->json([
             'isSuccess' => true,
