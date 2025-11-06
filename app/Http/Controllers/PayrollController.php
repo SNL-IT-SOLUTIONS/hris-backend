@@ -51,7 +51,7 @@ class PayrollController extends Controller
                 $other_deductions = $emp['other_deductions'] ?? 0;
 
                 // === GROSS PAY ===
-                $gross = ($daily * $days) + ($overtime * ($daily / 8));
+                $gross = ($daily * $days) + ($overtime * ($daily / 8)) + $total_allowances;
 
                 // === BENEFITS (deductions) ===
                 $employeeBenefitIds = DB::table('employee_benefit')
