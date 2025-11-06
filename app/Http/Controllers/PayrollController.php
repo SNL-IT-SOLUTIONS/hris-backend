@@ -50,6 +50,12 @@ class PayrollController extends Controller
                 $absences = $emp['absences'] ?? 0;
                 $other_deductions = $emp['other_deductions'] ?? 0;
 
+                $allowanceValues = !empty($employeeAllowanceIds)
+                    ? AllowanceType::whereIn('id', $employeeAllowanceIds)->get()
+                    : collect();
+
+                $total_allowances = $allowanceValues->sum('value');
+
                 // === GROSS PAY ===
                 $gross = ($daily * $days) + ($overtime * ($daily / 8)) + $total_allowances;
 
@@ -81,11 +87,6 @@ class PayrollController extends Controller
                     ->pluck('allowance_type_id')
                     ->toArray();
 
-                $allowanceValues = !empty($employeeAllowanceIds)
-                    ? AllowanceType::whereIn('id', $employeeAllowanceIds)->get()
-                    : collect();
-
-                $total_allowances = $allowanceValues->sum('value');
 
                 // === TOTAL DEDUCTIONS ===
                 $total_deductions = $sss + $philhealth + $pagibig + $other_deductions + $total_loan_deductions;
