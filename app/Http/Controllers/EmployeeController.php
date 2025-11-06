@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use App\Models\Leave;
 use App\Models\EmployeeFile;
+use App\Models\BenefitType;
+use App\Models\AllowanceType;
+use Illuminate\Support\Facades\Validator;
 
 class EmployeeController extends Controller
 {
@@ -358,21 +361,26 @@ class EmployeeController extends Controller
             ], 404);
         }
 
-        $request->validate([
+        // Custom validation for benefits and allowances
+        $validator = Validator::make($request->all(), [
             'email'         => 'sometimes|email|unique:employees,email,' . $employee->id,
             'department_id' => 'nullable|exists:departments,id',
             'position_id'   => 'nullable|exists:position_types,id',
             'password'      => 'nullable|string|min:8',
             '201_file.*'    => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
 
-            // Pivot relationships
-            'benefits'      => 'nullable|array',
-            'benefits.*'    => 'sometimes|exists:benefit_types,id',
-
-            'allowances'    => 'nullable|array',
-            'allowances.*'  => 'sometimes|exists:allowance_types,id',
-
+            // Make benefits and allowances completely optional
+            'benefits'      => 'nullable',
+            'allowances'    => 'nullable',
         ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'The given data was invalid.',
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
         $data = $request->except(['201_file', 'password', 'benefits', 'allowances']);
 
@@ -395,18 +403,21 @@ class EmployeeController extends Controller
             }
         }
 
-        // Handle Benefits
+        // Handle Benefits - manually validate and process
         if ($request->has('benefits')) {
             $benefits = $request->benefits;
 
-            // If benefits is empty array or contains only 0, clear all benefits
-            if (empty($benefits) || (count($benefits) === 1 && $benefits[0] == 0)) {
+            // If benefits is empty or contains invalid values, clear all benefits
+            if (empty($benefits) || !is_array($benefits)) {
                 $employee->benefits()->sync([]);
             } else {
-                // Filter out any zeros and sync the valid IDs
-                $validBenefits = array_filter($benefits, function ($benefit) {
-                    return $benefit != 0;
-                });
+                // Validate each benefit ID
+                $validBenefits = [];
+                foreach ($benefits as $benefitId) {
+                    if (is_numeric($benefitId) && BenefitType::where('id', $benefitId)->exists()) {
+                        $validBenefits[] = $benefitId;
+                    }
+                }
                 $employee->benefits()->sync($validBenefits);
             }
         }
@@ -416,14 +427,17 @@ class EmployeeController extends Controller
         if ($request->has('allowances')) {
             $allowances = $request->allowances;
 
-            // If allowances is empty array or contains only 0, clear all allowances
-            if (empty($allowances) || (count($allowances) === 1 && $allowances[0] == 0)) {
+            // If allowances is empty or contains invalid values, clear all allowances
+            if (empty($allowances) || !is_array($allowances)) {
                 $employee->allowances()->sync([]);
             } else {
-                // Filter out any zeros and sync the valid IDs
-                $validAllowances = array_filter($allowances, function ($allowance) {
-                    return $allowance != 0;
-                });
+                // Validate each allowance ID
+                $validAllowances = [];
+                foreach ($allowances as $allowanceId) {
+                    if (is_numeric($allowanceId) && AllowanceType::where('id', $allowanceId)->exists()) {
+                        $validAllowances[] = $allowanceId;
+                    }
+                }
                 $employee->allowances()->sync($validAllowances);
             }
         }
@@ -435,7 +449,6 @@ class EmployeeController extends Controller
             'employee'  => $employee->load(['files', 'benefits', 'allowances']),
         ]);
     }
-
 
 
     // Archive employee
