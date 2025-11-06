@@ -246,31 +246,7 @@ class PayrollController extends Controller
         }
     }
 
-    /**
-     * 📊 Get payroll summary stats
-     */
-    public function getPayrollSummary()
-    {
-        try {
-            $summary = [
-                'total_periods'   => DB::table('payroll_periods')->count(),
-                'processed'       => DB::table('payroll_periods')->where('status', 'processed')->count(),
-                'drafts'          => DB::table('payroll_periods')->where('status', 'draft')->count(),
-                'active_employees' => DB::table('employees')->where('is_active', 1)->count(),
-            ];
 
-            return response()->json([
-                'isSuccess' => true,
-                'data'      => $summary,
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'isSuccess' => false,
-                'message'   => 'Failed to load payroll summary.',
-                'error'     => $e->getMessage(),
-            ], 500);
-        }
-    }
 
     /**
      * 💰 Get payroll details by period
@@ -328,6 +304,102 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
+
+    public function getMyPayrollRecords(Request $request)
+    {
+        try {
+            $user = auth()->user();
+
+            if (!$user || !$user->employee) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Unauthorized or employee record not found.',
+                ], 403);
+            }
+
+            $perPage = $request->input('per_page', 10);
+            $search  = $request->input('search');
+
+            $query = PayrollRecord::with([
+                'payrollPeriod:id,period_name,start_date,end_date',
+                'allowances.allowanceType:id,type_name',
+                'deductions.benefitType:id,benefit_name',
+                'deductions.loan.loanType:id,type_name',
+            ])
+                ->where('employee_id', $user->employee->id)
+                ->where('is_archived', false)
+                ->orderByDesc('created_at');
+
+            if ($search) {
+                $query->whereHas('payrollPeriod', function ($q) use ($search) {
+                    $q->where('period_name', 'like', "%{$search}%");
+                });
+            }
+
+            $records = $query->paginate($perPage);
+
+            // Format the response for the frontend
+            $data = $records->map(function ($record) {
+                $allowances = $record->allowances->map(fn($a) => [
+                    'allowance_type' => $a->allowanceType->type_name ?? 'Other Allowance',
+                    'allowance_amount' => number_format($a->allowance_amount, 2),
+                ]);
+
+                $deductions = $record->deductions->map(function ($ded) {
+                    if ($ded->loan_id) {
+                        return [
+                            'deduction_type' => 'Loan Payment',
+                            'loan_name' => $ded->loan->loanType->type_name ?? 'Loan',
+                            'deduction_amount' => number_format($ded->deduction_amount, 2),
+                        ];
+                    } elseif ($ded->benefit_type_id) {
+                        return [
+                            'deduction_type' => $ded->benefitType->benefit_name ?? 'Other Deduction',
+                            'deduction_amount' => number_format($ded->deduction_amount, 2),
+                        ];
+                    }
+                    return [
+                        'deduction_type' => $ded->deduction_name ?? 'Other Deduction',
+                        'deduction_amount' => number_format($ded->deduction_amount, 2),
+                    ];
+                });
+
+                return [
+                    'record_id'        => $record->id,
+                    'period'           => $record->payrollPeriod->period_name ?? 'N/A',
+                    'period_range'     => ($record->payrollPeriod->start_date ?? '') . ' - ' . ($record->payrollPeriod->end_date ?? ''),
+                    'gross_pay'        => number_format($record->gross_pay, 2),
+                    'total_deductions' => number_format($record->total_deductions, 2),
+                    'net_pay'          => number_format($record->net_pay, 2),
+                    'generated_at'     => $record->created_at->format('F d, Y'),
+                    'allowances'       => $allowances,
+                    'deductions'       => $deductions,
+                ];
+            });
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Employee payroll records retrieved successfully.',
+                'data' => $data,
+                'pagination' => [
+                    'total' => $records->total(),
+                    'per_page' => $records->perPage(),
+                    'current_page' => $records->currentPage(),
+                    'last_page' => $records->lastPage(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching employee payroll records: ' . $e->getMessage());
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to fetch payroll records.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
 
     /**
      * 🧾 Get individual employee payslip
@@ -395,6 +467,101 @@ class PayrollController extends Controller
         }
     }
 
+
+
+    public function getMyPayslips(Request $request)
+    {
+        try {
+            $user = auth()->user();
+
+            // Ensure only employees can use this
+            if (!$user || !$user->employee) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Unauthorized or employee record not found.',
+                ], 403);
+            }
+
+            $perPage = $request->get('per_page', 10);
+
+            $records = PayrollRecord::with([
+                'payrollPeriod',
+                'allowances.allowanceType',
+                'deductions.benefitType',
+                'deductions.loan.loanType',
+            ])
+                ->where('employee_id', $user->employee->id)
+                ->orderByDesc('created_at')
+                ->paginate($perPage);
+
+            if ($records->isEmpty()) {
+                return response()->json([
+                    'isSuccess' => true,
+                    'message' => 'No payslips found for this employee.',
+                    'data' => [],
+                ]);
+            }
+
+            $data = $records->map(function ($record) {
+                $allowances = $record->allowances->map(fn($a) => [
+                    'allowance_type' => $a->allowanceType->type_name ?? 'Other Allowance',
+                    'allowance_amount' => number_format($a->allowance_amount, 2),
+                ]);
+
+                $deductions = $record->deductions->map(function ($ded) {
+                    if ($ded->loan_id) {
+                        return [
+                            'deduction_type' => 'Loan Payment',
+                            'loan_name' => $ded->loan->loanType->type_name ?? 'Loan',
+                            'deduction_amount' => number_format($ded->deduction_amount, 2),
+                        ];
+                    } elseif ($ded->benefit_type_id) {
+                        return [
+                            'deduction_type' => $ded->benefitType->benefit_name ?? 'Other Deduction',
+                            'deduction_amount' => number_format($ded->deduction_amount, 2),
+                        ];
+                    }
+                    return [
+                        'deduction_type' => $ded->deduction_name ?? 'Other Deduction',
+                        'deduction_amount' => number_format($ded->deduction_amount, 2),
+                    ];
+                });
+
+                return [
+                    'record_id' => $record->id,
+                    'period' => $record->payrollPeriod->period_name ?? 'N/A',
+                    'gross_pay' => number_format($record->gross_pay, 2),
+                    'total_deductions' => number_format($record->total_deductions, 2),
+                    'net_pay' => number_format($record->net_pay, 2),
+                    'generated_at' => $record->created_at->format('F d, Y'),
+                    'allowances' => $allowances,
+                    'deductions' => $deductions,
+                ];
+            });
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Payslips retrieved successfully.',
+                'data' => $data,
+                'pagination' => [
+                    'total' => $records->total(),
+                    'per_page' => $records->perPage(),
+                    'current_page' => $records->currentPage(),
+                    'last_page' => $records->lastPage(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching employee payslips: ' . $e->getMessage());
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to fetch payslips.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
     /**
      * ✅ Mark payroll period as processed
      */
@@ -415,6 +582,33 @@ class PayrollController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message'   => 'Failed to update payroll status.',
+                'error'     => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+    /**
+     * 📊 Get payroll summary stats
+     */
+    public function getPayrollSummary()
+    {
+        try {
+            $summary = [
+                'total_periods'   => DB::table('payroll_periods')->count(),
+                'processed'       => DB::table('payroll_periods')->where('status', 'processed')->count(),
+                'drafts'          => DB::table('payroll_periods')->where('status', 'draft')->count(),
+                'active_employees' => DB::table('employees')->where('is_active', 1)->count(),
+            ];
+
+            return response()->json([
+                'isSuccess' => true,
+                'data'      => $summary,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to load payroll summary.',
                 'error'     => $e->getMessage(),
             ], 500);
         }

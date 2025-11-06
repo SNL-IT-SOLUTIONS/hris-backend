@@ -91,7 +91,7 @@ Route::controller(EmployeeController::class)->middleware(['auth:sanctum'])->grou
 Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->group(function () {
     Route::post('attendance/clock-in', 'clockIn');
     Route::post('attendance/clock-out', 'clockOut');
-    Route::get('attendance/summary', 'getMyAttendance');
+    Route::middleware('auth:sanctum')->get('my-attendance', [AttendanceController::class, 'getMyAttendance']);
     Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
     Route::get('attendances', 'getAllAttendances');
     Route::get('leaves', 'getAllLeaves');
@@ -183,6 +183,9 @@ Route::controller(PayrollController::class)->group(function () {
     Route::get('payroll/payslip/{recordId}', 'getPayslip');
     Route::get('payroll/summary', 'getPayrollSummary');
     Route::post('payroll/process/{periodId}', 'processPayroll');
+
+    Route::middleware('auth:sanctum')->get('my-payroll-records', [PayrollController::class, 'getMyPayrollRecords']);
+    Route::middleware('auth:sanctum')->get('my-payslip/{recordId}', [PayrollController::class, 'getMyPayslip']);
 });
 
 //Allowances
@@ -210,7 +213,7 @@ Route::controller(LoanController::class)->group(function () {
     Route::get('loans/{id}', 'getLoanById');
     Route::post('loans/{id}/approve', 'approveLoan');
     Route::post('loans/{id}/cancel', 'cancelLoan');
-    Route::get('my-loans', 'getMyLoans');
+    Route::middleware('auth:sanctum')->get('my-loans/{recordId}', [LoanController::class, 'getMyLoans']);
 });
 
 
