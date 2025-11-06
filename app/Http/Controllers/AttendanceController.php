@@ -8,6 +8,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Leave;
+use Illuminate\Support\Facades\Log;
+
 use Exception;
 
 
@@ -224,6 +226,44 @@ class AttendanceController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+    //Request Leave
+    public function requestLeave(Request $request)
+    {
+        try {
+            // Validate input
+            $validated = $request->validate([
+                'employee_id'   => 'required|exists:employees,id',
+                'leave_type'    => 'required|string|max:100',
+                'start_date'    => 'required|date|after_or_equal:today',
+                'end_date'      => 'required|date|after_or_equal:start_date',
+                'reason'        => 'nullable|string|max:500',
+            ]);
+
+            // Optional: Calculate number of days
+            $days = (new \DateTime($validated['start_date']))->diff(new \DateTime($validated['end_date']))->days + 1;
+            $validated['total_days'] = $days;
+            $validated['status'] = 'Pending';
+
+            // ✅ Save to DB (assuming you have a Leave model + table)
+            $leave = Leave::create($validated);
+
+            Log::info("Leave request created for employee ID {$validated['employee_id']} ({$days} days)");
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Leave request submitted successfully.',
+                'leave'     => $leave,
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Error submitting leave request: ' . $e->getMessage());
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to submit leave request.',
             ], 500);
         }
     }
