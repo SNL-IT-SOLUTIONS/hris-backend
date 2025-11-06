@@ -369,7 +369,6 @@ class EmployeeController extends Controller
             'password'      => 'nullable|string|min:8',
             '201_file.*'    => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
 
-            // Make benefits and allowances completely optional
             'benefits'      => 'nullable',
             'allowances'    => 'nullable',
         ]);
