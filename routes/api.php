@@ -209,6 +209,7 @@ Route::controller(LoanController::class)->group(function () {
     Route::get('loans/{id}', 'getLoanById');
     Route::post('loans/{id}/approve', 'approveLoan');
     Route::post('loans/{id}/cancel', 'cancelLoan');
+    Route::get('my-loans', 'getMyLoans');
 });
 
 

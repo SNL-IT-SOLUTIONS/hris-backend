@@ -47,6 +47,53 @@ class LoanController extends Controller
         }
     }
 
+
+    public function getMyLoans(Request $request)
+    {
+        try {
+            $user = auth()->user(); // Get logged-in user
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access.',
+                ], 401);
+            }
+
+            $perPage = $request->get('per_page', 10);
+            $search  = $request->get('search');
+            $status  = $request->get('status');
+
+            // Fetch only the employee's loans
+            $query = Loan::with(['loanType'])
+                ->where('employee_id', $user->id);
+
+            if ($search) {
+                $query->whereHas('loanType', function ($q) use ($search) {
+                    $q->where('type_name', 'like', "%$search%");
+                });
+            }
+
+            if ($status) {
+                $query->where('status', $status);
+            }
+
+            $loans = $query->orderBy('created_at', 'desc')->paginate($perPage);
+
+            return response()->json([
+                'success' => true,
+                'data'    => $loans,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching employee loans: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch your loans.',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
     /**
      * Create a new loan record.
      */
