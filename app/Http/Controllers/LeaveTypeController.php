@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 class LeaveTypeController extends Controller
 {
     // ================================
-    // ✅ Get All Active Leave Types
+    // Get All Active Leave Types
     // ================================
     public function getAllLeaveTypes(Request $request)
     {

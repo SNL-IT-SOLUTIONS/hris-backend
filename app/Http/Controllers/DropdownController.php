@@ -37,7 +37,7 @@ class DropdownController extends Controller
     }
 
     /**
-     * 🏢 Get all work locations for dropdown
+     * Get all work locations for dropdown
      */
     public function getWorkLocations()
     {
