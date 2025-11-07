@@ -10,7 +10,8 @@ use App\Models\{
     BenefitType,
     AllowanceType,
     Employee,
-    Loan
+    Loan,
+    ThirteenthMonth
 };
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log};
@@ -49,7 +50,7 @@ class PayrollController extends Controller
             // === Cache allowance & benefit types ===
             $allAllowances = AllowanceType::all()->keyBy('id');
 
-            // ✅ Fetch all ACTIVE benefits dynamically
+            // Fetch all ACTIVE benefits dynamically
             $allBenefits = BenefitType::where('is_active', 1)
                 ->where('is_archived', 0)
                 ->get()
@@ -227,7 +228,7 @@ class PayrollController extends Controller
 
 
     /**
-     * 👷 Get list of active employees for payroll generation
+     * Get list of active employees for payroll generation
      */
     public function getEmployees()
     {
@@ -264,7 +265,7 @@ class PayrollController extends Controller
     }
 
     /**
-     * 📅 Get all payroll periods with their records
+     * Get all payroll periods with their records
      */
     public function getPayrollPeriods()
     {
@@ -655,5 +656,41 @@ class PayrollController extends Controller
                 'error'     => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function generateThirteenthMonthPay(Request $request)
+    {
+        $request->validate([
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'employees' => 'required|array',
+            'employees.*.employee_id' => 'required|integer|exists:employees,id',
+        ]);
+
+        foreach ($request->employees as $empData) {
+            $employeeId = $empData['employee_id'];
+
+            // Get total salary earned within the date range
+            $totalBasicSalary = PayrollRecord::where('employee_id', $employeeId)
+                ->whereBetween('created_at', [$request->start_date, $request->end_date])
+                ->sum('net_pay');
+
+            // Compute 13th month pay
+            $thirteenthMonthPay = $totalBasicSalary / 12;
+
+            // Save to table
+            ThirteenthMonth::updateOrCreate(
+                [
+                    'employee_id' => $employeeId,
+                    'start_date' => $request->start_date,
+                    'end_date' => $request->end_date,
+                ],
+                [
+                    'amount' => $thirteenthMonthPay,
+                ]
+            );
+        }
+
+        return response()->json(['message' => '13th month pay generated for selected employees']);
     }
 }
