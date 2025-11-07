@@ -28,7 +28,6 @@ class BenefitTypeController extends Controller
             'category' => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'deduction' => 'nullable|numeric',
-            'rate' => 'nullable|numeric',
 
             'is_active' => 'boolean',
         ]);
@@ -78,7 +77,6 @@ class BenefitTypeController extends Controller
             'category' => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'deduction' => 'nullable|numeric',
-            'rate' => 'nullable|decimal:10,2',
             'is_active' => 'boolean',
         ]);
 
