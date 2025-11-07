@@ -15,7 +15,6 @@ class PayrollDeduction extends Model
         'payroll_record_id',
         'benefit_type_id',
         'deduction_name',
-        'deduction_rate',
         'deduction_amount',
         'loan_id',
     ];

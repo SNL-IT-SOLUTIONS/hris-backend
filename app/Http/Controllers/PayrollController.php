@@ -26,8 +26,13 @@ class PayrollController extends Controller
             'period_name'        => 'required|string',
             'pay_date'           => 'required|date',
             'cutoff_start_date'  => 'required|date',
-            'cutoff_end_date'    => 'required|date',
+            'cutoff_end_date'    => 'required|date|after_or_equal:cutoff_start_date',
             'employees'          => 'required|array|min:1',
+            'employees.*.employee_id'      => 'required|exists:employees,id',
+            'employees.*.days_worked'      => 'required|numeric|min:0',
+            'employees.*.overtime_hours'   => 'nullable|numeric|min:0',
+            'employees.*.absences'         => 'nullable|numeric|min:0',
+            'employees.*.other_deductions' => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -41,16 +46,26 @@ class PayrollController extends Controller
                 'cutoff_end_date'    => $request->cutoff_end_date,
             ]);
 
-            foreach ($request->employees as $emp) {
-                $employee          = Employee::findOrFail($emp['employee_id']);
-                $daily             = $employee->base_salary;
-                $days              = $emp['days_worked'];
-                $overtime          = $emp['overtime_hours'] ?? 0;
-                $absences          = $emp['absences'] ?? 0;
-                $other_deductions  = $emp['other_deductions'] ?? 0;
+            // === Cache allowance & benefit types ===
+            $allAllowances = AllowanceType::all()->keyBy('id');
 
-                // === BASE GROSS PAY ===
-                $gross_base = ($daily * $days) + ($overtime * ($daily / 8)); // raw gross pay (no allowances)
+            // ✅ Fetch all ACTIVE benefits dynamically
+            $allBenefits = BenefitType::where('is_active', 1)
+                ->where('is_archived', 0)
+                ->get()
+                ->keyBy('id');
+
+            foreach ($request->employees as $emp) {
+                $employee         = Employee::findOrFail($emp['employee_id']);
+                $daily            = $employee->base_salary;
+                $days             = $emp['days_worked'];
+                $overtime         = $emp['overtime_hours'] ?? 0;
+                $absences         = $emp['absences'] ?? 0;
+                $other_deductions = $emp['other_deductions'] ?? 0;
+
+                // === BASE GROSS PAY (with 25% OT premium) ===
+                $overtimeRate = ($daily / 8) * 1.25;
+                $gross_base = ($daily * $days) + ($overtime * $overtimeRate);
 
                 // === ALLOWANCES ===
                 $employeeAllowanceIds = DB::table('employee_allowance')
@@ -58,26 +73,48 @@ class PayrollController extends Controller
                     ->pluck('allowance_type_id')
                     ->toArray();
 
-                $allowanceValues = !empty($employeeAllowanceIds)
-                    ? AllowanceType::whereIn('id', $employeeAllowanceIds)->get()
-                    : collect();
+                $allowanceValues = collect($employeeAllowanceIds)
+                    ->map(fn($id) => $allAllowances[$id] ?? null)
+                    ->filter();
 
                 $total_allowances = $allowanceValues->sum('value');
                 $gross_with_allowances = $gross_base + $total_allowances;
 
-                // === BENEFITS (deductions) ===
-                $employeeBenefitIds = DB::table('employee_benefit')
-                    ->where('employee_id', $employee->id)
-                    ->pluck('benefit_type_id')
-                    ->toArray();
+                // === BENEFITS (manual + default) ===
+                $benefitDeductions = [];
 
-                $benefitRates = !empty($employeeBenefitIds)
-                    ? BenefitType::whereIn('id', $employeeBenefitIds)->pluck('rate', 'benefit_name')
-                    : collect();
+                // ✅ Check if manual benefit values are provided in request
+                if (isset($emp['benefits']) && is_array($emp['benefits'])) {
+                    foreach ($emp['benefits'] as $benefitName => $amount) {
+                        $benefitType = BenefitType::where('benefit_name', 'like', $benefitName)->first();
 
-                $sss        = $benefitRates->has('SSS') ? ($gross_with_allowances * ($benefitRates['SSS'] / 100)) : 0;
-                $philhealth = $benefitRates->has('Philhealth') ? ($gross_with_allowances * ($benefitRates['Philhealth'] / 100)) : 0;
-                $pagibig    = $benefitRates->has('Pagibig') ? ($gross_with_allowances * ($benefitRates['Pagibig'] / 100)) : 0;
+                        if ($benefitType) {
+                            $benefitDeductions[] = [
+                                'benefit_type_id' => $benefitType->id,
+                                'benefit_name'    => $benefitType->benefit_name,
+                                'amount'          => $amount,
+                            ];
+                        }
+                    }
+                } else {
+                    // fallback if no manual input provided
+                    $employeeBenefitIds = DB::table('employee_benefit')
+                        ->where('employee_id', $employee->id)
+                        ->pluck('benefit_type_id')
+                        ->toArray();
+
+                    $activeBenefits = collect($employeeBenefitIds)
+                        ->map(fn($id) => $allBenefits[$id] ?? null)
+                        ->filter();
+
+                    foreach ($activeBenefits as $benefit) {
+                        $benefitDeductions[] = [
+                            'benefit_type_id' => $benefit->id,
+                            'benefit_name'    => $benefit->benefit_name,
+                            'amount'          => 0,
+                        ];
+                    }
+                }
 
                 // === LOANS (deductions) ===
                 $activeLoans = Loan::where('employee_id', $employee->id)
@@ -87,68 +124,64 @@ class PayrollController extends Controller
                 $total_loan_deductions = $activeLoans->sum('monthly_amortization');
 
                 // === TOTAL DEDUCTIONS ===
-                $total_deductions = $sss + $philhealth + $pagibig + $other_deductions + $total_loan_deductions;
+                $total_deductions = $other_deductions
+                    + $total_loan_deductions
+                    + collect($benefitDeductions)->sum('amount');
 
                 // === NET PAY ===
                 $net = $gross_with_allowances - $total_deductions;
 
                 // === CREATE PAYROLL RECORD ===
                 $record = PayrollRecord::create([
-                    'payroll_period_id' => $period->id,
-                    'employee_id'       => $employee->id,
-                    'daily_rate'        => $daily,
-                    'days_worked'       => $days,
-                    'overtime_hours'    => $overtime,
-                    'absences'          => $absences,
-                    'other_deductions'  => $other_deductions,
-                    'gross_base'        => $gross_base,
-                    'gross_pay'         => $gross_with_allowances,
-                    'total_deductions'  => $total_deductions,
-                    'net_pay'           => $net,
+                    'payroll_period_id'     => $period->id,
+                    'employee_id'           => $employee->id,
+                    'daily_rate'            => $daily,
+                    'days_worked'           => $days,
+                    'overtime_hours'        => $overtime,
+                    'absences'              => $absences,
+                    'other_deductions'      => $other_deductions,
+                    'gross_base'            => $gross_base,
+                    'gross_pay'             => $gross_with_allowances,
+                    'total_allowances'      => $total_allowances,
+                    'total_loan_deductions' => $total_loan_deductions,
+                    'total_deductions'      => $total_deductions,
+                    'net_pay'               => $net,
                 ]);
 
                 // === RECORD BENEFIT DEDUCTIONS ===
-                $deductions = [
-                    ['name' => 'SSS',        'amount' => $sss],
-                    ['name' => 'Philhealth', 'amount' => $philhealth],
-                    ['name' => 'Pagibig',    'amount' => $pagibig],
-                ];
-
-                foreach ($deductions as $ded) {
-                    if ($ded['amount'] > 0) {
-                        $benefitType = BenefitType::where('benefit_name', $ded['name'])->first();
-                        if ($benefitType) {
-                            PayrollDeduction::create([
-                                'payroll_record_id' => $record->id,
-                                'benefit_type_id'   => $benefitType->id,
-                                'deduction_name'    => $benefitType->benefit_name,
-                                'deduction_rate'    => $benefitType->rate,
-                                'deduction_amount'  => $ded['amount'],
-                                'loan_id'           => null,
-                            ]);
-                        }
-                    }
+                foreach ($benefitDeductions as $benefit) {
+                    PayrollDeduction::create([
+                        'payroll_record_id' => $record->id,
+                        'benefit_type_id'   => $benefit['benefit_type_id'],
+                        'deduction_name'    => $benefit['benefit_name'],
+                        'deduction_rate'    => null,
+                        'deduction_amount'  => $benefit['amount'],
+                        'loan_id'           => null,
+                    ]);
                 }
 
                 // === RECORD LOAN DEDUCTIONS ===
                 foreach ($activeLoans as $loan) {
                     $amortization = $loan->monthly_amortization;
-                    $newBalance   = max($loan->balance_amount - $amortization, 0);
 
-                    $loan->update([
-                        'balance_amount' => $newBalance,
-                        'status'         => $newBalance <= 0 ? 'paid' : 'active',
-                        'updated_at'     => now(),
-                    ]);
+                    if ($amortization > 0 && $loan->balance_amount > 0) {
+                        $newBalance = max($loan->balance_amount - $amortization, 0);
 
-                    PayrollDeduction::create([
-                        'payroll_record_id' => $record->id,
-                        'benefit_type_id'   => null,
-                        'loan_id'           => $loan->id,
-                        'deduction_name'    => 'Loan Payment',
-                        'deduction_rate'    => $loan->interest_rate,
-                        'deduction_amount'  => $amortization,
-                    ]);
+                        $loan->update([
+                            'balance_amount' => $newBalance,
+                            'status'         => $newBalance <= 0 ? 'paid' : 'active',
+                            'updated_at'     => now(),
+                        ]);
+
+                        PayrollDeduction::create([
+                            'payroll_record_id' => $record->id,
+                            'benefit_type_id'   => null,
+                            'loan_id'           => $loan->id,
+                            'deduction_name'    => 'Loan Payment',
+                            'deduction_rate'    => $loan->interest_rate,
+                            'deduction_amount'  => $amortization,
+                        ]);
+                    }
                 }
 
                 // === RECORD ALLOWANCES ===
@@ -160,14 +193,24 @@ class PayrollController extends Controller
                     ]);
                 }
 
-                Log::info("Payroll generated for Employee #{$employee->id}: BaseGross={$gross_base}, TotalAllowances={$total_allowances}, GrossWithAllowances={$gross_with_allowances}, Deductions={$total_deductions}, Net={$net}");
+                Log::info("Payroll generated for {$employee->first_name} {$employee->last_name} (ID: {$employee->id})", [
+                    'BaseGross' => $gross_base,
+                    'Allowances' => $total_allowances,
+                    'GrossWithAllowances' => $gross_with_allowances,
+                    'TotalDeductions' => $total_deductions,
+                    'NetPay' => $net,
+                ]);
             }
 
             DB::commit();
 
             return response()->json([
                 'isSuccess' => true,
-                'message'   => 'Payroll period and employee records created successfully (now includes base gross + total allowances).',
+                'message'   => 'Payroll period and employee records created successfully.',
+                'data'      => [
+                    'period' => $period,
+                    'records_count' => count($request->employees),
+                ]
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -180,6 +223,7 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
 
 
     /**
@@ -339,28 +383,27 @@ class PayrollController extends Controller
 
             $records = $query->paginate($perPage);
 
-            // Format the response for the frontend
             $data = $records->map(function ($record) {
                 $allowances = $record->allowances->map(fn($a) => [
-                    'allowance_type' => $a->allowanceType->type_name ?? 'Other Allowance',
+                    'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
                     'allowance_amount' => number_format($a->allowance_amount, 2),
                 ]);
 
                 $deductions = $record->deductions->map(function ($ded) {
                     if ($ded->loan_id) {
                         return [
-                            'deduction_type' => 'Loan Payment',
-                            'loan_name' => $ded->loan->loanType->type_name ?? 'Loan',
+                            'deduction_type'   => 'Loan Payment',
+                            'loan_name'        => $ded->loan->loanType->type_name ?? 'Loan',
                             'deduction_amount' => number_format($ded->deduction_amount, 2),
                         ];
                     } elseif ($ded->benefit_type_id) {
                         return [
-                            'deduction_type' => $ded->benefitType->benefit_name ?? 'Other Deduction',
+                            'deduction_type'   => $ded->benefitType->benefit_name ?? 'Other Deduction',
                             'deduction_amount' => number_format($ded->deduction_amount, 2),
                         ];
                     }
                     return [
-                        'deduction_type' => $ded->deduction_name ?? 'Other Deduction',
+                        'deduction_type'   => $ded->deduction_name ?? 'Other Deduction',
                         'deduction_amount' => number_format($ded->deduction_amount, 2),
                     ];
                 });
@@ -380,13 +423,13 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-                'message' => 'Employee payroll records retrieved successfully.',
-                'data' => $data,
+                'message'   => 'Employee payroll records retrieved successfully.',
+                'data'      => $data,
                 'pagination' => [
-                    'total' => $records->total(),
-                    'per_page' => $records->perPage(),
-                    'current_page' => $records->currentPage(),
-                    'last_page' => $records->lastPage(),
+                    'total'         => $records->total(),
+                    'per_page'      => $records->perPage(),
+                    'current_page'  => $records->currentPage(),
+                    'last_page'     => $records->lastPage(),
                 ],
             ]);
         } catch (\Exception $e) {
@@ -394,8 +437,8 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => false,
-                'message' => 'Failed to fetch payroll records.',
-                'error' => $e->getMessage(),
+                'message'   => 'Failed to fetch payroll records.',
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }
@@ -446,7 +489,7 @@ class PayrollController extends Controller
                     'period'            => $record->payrollPeriod->period_name,
                     'daily_rate'        => number_format($record->daily_rate, 2),
                     'days_worked'       => number_format($record->days_worked, 2),
-                    'gross_base'       => number_format($record->gross_base, 2),
+                    'gross_base'        => number_format($record->gross_base, 2),
                     'gross_pay'         => number_format($record->gross_pay, 2),
                     'allowances'        => $allowances,
                     'total_allowances'  => number_format($record->allowances->sum('allowance_amount'), 2),
@@ -474,11 +517,10 @@ class PayrollController extends Controller
         try {
             $user = auth()->user();
 
-            // Ensure only employees can use this
             if (!$user || !$user->employee) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message' => 'Unauthorized or employee record not found.',
+                    'message'   => 'Unauthorized or employee record not found.',
                 ], 403);
             }
 
@@ -497,57 +539,57 @@ class PayrollController extends Controller
             if ($records->isEmpty()) {
                 return response()->json([
                     'isSuccess' => true,
-                    'message' => 'No payslips found for this employee.',
-                    'data' => [],
+                    'message'   => 'No payslips found for this employee.',
+                    'data'      => [],
                 ]);
             }
 
             $data = $records->map(function ($record) {
                 $allowances = $record->allowances->map(fn($a) => [
-                    'allowance_type' => $a->allowanceType->type_name ?? 'Other Allowance',
+                    'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
                     'allowance_amount' => number_format($a->allowance_amount, 2),
                 ]);
 
                 $deductions = $record->deductions->map(function ($ded) {
                     if ($ded->loan_id) {
                         return [
-                            'deduction_type' => 'Loan Payment',
-                            'loan_name' => $ded->loan->loanType->type_name ?? 'Loan',
+                            'deduction_type'   => 'Loan Payment',
+                            'loan_name'        => $ded->loan->loanType->type_name ?? 'Loan',
                             'deduction_amount' => number_format($ded->deduction_amount, 2),
                         ];
                     } elseif ($ded->benefit_type_id) {
                         return [
-                            'deduction_type' => $ded->benefitType->benefit_name ?? 'Other Deduction',
+                            'deduction_type'   => $ded->benefitType->benefit_name ?? 'Other Deduction',
                             'deduction_amount' => number_format($ded->deduction_amount, 2),
                         ];
                     }
                     return [
-                        'deduction_type' => $ded->deduction_name ?? 'Other Deduction',
+                        'deduction_type'   => $ded->deduction_name ?? 'Other Deduction',
                         'deduction_amount' => number_format($ded->deduction_amount, 2),
                     ];
                 });
 
                 return [
-                    'record_id' => $record->id,
-                    'period' => $record->payrollPeriod->period_name ?? 'N/A',
-                    'gross_pay' => number_format($record->gross_pay, 2),
+                    'record_id'        => $record->id,
+                    'period'           => $record->payrollPeriod->period_name ?? 'N/A',
+                    'gross_pay'        => number_format($record->gross_pay, 2),
                     'total_deductions' => number_format($record->total_deductions, 2),
-                    'net_pay' => number_format($record->net_pay, 2),
-                    'generated_at' => $record->created_at->format('F d, Y'),
-                    'allowances' => $allowances,
-                    'deductions' => $deductions,
+                    'net_pay'          => number_format($record->net_pay, 2),
+                    'generated_at'     => $record->created_at->format('F d, Y'),
+                    'allowances'       => $allowances,
+                    'deductions'       => $deductions,
                 ];
             });
 
             return response()->json([
                 'isSuccess' => true,
-                'message' => 'Payslips retrieved successfully.',
-                'data' => $data,
+                'message'   => 'Payslips retrieved successfully.',
+                'data'      => $data,
                 'pagination' => [
-                    'total' => $records->total(),
-                    'per_page' => $records->perPage(),
-                    'current_page' => $records->currentPage(),
-                    'last_page' => $records->lastPage(),
+                    'total'         => $records->total(),
+                    'per_page'      => $records->perPage(),
+                    'current_page'  => $records->currentPage(),
+                    'last_page'     => $records->lastPage(),
                 ],
             ]);
         } catch (\Exception $e) {
@@ -555,8 +597,8 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => false,
-                'message' => 'Failed to fetch payslips.',
-                'error' => $e->getMessage(),
+                'message'   => 'Failed to fetch payslips.',
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }
@@ -588,6 +630,7 @@ class PayrollController extends Controller
     }
 
 
+
     /**
      * 📊 Get payroll summary stats
      */
@@ -595,9 +638,9 @@ class PayrollController extends Controller
     {
         try {
             $summary = [
-                'total_periods'   => DB::table('payroll_periods')->count(),
-                'processed'       => DB::table('payroll_periods')->where('status', 'processed')->count(),
-                'drafts'          => DB::table('payroll_periods')->where('status', 'draft')->count(),
+                'total_periods'    => DB::table('payroll_periods')->count(),
+                'processed'        => DB::table('payroll_periods')->where('status', 'processed')->count(),
+                'drafts'           => DB::table('payroll_periods')->where('status', 'draft')->count(),
                 'active_employees' => DB::table('employees')->where('is_active', 1)->count(),
             ];
 
