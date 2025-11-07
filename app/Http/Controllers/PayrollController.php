@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\{DB, Log};
 class PayrollController extends Controller
 {
     /**
-     * 🧾 Create a new payroll period and generate records for selected employees
+     * Create a new payroll period and generate records for selected employees
      */
     public function createPayrollPeriod(Request $request)
     {
@@ -101,8 +101,8 @@ class PayrollController extends Controller
                     'overtime_hours'    => $overtime,
                     'absences'          => $absences,
                     'other_deductions'  => $other_deductions,
-                    'gross_base'        => $gross_base,              // 👈 NEW: save raw base gross
-                    'gross_pay'         => $gross_with_allowances,   // 👈 gross including allowances
+                    'gross_base'        => $gross_base,
+                    'gross_pay'         => $gross_with_allowances,
                     'total_deductions'  => $total_deductions,
                     'net_pay'           => $net,
                 ]);

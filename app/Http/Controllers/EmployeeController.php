@@ -39,7 +39,7 @@ class EmployeeController extends Controller
                     ->orWhereHas('department', fn($dq) => $dq->where('department_name', 'LIKE', "%$search%"))
                     ->orWhereHas('position', fn($pq) => $pq->where('position_name', 'LIKE', "%$search%"))
                     ->orWhereHas('benefits', fn($bq) => $bq->where('benefit_name', 'LIKE', "%$search%"))
-                    ->orWhereHas('allowances', fn($aq) => $aq->where('type_name', 'LIKE', "%$search%")); // new search
+                    ->orWhereHas('allowances', fn($aq) => $aq->where('type_name', 'LIKE', "%$search%"));
             });
         }
 
