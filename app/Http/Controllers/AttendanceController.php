@@ -230,6 +230,32 @@ class AttendanceController extends Controller
         }
     }
 
+    public function getMyLeaves(Request $request)
+    {
+        try {
+            //  Get authenticated user
+            $user = auth()->user();
+
+            // Check if this user is linked to an employee record
+            $employeeId = $user->id;
+
+            // Fetch leave records for this employee
+            $leaves = Leave::where('employee_id', $employeeId)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'leaves' => $leaves,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
 
     //Request Leave
     public function requestLeave(Request $request)
