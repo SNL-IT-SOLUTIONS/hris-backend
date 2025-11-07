@@ -91,12 +91,15 @@ Route::controller(EmployeeController::class)->middleware(['auth:sanctum'])->grou
 Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->group(function () {
     Route::post('attendance/clock-in', 'clockIn');
     Route::post('attendance/clock-out', 'clockOut');
+    Route::middleware('auth:sanctum')->get('my-leaves', [AttendanceController::class, 'getMyLeaves']);
     Route::middleware('auth:sanctum')->get('my-attendance', [AttendanceController::class, 'getMyAttendance']);
     Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
-    Route::get('attendances', 'getAllAttendances');
-    Route::get('leaves', 'getAllLeaves');
     Route::post('request-leave', 'requestLeave');
+
+
     Route::post('confirm-leave/{leaveId}', 'confirmLeave');
+    Route::get('leaves', 'getAllLeaves');
+    Route::get('attendances', 'getAllAttendances');
 });
 
 
