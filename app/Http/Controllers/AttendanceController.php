@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Leave;
 use Illuminate\Support\Facades\Log;
+use App\Models\LeaveType;
 
 use Exception;
 
@@ -261,24 +262,40 @@ class AttendanceController extends Controller
     public function requestLeave(Request $request)
     {
         try {
-            // Validate input
+            // ✅ Validate input
             $validated = $request->validate([
                 'employee_id'   => 'required|exists:employees,id',
-                'leave_type'    => 'required|string|max:100',
+                'leave_type_id' => 'required|exists:leave_types,id', // fixed typo: "extists" → "exists"
                 'start_date'    => 'required|date|after_or_equal:today',
                 'end_date'      => 'required|date|after_or_equal:start_date',
                 'reason'        => 'nullable|string|max:500',
             ]);
 
-            // Optional: Calculate number of days
-            $days = (new \DateTime($validated['start_date']))->diff(new \DateTime($validated['end_date']))->days + 1;
+            // 🧮 Calculate total days
+            $days = (new \DateTime($validated['start_date']))
+                ->diff(new \DateTime($validated['end_date']))
+                ->days + 1;
+
+            // 🧾 Fetch leave type details
+            $leaveType = \App\Models\LeaveType::find($validated['leave_type_id']);
+
+            // 🧩 Optional: Check if leave exceeds max_days
+            if ($leaveType && $leaveType->max_days && $days > $leaveType->max_days) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => "This leave type allows a maximum of {$leaveType->max_days} days.",
+                ], 422);
+            }
+
+            // ✍️ Add extra fields
             $validated['total_days'] = $days;
             $validated['status'] = 'Pending';
+            $validated['is_paid'] = $leaveType->is_paid ?? false;
 
-            // ✅ Save to DB (assuming you have a Leave model + table)
-            $leave = Leave::create($validated);
+            // ✅ Save to DB
+            $leave = \App\Models\Leave::create($validated);
 
-            Log::info("Leave request created for employee ID {$validated['employee_id']} ({$days} days)");
+            Log::info("Leave request created for employee ID {$validated['employee_id']} ({$days} days, {$leaveType->leave_name})");
 
             return response()->json([
                 'isSuccess' => true,

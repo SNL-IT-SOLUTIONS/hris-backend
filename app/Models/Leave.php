@@ -15,7 +15,7 @@ class Leave extends Model
     // ✅ Fields that can be mass-assigned
     protected $fillable = [
         'employee_id',
-        'leave_type',
+        'leave_type_id',
         'start_date',
         'end_date',
         'total_days',
