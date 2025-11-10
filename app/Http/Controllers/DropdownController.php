@@ -8,6 +8,8 @@ use App\Models\WorkLocation;
 use App\Models\Employee;
 use App\Models\PositionType;
 use App\Models\BenefitType;
+use App\Models\LeaveType;
+use Illuminate\Http\Request;
 
 class DropdownController extends Controller
 {
@@ -185,6 +187,28 @@ class DropdownController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to load allowance types dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getLeaveTypesDropdown()
+    {
+        try {
+            $leaveTypes = LeaveType::select('id', 'type_name')
+                ->where('is_active', 1)
+                ->orderBy('type_name', 'asc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Leave types dropdown retrieved successfully.',
+                'data' => $leaveTypes
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load leave types dropdown.',
                 'error' => $e->getMessage()
             ], 500);
         }

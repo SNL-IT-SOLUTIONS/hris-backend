@@ -230,4 +230,5 @@ Route::controller(DropdownController::class)->group(function () {
     Route::get('dropdown/interviewers', 'getInterviewersDropdown');
     Route::get('dropdown/benefit-types', 'getBenefitTypesDropdown');
     Route::get('dropdown/allowance-types', 'getAllowanceTypesDropdown');
+    Route::get('dropdown/leave-types', 'getLeaveTypesDropdown');
 });
