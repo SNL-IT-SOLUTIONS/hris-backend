@@ -195,9 +195,9 @@ class DropdownController extends Controller
     public function getLeaveTypesDropdown()
     {
         try {
-            $leaveTypes = LeaveType::select('id', 'type_name')
+            $leaveTypes = LeaveType::select('id', 'leave_name')
                 ->where('is_active', 1)
-                ->orderBy('type_name', 'asc')
+                ->orderBy('leave_name', 'asc')
                 ->get();
 
             return response()->json([
