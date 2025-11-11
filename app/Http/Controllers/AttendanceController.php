@@ -19,7 +19,6 @@ use Exception;
 class AttendanceController extends Controller
 {
 
-    use Illuminate\Http\UploadedFile;
 
     public function registerFace(Request $request)
     {
