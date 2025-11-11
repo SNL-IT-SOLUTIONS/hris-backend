@@ -83,6 +83,7 @@ class AuthController extends Controller
                 'phone'         => $role === 'employee' ? $user->phone : null,
                 'department_id' => $role === 'employee' ? $user->department_id : null,
                 'position_id'   => $role === 'employee' ? $user->position_id : null,
+                'face_id'   => $role === 'employee' ? $user->face_id : null,
             ],
             'company_information' => $company ? [
                 'id' => $company->id,
