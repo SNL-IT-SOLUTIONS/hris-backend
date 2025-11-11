@@ -83,9 +83,9 @@ class AttendanceController extends Controller
             ->whereDate('clock_in', Carbon::today())
             ->first();
 
-        if ($existing) {
-            return response()->json(['message' => 'Already clocked in today.'], 400);
-        }
+        // if ($existing) {
+        //     return response()->json(['message' => 'Already clocked in today.'], 400);
+        // }
 
         $attendance = Attendance::create([
             'employee_id' => $employeeId,
@@ -111,9 +111,9 @@ class AttendanceController extends Controller
             return response()->json(['message' => 'You have not clocked in yet.'], 400);
         }
 
-        if ($attendance->clock_out) {
-            return response()->json(['message' => 'Already clocked out today.'], 400);
-        }
+        // if ($attendance->clock_out) {
+        //     return response()->json(['message' => 'Already clocked out today.'], 400);
+        // }
 
         $attendance->clock_out = Carbon::now();
         $attendance->calculateHoursWorked();
