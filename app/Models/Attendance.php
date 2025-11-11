@@ -16,6 +16,8 @@ class Attendance extends Model
         'clock_out',
         'hours_worked',
         'status',
+        'clock_in_image',
+        'clock_out_image',
         'remarks',
     ];
 
