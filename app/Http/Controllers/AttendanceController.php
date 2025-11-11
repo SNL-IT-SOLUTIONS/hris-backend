@@ -11,6 +11,7 @@ use App\Models\Leave;
 use Illuminate\Support\Facades\Log;
 use App\Models\LeaveType;
 use App\Models\Employee;
+use App\Models\EmployeeFace;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 
@@ -30,19 +31,23 @@ class AttendanceController extends Controller
                 'face_image' => 'required|file|image|mimes:jpeg,jpg,png|max:5120',
             ]);
 
-            // Save using helper
-            $file = $request->file('face_image');
-            $path = $this->saveFileToPublic($file, 'face_' . $user->id);
+            // Save the uploaded file
+            $file = $request->file('face_image_path');
+            $path = $this->saveFileToPublic($file, 'face_' . $user->id . '_' . time());
 
-            // Update correct column
-            $user->update(['face_image_path' => $path]);
+            // Insert a new record into employee_faces table
+            $faceRecord = EmployeeFace::create([
+                'employee_id' => $user->id,
+                'face_image_path' => $path,
+                // optionally, you can generate and store face_encoding here if your system uses it
+            ]);
 
             return response()->json([
                 'message' => 'Face successfully registered!',
                 'employee' => [
                     'id' => $user->id,
                     'name' => "{$user->first_name} {$user->last_name}",
-                    'face_image_url' => asset($path),
+                    'face_image_url' => asset($faceRecord->face_image_path),
                 ],
             ], 200);
         } catch (\Exception $e) {
@@ -52,6 +57,7 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
 
 
 
