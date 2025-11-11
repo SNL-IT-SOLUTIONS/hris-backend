@@ -161,10 +161,15 @@ class AttendanceController extends Controller
                 return response()->json(['message' => 'Already clocked in today.'], 400);
             }
 
+            // Save clock-in image
+            $imagePath = $this->saveFileToPublic($uploadedFile, 'attendance_in_' . $employee->id . '_' . time());
+
             $attendance = Attendance::create([
                 'employee_id' => $employee->id,
                 'clock_in' => Carbon::now(),
                 'status' => 'Present',
+                'method' => 'Manual',
+                'image_path' => $imagePath, // clock-in image
             ]);
 
             return response()->json([
@@ -215,7 +220,11 @@ class AttendanceController extends Controller
                 return response()->json(['message' => 'Already clocked out today.'], 400);
             }
 
+            // Save clock-out image
+            $imagePath = $this->saveFileToPublic($uploadedFile, 'attendance_out_' . $employee->id . '_' . time());
+
             $attendance->clock_out = Carbon::now();
+            $attendance->clock_out_image_path = $imagePath; // clock-out image
             if (method_exists($attendance, 'calculateHoursWorked')) {
                 $attendance->calculateHoursWorked();
             }
@@ -233,6 +242,8 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
+
 
     /**
      * Dashboard Summary
