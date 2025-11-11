@@ -169,7 +169,7 @@ class AttendanceController extends Controller
                 'clock_in' => Carbon::now(),
                 'status' => 'Present',
                 'method' => 'Manual',
-                'image_path' => $imagePath, // clock-in image
+                'clock_in_image' => $imagePath, // clock-in image
             ]);
 
             return response()->json([
@@ -224,7 +224,7 @@ class AttendanceController extends Controller
             $imagePath = $this->saveFileToPublic($uploadedFile, 'attendance_out_' . $employee->id . '_' . time());
 
             $attendance->clock_out = Carbon::now();
-            $attendance->clock_out_image_path = $imagePath; // clock-out image
+            $attendance->clock_out_image = $imagePath; // clock-out image
             if (method_exists($attendance, 'calculateHoursWorked')) {
                 $attendance->calculateHoursWorked();
             }
