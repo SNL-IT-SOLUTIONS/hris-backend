@@ -133,7 +133,7 @@ class EmployeeController extends Controller
                 'manager:id,first_name,last_name',
                 'supervisor:id,first_name,last_name',
                 'files',
-                'benefits:id,benefit_name,description,rate',
+                'benefits:id,benefit_name,description',
                 'allowances:id,type_name,description,value'
             ])
                 ->where('is_archived', false)

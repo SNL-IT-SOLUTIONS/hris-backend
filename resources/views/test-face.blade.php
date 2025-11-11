@@ -36,7 +36,7 @@
                 fetch(url, {
                         method: 'POST',
                         headers: {
-                            'Authorization': 'Bearer AV3wQUaFuRJ6Rj4o3RyXbvH9wIGiVcGxjixwbAfZ', // replace with your token
+                            'Authorization': 'Bearer AV3wQUaFuRJ6Rj4o3RyXbvH9wIGiVcGxjixwbAfZ',
                         },
                         body: formData
                     })
