@@ -89,6 +89,7 @@ Route::controller(EmployeeController::class)->middleware(['auth:sanctum'])->grou
 
 //ATTENDANCE & LEAVES
 Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->group(function () {
+    Route::middleware('auth:sanctum')->post('register-face', [AttendanceController::class, 'registerFace']);
     Route::post('attendance/clock-in', 'clockIn');
     Route::post('attendance/clock-out', 'clockOut');
     Route::middleware('auth:sanctum')->get('my-leaves', [AttendanceController::class, 'getMyLeaves']);

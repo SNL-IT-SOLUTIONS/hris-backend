@@ -10,12 +10,58 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Leave;
 use Illuminate\Support\Facades\Log;
 use App\Models\LeaveType;
+use App\Models\Employee;
+use Illuminate\Http\UploadedFile;
 
 use Exception;
 
 
 class AttendanceController extends Controller
 {
+
+    public function registerFace(Request $request)
+    {
+        try {
+            $user = auth()->user();
+
+            $request->validate([
+                'face_image' => 'required|string', // base64 string
+            ]);
+
+            // Decode base64
+            $imageData = $request->face_image;
+            $imageData = str_replace('data:image/jpeg;base64,', '', $imageData);
+            $imageData = str_replace(' ', '+', $imageData);
+            $imageName = 'face_' . $user->id . '_' . uniqid() . '.jpg';
+
+            // Use your helper to save
+            $tmpFile = tmpfile();
+            $tmpFilePath = stream_get_meta_data($tmpFile)['uri'];
+            file_put_contents($tmpFilePath, base64_decode($imageData));
+
+            $path = $this->saveFileToPublic(new UploadedFile($tmpFilePath, $imageName, 'image/jpeg', null, true), 'face_' . $user->id);
+
+            $user->update(['face_path' => $path]);
+
+            return response()->json([
+                'message' => 'Face successfully registered!',
+                'employee' => [
+                    'id' => $user->id,
+                    'name' => "{$user->first_name} {$user->last_name}",
+                    'face_image_url' => asset($path),
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to register face.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+
+
     /**
      * Display a listing of all attendance records.
      */
@@ -309,5 +355,37 @@ class AttendanceController extends Controller
                 'message'   => 'Failed to submit leave request.',
             ], 500);
         }
+    }
+
+
+    //HELPERS
+    private function saveFileToPublic($fileInput, $prefix)
+    {
+        $directory = public_path('hris_files');
+        if (!file_exists($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $saveSingleFile = function ($file) use ($directory, $prefix) {
+            $filename = $prefix . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $file->move($directory, $filename);
+            return 'hris_files/' . $filename;
+        };
+
+        //  Case 1: Multiple files
+        if (is_array($fileInput)) {
+            $paths = [];
+            foreach ($fileInput as $file) {
+                $paths[] = $saveSingleFile($file);
+            }
+            return $paths; // Return array of paths
+        }
+
+        // Case 2: Single file
+        if ($fileInput instanceof \Illuminate\Http\UploadedFile) {
+            return $saveSingleFile($fileInput);
+        }
+
+        return null;
     }
 }
