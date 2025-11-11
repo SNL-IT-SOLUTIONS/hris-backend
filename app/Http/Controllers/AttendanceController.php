@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use App\Models\LeaveType;
 use App\Models\Employee;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Validator;
 
 use Exception;
 
@@ -113,56 +114,100 @@ class AttendanceController extends Controller
     /**
      * Clock In
      */
-
-
     public function clockIn(Request $request)
     {
-        $employeeId = Auth::id(); // Get the logged-in user's ID
+        try {
+            // Validate uploaded image
+            $validator = Validator::make($request->all(), [
+                'face_image' => 'required|file|image|mimes:jpeg,png,jpg|max:5120',
+            ]);
 
-        $existing = Attendance::where('employee_id', $employeeId)
-            ->whereDate('clock_in', Carbon::today())
-            ->first();
+            if ($validator->fails()) {
+                return response()->json(['message' => 'Invalid image.', 'errors' => $validator->errors()], 422);
+            }
 
-        if ($existing) {
-            return response()->json(['message' => 'Already clocked in today.'], 400);
+            $uploadedFile = $request->file('face_image');
+
+            // Match face with employee
+            $employee = $this->matchFace($uploadedFile);
+
+            if (!$employee) {
+                return response()->json(['message' => 'Face not recognized.'], 401);
+            }
+
+            // Check if already clocked in today
+            $existing = Attendance::where('employee_id', $employee->id)
+                ->whereDate('clock_in', Carbon::today())
+                ->first();
+
+            if ($existing) {
+                return response()->json(['message' => 'Already clocked in today.'], 400);
+            }
+
+            $attendance = Attendance::create([
+                'employee_id' => $employee->id,
+                'clock_in' => Carbon::now(),
+                'status' => 'Present',
+            ]);
+
+            return response()->json([
+                'message' => 'Clocked in successfully!',
+                'employee' => $employee->first_name . ' ' . $employee->last_name,
+                'attendance' => $attendance,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to clock in.', 'error' => $e->getMessage()], 500);
         }
-
-        $attendance = Attendance::create([
-            'employee_id' => $employeeId,
-            'clock_in' => Carbon::now(),
-            'status' => 'Present',
-        ]);
-
-        return response()->json([
-            'message' => 'Clocked in successfully!',
-            'data' => $attendance,
-        ]);
     }
 
+    /**
+     * Clock out via face recognition
+     */
     public function clockOut(Request $request)
     {
-        $employeeId = Auth::id(); // Logged-in user again
+        try {
+            // Validate uploaded image
+            $validator = Validator::make($request->all(), [
+                'face_image' => 'required|file|image|mimes:jpeg,png,jpg|max:5120',
+            ]);
 
-        $attendance = Attendance::where('employee_id', $employeeId)
-            ->whereDate('clock_in', Carbon::today())
-            ->first();
+            if ($validator->fails()) {
+                return response()->json(['message' => 'Invalid image.', 'errors' => $validator->errors()], 422);
+            }
 
-        if (!$attendance) {
-            return response()->json(['message' => 'You have not clocked in yet.'], 400);
+            $uploadedFile = $request->file('face_image');
+
+            // Match face with employee
+            $employee = $this->matchFace($uploadedFile);
+
+            if (!$employee) {
+                return response()->json(['message' => 'Face not recognized.'], 401);
+            }
+
+            $attendance = Attendance::where('employee_id', $employee->id)
+                ->whereDate('clock_in', Carbon::today())
+                ->first();
+
+            if (!$attendance) {
+                return response()->json(['message' => 'You have not clocked in yet.'], 400);
+            }
+
+            if ($attendance->clock_out) {
+                return response()->json(['message' => 'Already clocked out today.'], 400);
+            }
+
+            $attendance->clock_out = Carbon::now();
+            $attendance->calculateHoursWorked(); // Make sure this method exists
+            $attendance->save();
+
+            return response()->json([
+                'message' => 'Clocked out successfully!',
+                'employee' => $employee->first_name . ' ' . $employee->last_name,
+                'attendance' => $attendance,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to clock out.', 'error' => $e->getMessage()], 500);
         }
-
-        if ($attendance->clock_out) {
-            return response()->json(['message' => 'Already clocked out today.'], 400);
-        }
-
-        $attendance->clock_out = Carbon::now();
-        $attendance->calculateHoursWorked();
-        $attendance->save();
-
-        return response()->json([
-            'message' => 'Clocked out successfully!',
-            'data' => $attendance,
-        ]);
     }
 
 
@@ -376,10 +421,50 @@ class AttendanceController extends Controller
         }
 
         // Case 2: Single file
-        if ($fileInput instanceof \Illuminate\Http\UploadedFile) {
+        if ($fileInput instanceof UploadedFile) {
             return $saveSingleFile($fileInput);
         }
 
         return null;
+    }
+
+
+    /**
+     * Match uploaded face with stored employee faces.
+     * This is a placeholder: you must integrate a real face recognition system.
+     *
+     * @param UploadedFile $uploadedFile
+     * @return Employee|null
+     */
+    private function matchFace(UploadedFile $uploadedFile)
+    {
+        // Save uploaded image temporarily
+        $tmpPath = $uploadedFile->getRealPath();
+
+        // Loop through employees who have face images
+        $employees = Employee::whereNotNull('face_image_path')->get();
+
+        foreach ($employees as $emp) {
+            $storedFace = public_path($emp->face_image_path);
+
+            // Example: Compare uploaded face with stored face
+            // This is a placeholder; replace with actual face recognition library
+            if ($this->isSameFace($tmpPath, $storedFace)) {
+                return $emp;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Dummy face comparison function
+     * Replace this with actual comparison logic using a Python/AI service or OpenCV
+     */
+    private function isSameFace($img1Path, $img2Path)
+    {
+        // Placeholder: In practice, call a face recognition API here
+        // For testing, you can match filenames or use a hash as dummy
+        return md5_file($img1Path) === md5_file($img2Path);
     }
 }

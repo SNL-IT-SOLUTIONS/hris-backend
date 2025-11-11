@@ -2,9 +2,10 @@
 <html>
 
 <body>
-    <h3>Face Registration Test</h3>
+    <h3>Face Clock-In / Clock-Out Test</h3>
     <video id="video" width="320" height="240" autoplay></video>
-    <button id="snap">Capture & Upload</button>
+    <button id="clockInBtn">Clock In</button>
+    <button id="clockOutBtn">Clock Out</button>
     <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
 
     <script>
@@ -22,26 +23,33 @@
                 alert("Cannot access camera. Make sure permissions are allowed and you're using localhost/https.");
             });
 
-        document.getElementById('snap').addEventListener('click', () => {
+        function captureAndSend(url) {
             // Capture frame
             context.drawImage(video, 0, 0, 320, 240);
 
             canvas.toBlob(blob => {
                 const formData = new FormData();
-                formData.append('face_image', blob, 'face.jpg'); // matches controller's file validation
+                formData.append('face_image', blob, 'face.jpg'); // matches controller
 
-                // Localhost URL for testing with php artisan serve
-                fetch('https://api-hris.slarenasitsolutions.com/public/api/register-face', {
+                fetch(url, {
                         method: 'POST',
                         headers: {
-                            'Authorization': 'Bearer AV3wQUaFuRJ6Rj4o3RyXbvH9wIGiVcGxjixwbAfZ', // replace with your token
+                            'Authorization': 'Bearer AV3wQUaFuRJ6Rj4o3RyXbvH9wIGiVcGxjixwbAfZ'
                         },
                         body: formData
                     })
                     .then(res => res.json())
-                    .then(data => console.log(data))
+                    .then(data => alert(JSON.stringify(data)))
                     .catch(err => console.error(err));
             }, 'image/jpeg');
+        }
+
+        document.getElementById('clockInBtn').addEventListener('click', () => {
+            captureAndSend('https://api-hris.slarenasitsolutions.com/public/api/attendance/clock-in');
+        });
+
+        document.getElementById('clockOutBtn').addEventListener('click', () => {
+            captureAndSend('https://api-hris.slarenasitsolutions.com/public/api/attendance/clock-out');
         });
     </script>
 </body>
