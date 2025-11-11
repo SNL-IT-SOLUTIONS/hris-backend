@@ -97,6 +97,15 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
     Route::post('request-leave', 'requestLeave');
 
+    //DTR ADJUSTMENTS
+    Route::get('dtr-adjustments', 'getAllAdjustments');
+    Route::middleware('auth:sanctum')->get('my-adjustments', [AttendanceController::class, 'getMyAdjustments']);
+    Route::post('request/adjustment', 'requestAdjustment');
+    Route::post('adjustment/approve/{adjustmentId}', 'approveAdjustment');
+    Route::post('adjustment/reject/{adjustmentId}', 'rejectAdjustment');
+
+
+
 
     Route::post('confirm-leave/{leaveId}', 'confirmLeave');
     Route::get('leaves', 'getAllLeaves');

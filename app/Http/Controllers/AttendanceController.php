@@ -377,6 +377,122 @@ class AttendanceController extends Controller
     }
 
 
+    //DTR ADJUSTMENTS
+
+    public function requestAdjustment(Request $request, $attendanceId)
+    {
+        $request->validate([
+            'adjusted_clock_in' => 'nullable|date',
+            'adjusted_clock_out' => 'nullable|date',
+            'reason' => 'required|string|max:255',
+        ]);
+
+        $attendance = Attendance::findOrFail($attendanceId);
+
+        $attendance->update([
+            'adjusted_clock_in' => $request->adjusted_clock_in,
+            'adjusted_clock_out' => $request->adjusted_clock_out,
+            'adjustment_reason' => $request->reason,
+            'adjustment_status' => 'pending',
+        ]);
+
+        return response()->json([
+            'message' => 'Adjustment request submitted successfully.',
+            'attendance' => $attendance
+        ], 200);
+    }
+
+
+    public function approveAdjustment(Request $request, $attendanceId)
+    {
+        $request->validate([
+            'status' => 'required|in:approved,rejected',
+        ]);
+
+        $attendance = Attendance::findOrFail($attendanceId);
+
+        if ($request->status === 'approved') {
+            // Apply the adjustment
+            if ($attendance->adjusted_clock_in) {
+                $attendance->clock_in = $attendance->adjusted_clock_in;
+            }
+            if ($attendance->adjusted_clock_out) {
+                $attendance->clock_out = $attendance->adjusted_clock_out;
+            }
+        }
+
+        $attendance->adjustment_status = $request->status;
+        $attendance->adjusted_by = auth()->id(); // admin/supervisor ID
+        $attendance->save();
+
+        return response()->json([
+            'message' => 'Adjustment ' . $request->status,
+            'attendance' => $attendance
+        ], 200);
+    }
+
+
+
+    public function rejectAdjustment(Request $request, $attendanceId)
+    {
+        $attendance = Attendance::findOrFail($attendanceId);
+
+        $attendance->update([
+            'adjustment_status' => 'rejected',
+        ]);
+
+        return response()->json([
+            'message' => 'Adjustment request rejected successfully.',
+            'attendance' => $attendance
+        ], 200);
+    }
+
+
+    public function getAllAdjustments()
+    {
+        $adjustments = Attendance::whereNotNull('adjustment_status')
+            ->with('employee:id,first_name,last_name,email')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'isSuccess' => true,
+            'data' => $adjustments,
+        ]);
+    }
+
+
+
+
+    public function getMyAdjustments(Request $request)
+    {
+        try {
+            //  Get authenticated user
+            $user = auth()->user();
+
+            // Check if this user is linked to an employee record
+            $employeeId = $user->id;
+
+            // Fetch adjustment records for this employee
+            $adjustments = Attendance::where('employee_id', $employeeId)
+                ->whereNotNull('adjustment_status')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'adjustments' => $adjustments,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+
     //Request Leave
     public function requestLeave(Request $request)
     {
