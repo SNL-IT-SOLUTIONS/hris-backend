@@ -29,11 +29,12 @@ class AttendanceController extends Controller
                 'face_image' => 'required|file|image|mimes:jpeg,jpg,png|max:5120',
             ]);
 
-            // Use your helper to save
+            // Save using helper
             $file = $request->file('face_image');
             $path = $this->saveFileToPublic($file, 'face_' . $user->id);
 
-            $user->update(['face_path' => $path]);
+            // Update correct column
+            $user->update(['face_image_path' => $path]);
 
             return response()->json([
                 'message' => 'Face successfully registered!',
@@ -50,6 +51,7 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
 
 
 
