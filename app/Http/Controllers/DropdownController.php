@@ -218,9 +218,9 @@ class DropdownController extends Controller
     public function getLoanTypesDropdown()
     {
         try {
-            $loanTypes = LoanType::select('id', 'loan_name')
+            $loanTypes = LoanType::select('id', 'type_name')
                 ->where('is_active', 1)
-                ->orderBy('loan_name', 'asc')
+                ->orderBy('type_name', 'asc')
                 ->get();
 
             return response()->json([
