@@ -461,22 +461,21 @@ class AttendanceController extends Controller
      */
     private function matchFace(UploadedFile $uploadedFile)
     {
-        $tmpPath = $uploadedFile->getRealPath();
-
-        // Get all employees with a registered face
-        $employees = Employee::whereNotNull('face_id')->with('face')->get();
-        // Make sure Employee model has: public function face() { return $this->hasOne(EmployeeFace::class, 'id', 'face_id'); }
+        // Get all employees that have a face_id set
+        $employees = Employee::whereNotNull('face_id')->get();
 
         foreach ($employees as $employee) {
-            $storedFace = public_path($employee->face->face_image_path);
+            // Check if that face_id exists in employee_faces
+            $faceExists = EmployeeFace::where('id', $employee->face_id)->exists();
 
-            if ($this->isSameFace($tmpPath, $storedFace)) {
-                return $employee;
+            if ($faceExists) {
+                return $employee; // Employee recognized
             }
         }
 
-        return null;
+        return null; // No match found
     }
+
 
 
 
