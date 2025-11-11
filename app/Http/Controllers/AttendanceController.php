@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use Illuminate\Http\Request;
-use Carbon\Carbon;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Leave;
@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\Log;
 use App\Models\LeaveType;
 use App\Models\Employee;
 use App\Models\EmployeeFace;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
-
 
 use Exception;
 
@@ -57,9 +57,6 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
-
-
-
 
     /**
      * Display a listing of all attendance records.
@@ -118,16 +115,19 @@ class AttendanceController extends Controller
     /**
      * Clock In
      */
+
     public function clockIn(Request $request)
     {
         try {
-            // Validate uploaded image
             $validator = Validator::make($request->all(), [
                 'face_image' => 'required|file|image|mimes:jpeg,png,jpg|max:5120',
             ]);
 
             if ($validator->fails()) {
-                return response()->json(['message' => 'Invalid image.', 'errors' => $validator->errors()], 422);
+                return response()->json([
+                    'message' => 'Invalid image.',
+                    'errors' => $validator->errors()
+                ], 422);
             }
 
             $uploadedFile = $request->file('face_image');
@@ -160,23 +160,25 @@ class AttendanceController extends Controller
                 'attendance' => $attendance,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to clock in.', 'error' => $e->getMessage()], 500);
+            return response()->json([
+                'message' => 'Failed to clock in.',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
-    /**
-     * Clock out via face recognition
-     */
     public function clockOut(Request $request)
     {
         try {
-            // Validate uploaded image
             $validator = Validator::make($request->all(), [
                 'face_image' => 'required|file|image|mimes:jpeg,png,jpg|max:5120',
             ]);
 
             if ($validator->fails()) {
-                return response()->json(['message' => 'Invalid image.', 'errors' => $validator->errors()], 422);
+                return response()->json([
+                    'message' => 'Invalid image.',
+                    'errors' => $validator->errors()
+                ], 422);
             }
 
             $uploadedFile = $request->file('face_image');
@@ -201,7 +203,9 @@ class AttendanceController extends Controller
             }
 
             $attendance->clock_out = Carbon::now();
-            $attendance->calculateHoursWorked(); // Make sure this method exists
+            if (method_exists($attendance, 'calculateHoursWorked')) {
+                $attendance->calculateHoursWorked();
+            }
             $attendance->save();
 
             return response()->json([
@@ -210,10 +214,12 @@ class AttendanceController extends Controller
                 'attendance' => $attendance,
             ], 200);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed to clock out.', 'error' => $e->getMessage()], 500);
+            return response()->json([
+                'message' => 'Failed to clock out.',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
-
 
     /**
      * Dashboard Summary
@@ -442,17 +448,13 @@ class AttendanceController extends Controller
      */
     private function matchFace(UploadedFile $uploadedFile)
     {
-        // Save uploaded image temporarily
         $tmpPath = $uploadedFile->getRealPath();
-
-        // Loop through employees who have face images
         $employees = Employee::whereNotNull('face_image_path')->get();
 
         foreach ($employees as $emp) {
             $storedFace = public_path($emp->face_image_path);
 
-            // Example: Compare uploaded face with stored face
-            // This is a placeholder; replace with actual face recognition library
+            // Use real face recognition here (Python/AI service or OpenCV)
             if ($this->isSameFace($tmpPath, $storedFace)) {
                 return $emp;
             }
