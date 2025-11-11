@@ -33,7 +33,7 @@ class AttendanceController extends Controller
             ]);
 
             // Save the uploaded file
-            $file = $request->file('face_image'); // <-- fix here
+            $file = $request->file('face_image');
             $path = $this->saveFileToPublic($file, 'face_' . $user->id . '_' . time());
 
             // Insert a new record into employee_faces table
@@ -42,12 +42,16 @@ class AttendanceController extends Controller
                 'face_image_path' => $path,
             ]);
 
+            // Update the employees table with the new face_id
+            $user->update(['face_id' => $faceRecord->id]);
+
             return response()->json([
                 'message' => 'Face successfully registered!',
                 'employee' => [
                     'id' => $user->id,
                     'name' => "{$user->first_name} {$user->last_name}",
                     'face_image_url' => asset($faceRecord->face_image_path),
+                    'face_id' => $faceRecord->id,
                 ],
             ], 200);
         } catch (\Exception $e) {
@@ -57,6 +61,7 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Display a listing of all attendance records.
