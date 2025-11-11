@@ -76,15 +76,24 @@ class AttendanceController extends Controller
      */
     public function getAllAttendances()
     {
-        $attendances = Attendance::with(['employee:id,first_name,last_name,email,department_id,position_id'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $attendances = Attendance::with([
+            'employee:id,first_name,last_name,email,department_id,position_id'
+        ])->orderBy('created_at', 'desc')->get();
+
+        $attendances->transform(function ($attendance) {
+            $attendance->clock_in = $attendance->adjusted_clock_in ?? $attendance->clock_in;
+            $attendance->clock_out = $attendance->adjusted_clock_out ?? $attendance->clock_out;
+            $attendance->clock_in_image = $attendance->clock_in_image ? asset($attendance->clock_in_image) : null;
+            $attendance->clock_out_image = $attendance->clock_out_image ? asset($attendance->clock_out_image) : null;
+            return $attendance;
+        });
 
         return response()->json([
             'isSuccess' => true,
             'data' => $attendances,
         ]);
     }
+
 
 
     public function getAllLeaves()
@@ -109,16 +118,16 @@ class AttendanceController extends Controller
         }
 
         // Validate status input
-        $request->validate([
+        $validated = $request->validate([
             'status' => 'required|in:Approved,Rejected',
         ]);
 
-        $leave->status = $request->status;
+        $leave->status = $validated['status'];
         $leave->save();
 
         return response()->json([
             'isSuccess' => true,
-            'message'   => 'Leave request ' . strtolower($request->status) . ' successfully.',
+            'message'   => 'Leave request ' . strtolower($validated['status']) . ' successfully.',
             'leave'     => $leave,
         ]);
     }
@@ -132,8 +141,15 @@ class AttendanceController extends Controller
     public function clockIn(Request $request)
     {
         try {
+            $user = auth()->user();
+
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized. Please log in.'], 401);
+            }
+
+            // Optional: Only require face image if not manual
             $validator = Validator::make($request->all(), [
-                'face_image' => 'required|file|image|mimes:jpeg,png,jpg|max:5120',
+                'face_image' => 'nullable|file|image|mimes:jpeg,png,jpg|max:5120',
             ]);
 
             if ($validator->fails()) {
@@ -143,14 +159,7 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            $uploadedFile = $request->file('face_image');
-
-            // Match face with employee
-            $employee = $this->matchFace($uploadedFile);
-
-            if (!$employee) {
-                return response()->json(['message' => 'Face not recognized.'], 401);
-            }
+            $employee = $user; // use authenticated user
 
             // Check if already clocked in today
             $existing = Attendance::where('employee_id', $employee->id)
@@ -161,15 +170,19 @@ class AttendanceController extends Controller
                 return response()->json(['message' => 'Already clocked in today.'], 400);
             }
 
-            // Save clock-in image
-            $imagePath = $this->saveFileToPublic($uploadedFile, 'attendance_in_' . $employee->id . '_' . time());
+            // Save clock-in image (if provided)
+            $imagePath = null;
+            if ($request->hasFile('face_image')) {
+                $uploadedFile = $request->file('face_image');
+                $imagePath = $this->saveFileToPublic($uploadedFile, 'attendance_in_' . $employee->id . '_' . time());
+            }
 
             $attendance = Attendance::create([
                 'employee_id' => $employee->id,
                 'clock_in' => Carbon::now(),
                 'status' => 'Present',
-                'method' => 'Manual',
-                'clock_in_image' => $imagePath, // clock-in image
+                'method' => $request->hasFile('face_image') ? 'Facial Recognition' : 'Manual',
+                'clock_in_image' => $imagePath,
             ]);
 
             return response()->json([
@@ -188,8 +201,14 @@ class AttendanceController extends Controller
     public function clockOut(Request $request)
     {
         try {
+            $user = auth()->user();
+
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized. Please log in.'], 401);
+            }
+
             $validator = Validator::make($request->all(), [
-                'face_image' => 'required|file|image|mimes:jpeg,png,jpg|max:5120',
+                'face_image' => 'nullable|file|image|mimes:jpeg,png,jpg|max:5120',
             ]);
 
             if ($validator->fails()) {
@@ -199,15 +218,9 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            $uploadedFile = $request->file('face_image');
+            $employee = $user;
 
-            // Match face with employee
-            $employee = $this->matchFace($uploadedFile);
-
-            if (!$employee) {
-                return response()->json(['message' => 'Face not recognized.'], 401);
-            }
-
+            // Find today's attendance
             $attendance = Attendance::where('employee_id', $employee->id)
                 ->whereDate('clock_in', Carbon::today())
                 ->first();
@@ -220,14 +233,21 @@ class AttendanceController extends Controller
                 return response()->json(['message' => 'Already clocked out today.'], 400);
             }
 
-            // Save clock-out image
-            $imagePath = $this->saveFileToPublic($uploadedFile, 'attendance_out_' . $employee->id . '_' . time());
+            // Save clock-out image (if provided)
+            $imagePath = null;
+            if ($request->hasFile('face_image')) {
+                $uploadedFile = $request->file('face_image');
+                $imagePath = $this->saveFileToPublic($uploadedFile, 'attendance_out_' . $employee->id . '_' . time());
+            }
 
             $attendance->clock_out = Carbon::now();
-            $attendance->clock_out_image = $imagePath; // clock-out image
+            $attendance->clock_out_image = $imagePath;
+            $attendance->method = $request->hasFile('face_image') ? 'Facial Recognition' : 'Manual';
+
             if (method_exists($attendance, 'calculateHoursWorked')) {
                 $attendance->calculateHoursWorked();
             }
+
             $attendance->save();
 
             return response()->json([
@@ -290,22 +310,23 @@ class AttendanceController extends Controller
     public function getMyAttendance(Request $request)
     {
         try {
-            //  Get authenticated user
             $user = auth()->user();
-
-            // Check if this user is linked to an employee record
             $employeeId = $user->id;
 
             $today = now()->toDateString();
             $weekStart = now()->startOfWeek();
             $monthStart = now()->startOfMonth();
 
-            // Fetch today’s record
             $todayRecord = Attendance::where('employee_id', $employeeId)
                 ->whereDate('clock_in', $today)
                 ->first();
 
-            // Compute summaries
+            // Transform todayRecord to include adjusted times and images
+            if ($todayRecord) {
+                $todayRecord->clock_in = $todayRecord->adjusted_clock_in ?? $todayRecord->clock_in;
+                $todayRecord->clock_out = $todayRecord->adjusted_clock_out ?? $todayRecord->clock_out;
+            }
+
             $thisWeekHours = Attendance::where('employee_id', $employeeId)
                 ->whereBetween('clock_in', [$weekStart, now()])
                 ->sum('hours_worked');
@@ -318,14 +339,21 @@ class AttendanceController extends Controller
                 ->whereMonth('clock_in', now()->month)
                 ->count();
 
-            // Example on-time rate (placeholder logic)
-            $onTimeRate = 95;
+            $onTimeRate = 95; // placeholder
 
-            // Recent attendance records
             $recent = Attendance::where('employee_id', $employeeId)
                 ->orderBy('clock_in', 'desc')
                 ->take(5)
                 ->get();
+
+            // Transform recent records to include adjusted times and image URLs
+            $recent->transform(function ($attendance) {
+                $attendance->clock_in = $attendance->adjusted_clock_in ?? $attendance->clock_in;
+                $attendance->clock_out = $attendance->adjusted_clock_out ?? $attendance->clock_out;
+                $attendance->clock_in_image = $attendance->clock_in_image ? asset($attendance->clock_in_image) : null;
+                $attendance->clock_out_image = $attendance->clock_out_image ? asset($attendance->clock_out_image) : null;
+                return $attendance;
+            });
 
             return response()->json([
                 'isSuccess' => true,
@@ -349,6 +377,7 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
 
     public function getMyLeaves(Request $request)
     {
@@ -512,7 +541,7 @@ class AttendanceController extends Controller
                 ->days + 1;
 
             // 🧾 Fetch leave type details
-            $leaveType = \App\Models\LeaveType::find($validated['leave_type_id']);
+            $leaveType = LeaveType::find($validated['leave_type_id']);
 
             // 🧩 Optional: Check if leave exceeds max_days
             if ($leaveType && $leaveType->max_days && $days > $leaveType->max_days) {
