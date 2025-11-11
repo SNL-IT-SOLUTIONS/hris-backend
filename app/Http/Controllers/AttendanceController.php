@@ -36,13 +36,21 @@ class AttendanceController extends Controller
             $file = $request->file('face_image');
             $path = $this->saveFileToPublic($file, 'face_' . $user->id . '_' . time());
 
-            // Insert a new record into employee_faces table
-            $faceRecord = EmployeeFace::create([
-                'employee_id' => $user->id,
-                'face_image_path' => $path,
-            ]);
+            // Check if the employee already has a face record
+            $faceRecord = EmployeeFace::where('employee_id', $user->id)->first();
 
-            // Update the employees table with the new face_id
+            if ($faceRecord) {
+                // Update existing face record
+                $faceRecord->update(['face_image_path' => $path]);
+            } else {
+                // Create new face record
+                $faceRecord = EmployeeFace::create([
+                    'employee_id' => $user->id,
+                    'face_image_path' => $path,
+                ]);
+            }
+
+            // Update the employees table with the face_id
             $user->update(['face_id' => $faceRecord->id]);
 
             return response()->json([
