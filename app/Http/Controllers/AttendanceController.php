@@ -19,27 +19,20 @@ use Exception;
 class AttendanceController extends Controller
 {
 
+    use Illuminate\Http\UploadedFile;
+
     public function registerFace(Request $request)
     {
         try {
             $user = auth()->user();
 
             $request->validate([
-                'face_image' => 'required|string', // base64 string
+                'face_image' => 'required|file|image|mimes:jpeg,jpg,png|max:5120',
             ]);
 
-            // Decode base64
-            $imageData = $request->face_image;
-            $imageData = str_replace('data:image/jpeg;base64,', '', $imageData);
-            $imageData = str_replace(' ', '+', $imageData);
-            $imageName = 'face_' . $user->id . '_' . uniqid() . '.jpg';
-
             // Use your helper to save
-            $tmpFile = tmpfile();
-            $tmpFilePath = stream_get_meta_data($tmpFile)['uri'];
-            file_put_contents($tmpFilePath, base64_decode($imageData));
-
-            $path = $this->saveFileToPublic(new UploadedFile($tmpFilePath, $imageName, 'image/jpeg', null, true), 'face_' . $user->id);
+            $file = $request->file('face_image');
+            $path = $this->saveFileToPublic($file, 'face_' . $user->id);
 
             $user->update(['face_path' => $path]);
 

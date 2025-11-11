@@ -1,4 +1,3 @@
-<!-- resources/views/test-face.blade.php -->
 <!DOCTYPE html>
 <html>
 
@@ -13,31 +12,35 @@
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
 
+        // Request webcam
         navigator.mediaDevices.getUserMedia({
                 video: true
             })
             .then(stream => video.srcObject = stream)
             .catch(err => {
                 console.error("Cannot access camera:", err);
-                alert("Cannot access camera. Make sure permissions are allowed and you’re using localhost/https.");
+                alert("Cannot access camera. Make sure permissions are allowed and you're using localhost/https.");
             });
 
         document.getElementById('snap').addEventListener('click', () => {
+            // Capture frame
             context.drawImage(video, 0, 0, 320, 240);
+
             canvas.toBlob(blob => {
                 const formData = new FormData();
-                formData.append('face_image', blob, 'face.jpg');
+                formData.append('face_image', blob, 'face.jpg'); // matches controller's file validation
 
-                fetch('/api/employee/register-face', {
+                // Localhost URL for testing with php artisan serve
+                fetch('https://api-hris.slarenasitsolutions.com/public/api/register-face', {
                         method: 'POST',
                         headers: {
-                            'Authorization': 'Bearer YOUR_TOKEN'
-                        }, // replace YOUR_TOKEN
+                            'Authorization': 'Bearer AV3wQUaFuRJ6Rj4o3RyXbvH9wIGiVcGxjixwbAfZ', // replace with your token
+                        },
                         body: formData
                     })
                     .then(res => res.json())
-                    .then(console.log)
-                    .catch(console.error);
+                    .then(data => console.log(data))
+                    .catch(err => console.error(err));
             }, 'image/jpeg');
         });
     </script>
