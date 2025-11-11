@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\PositionType;
 use App\Models\BenefitType;
 use App\Models\LeaveType;
+use App\Models\LoanType;
 use Illuminate\Http\Request;
 
 class DropdownController extends Controller
@@ -209,6 +210,28 @@ class DropdownController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to load leave types dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getLoanTypesDropdown()
+    {
+        try {
+            $loanTypes = LoanType::select('id', 'loan_name')
+                ->where('is_active', 1)
+                ->orderBy('loan_name', 'asc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Loan types dropdown retrieved successfully.',
+                'data' => $loanTypes
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load loan types dropdown.',
                 'error' => $e->getMessage()
             ], 500);
         }
