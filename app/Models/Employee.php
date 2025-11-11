@@ -158,4 +158,9 @@ class Employee extends Authenticatable
     {
         return $this->hasMany(Attendance::class, 'employee_id');
     }
+
+    public function face()
+    {
+        return $this->hasOne(EmployeeFace::class, 'id', 'face_id');
+    }
 }
