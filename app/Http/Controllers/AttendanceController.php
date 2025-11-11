@@ -449,19 +449,21 @@ class AttendanceController extends Controller
     private function matchFace(UploadedFile $uploadedFile)
     {
         $tmpPath = $uploadedFile->getRealPath();
-        $employees = Employee::whereNotNull('face_image_path')->get();
 
-        foreach ($employees as $emp) {
-            $storedFace = public_path($emp->face_image_path);
+        // Get all face records
+        $faces = EmployeeFace::with('employee')->get(); // make sure EmployeeFace has 'employee' relationship
 
-            // Use real face recognition here (Python/AI service or OpenCV)
+        foreach ($faces as $face) {
+            $storedFace = public_path($face->face_image_path);
+
             if ($this->isSameFace($tmpPath, $storedFace)) {
-                return $emp;
+                return $face->employee; // return the related Employee model
             }
         }
 
         return null;
     }
+
 
     /**
      * Dummy face comparison function
