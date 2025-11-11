@@ -15,6 +15,7 @@ use App\Models\EmployeeFace;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 
+
 use Exception;
 
 
@@ -32,14 +33,13 @@ class AttendanceController extends Controller
             ]);
 
             // Save the uploaded file
-            $file = $request->file('face_image_path');
+            $file = $request->file('face_image'); // <-- fix here
             $path = $this->saveFileToPublic($file, 'face_' . $user->id . '_' . time());
 
             // Insert a new record into employee_faces table
             $faceRecord = EmployeeFace::create([
                 'employee_id' => $user->id,
                 'face_image_path' => $path,
-                // optionally, you can generate and store face_encoding here if your system uses it
             ]);
 
             return response()->json([
@@ -57,8 +57,6 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
-
-
 
 
 
