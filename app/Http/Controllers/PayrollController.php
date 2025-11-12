@@ -24,15 +24,15 @@ class PayrollController extends Controller
     public function createPayrollPeriod(Request $request)
     {
         $request->validate([
-            'period_name'        => 'required|string',
-            'pay_date'           => 'required|date',
-            'cutoff_start_date'  => 'required|date',
-            'cutoff_end_date'    => 'required|date|after_or_equal:cutoff_start_date',
-            'employees'          => 'required|array|min:1',
-            'employees.*.employee_id'      => 'required|exists:employees,id',
-            'employees.*.days_worked'      => 'required|numeric|min:0',
-            'employees.*.overtime_hours'   => 'nullable|numeric|min:0',
-            'employees.*.absences'         => 'nullable|numeric|min:0',
+            'period_name'       => 'required|string',
+            'pay_date'          => 'required|date',
+            'cutoff_start_date' => 'required|date',
+            'cutoff_end_date'   => 'required|date|after_or_equal:cutoff_start_date',
+            'employees'         => 'required|array|min:1',
+            'employees.*.employee_id'    => 'required|exists:employees,id',
+            'employees.*.days_worked'    => 'required|numeric|min:0',
+            'employees.*.overtime_hours' => 'nullable|numeric|min:0',
+            'employees.*.absences'       => 'nullable|numeric|min:0',
             'employees.*.other_deductions' => 'nullable|numeric|min:0',
         ]);
 
@@ -41,34 +41,32 @@ class PayrollController extends Controller
         try {
             // === Create payroll period ===
             $period = PayrollPeriod::create([
-                'period_name'        => $request->period_name,
-                'pay_date'           => $request->pay_date,
-                'cutoff_start_date'  => $request->cutoff_start_date,
-                'cutoff_end_date'    => $request->cutoff_end_date,
+                'period_name'       => $request->period_name,
+                'pay_date'          => $request->pay_date,
+                'cutoff_start_date' => $request->cutoff_start_date,
+                'cutoff_end_date'   => $request->cutoff_end_date,
             ]);
 
-            // === Cache allowance & benefit types ===
+            // === Cache all allowances and active benefits ===
             $allAllowances = AllowanceType::all()->keyBy('id');
-
-            // Fetch all ACTIVE benefits dynamically
-            $allBenefits = BenefitType::where('is_active', 1)
+            $allBenefits   = BenefitType::where('is_active', 1)
                 ->where('is_archived', 0)
                 ->get()
                 ->keyBy('id');
 
             foreach ($request->employees as $emp) {
-                $employee         = Employee::findOrFail($emp['employee_id']);
-                $daily            = $employee->base_salary;
-                $days             = $emp['days_worked'];
-                $overtime         = $emp['overtime_hours'] ?? 0;
-                $absences         = $emp['absences'] ?? 0;
+                $employee = Employee::findOrFail($emp['employee_id']);
+                $daily    = $employee->base_salary;
+                $days     = $emp['days_worked'];
+                $overtime = $emp['overtime_hours'] ?? 0;
+                $absences = $emp['absences'] ?? 0;
                 $other_deductions = $emp['other_deductions'] ?? 0;
 
-                // === BASE GROSS PAY (with 25% OT premium) ===
+                // === Calculate gross pay with OT premium (25%) ===
                 $overtimeRate = ($daily / 8) * 1.25;
-                $gross_base = ($daily * $days) + ($overtime * $overtimeRate);
+                $gross_base   = ($daily * $days) + ($overtime * $overtimeRate);
 
-                // === ALLOWANCES ===
+                // === Employee Allowances ===
                 $employeeAllowanceIds = DB::table('employee_allowance')
                     ->where('employee_id', $employee->id)
                     ->pluck('allowance_type_id')
@@ -78,61 +76,41 @@ class PayrollController extends Controller
                     ->map(fn($id) => $allAllowances[$id] ?? null)
                     ->filter();
 
-                $total_allowances = $allowanceValues->sum('value');
+                $total_allowances      = $allowanceValues->sum('value');
                 $gross_with_allowances = $gross_base + $total_allowances;
 
-                // === BENEFITS (manual + default) ===
-                $benefitDeductions = [];
+                // === Employee Benefits (deductions) ===
+                $employeeBenefitIds = DB::table('employee_benefit')
+                    ->where('employee_id', $employee->id)
+                    ->pluck('benefit_type_id')
+                    ->toArray();
 
-                // ✅ Check if manual benefit values are provided in request
-                if (isset($emp['benefits']) && is_array($emp['benefits'])) {
-                    foreach ($emp['benefits'] as $benefitName => $amount) {
-                        $benefitType = BenefitType::where('benefit_name', 'like', $benefitName)->first();
+                $benefitDeductions = collect($employeeBenefitIds)
+                    ->map(fn($id) => $allBenefits[$id] ?? null)
+                    ->filter()
+                    ->map(fn($benefit) => [
+                        'benefit_type_id' => $benefit->id,
+                        'benefit_name'    => $benefit->benefit_name,
+                        'amount'          => 0, // default, can adjust later if needed
+                    ])
+                    ->toArray();
 
-                        if ($benefitType) {
-                            $benefitDeductions[] = [
-                                'benefit_type_id' => $benefitType->id,
-                                'benefit_name'    => $benefitType->benefit_name,
-                                'amount'          => $amount,
-                            ];
-                        }
-                    }
-                } else {
-                    // fallback if no manual input provided
-                    $employeeBenefitIds = DB::table('employee_benefit')
-                        ->where('employee_id', $employee->id)
-                        ->pluck('benefit_type_id')
-                        ->toArray();
-
-                    $activeBenefits = collect($employeeBenefitIds)
-                        ->map(fn($id) => $allBenefits[$id] ?? null)
-                        ->filter();
-
-                    foreach ($activeBenefits as $benefit) {
-                        $benefitDeductions[] = [
-                            'benefit_type_id' => $benefit->id,
-                            'benefit_name'    => $benefit->benefit_name,
-                            'amount'          => 0,
-                        ];
-                    }
-                }
-
-                // === LOANS (deductions) ===
+                // === Loans (deductions) ===
                 $activeLoans = Loan::where('employee_id', $employee->id)
                     ->where('status', 'active')
                     ->get();
 
                 $total_loan_deductions = $activeLoans->sum('monthly_amortization');
 
-                // === TOTAL DEDUCTIONS ===
+                // === Total deductions ===
                 $total_deductions = $other_deductions
                     + $total_loan_deductions
                     + collect($benefitDeductions)->sum('amount');
 
-                // === NET PAY ===
+                // === Net pay ===
                 $net = $gross_with_allowances - $total_deductions;
 
-                // === CREATE PAYROLL RECORD ===
+                // === Create payroll record ===
                 $record = PayrollRecord::create([
                     'payroll_period_id'     => $period->id,
                     'employee_id'           => $employee->id,
@@ -149,7 +127,7 @@ class PayrollController extends Controller
                     'net_pay'               => $net,
                 ]);
 
-                // === RECORD BENEFIT DEDUCTIONS ===
+                // === Record benefit deductions ===
                 foreach ($benefitDeductions as $benefit) {
                     PayrollDeduction::create([
                         'payroll_record_id' => $record->id,
@@ -161,7 +139,7 @@ class PayrollController extends Controller
                     ]);
                 }
 
-                // === RECORD LOAN DEDUCTIONS ===
+                // === Record loan deductions ===
                 foreach ($activeLoans as $loan) {
                     $amortization = $loan->monthly_amortization;
 
@@ -185,7 +163,7 @@ class PayrollController extends Controller
                     }
                 }
 
-                // === RECORD ALLOWANCES ===
+                // === Record allowances ===
                 foreach ($allowanceValues as $allowance) {
                     PayrollAllowance::create([
                         'payroll_record_id' => $record->id,
@@ -209,7 +187,7 @@ class PayrollController extends Controller
                 'isSuccess' => true,
                 'message'   => 'Payroll period and employee records created successfully.',
                 'data'      => [
-                    'period' => $period,
+                    'period'        => $period,
                     'records_count' => count($request->employees),
                 ]
             ], 201);
@@ -224,6 +202,7 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
 
 
 
