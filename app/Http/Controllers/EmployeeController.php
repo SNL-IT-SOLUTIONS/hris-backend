@@ -13,6 +13,7 @@ use App\Models\EmployeeFile;
 use App\Models\BenefitType;
 use App\Models\AllowanceType;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class EmployeeController extends Controller
 {
@@ -289,6 +290,14 @@ class EmployeeController extends Controller
             'allowance_type_ids'   => 'nullable|array',
             'allowance_type_ids.*' => 'exists:allowance_types,id',
 
+            // Benefit & Allowance amounts
+            'benefits' => 'nullable|array',
+            'benefits.*.benefit_type_id' => 'required_with:benefits|exists:benefit_types,id',
+            'benefits.*.amount' => 'nullable|numeric|min:0',
+            'allowances' => 'nullable|array',
+            'allowances.*.allowance_type_id' => 'required_with:allowances|exists:allowance_types,id',
+            'allowances.*.amount' => 'nullable|numeric|min:0',
+
             // Auth / System
             'password'     => 'required|string|min:8',
             'role'         => 'nullable|string|max:50',
@@ -300,7 +309,7 @@ class EmployeeController extends Controller
         $plainPassword = $validated['password'];
         $validated['password'] = Hash::make($plainPassword);
 
-        //  Auto-generate employee ID
+        // Auto-generate employee ID
         $latestEmployee = Employee::latest('id')->first();
         $nextNumber = $latestEmployee ? $latestEmployee->id + 1 : 1;
         $validated['employee_id'] = 'EMP-' . date('Y') . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
@@ -322,6 +331,38 @@ class EmployeeController extends Controller
             $employee->allowances()->sync($validated['allowance_type_ids']);
         }
 
+        // ✅ NEW: Insert benefit and allowance values
+        if (!empty($validated['benefits'])) {
+            foreach ($validated['benefits'] as $benefit) {
+                DB::table('employee_benefit')->updateOrInsert(
+                    [
+                        'employee_id' => $employee->id,
+                        'benefit_type_id' => $benefit['benefit_type_id'],
+                    ],
+                    [
+                        'amount' => $benefit['amount'] ?? null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                );
+            }
+        }
+
+        if (!empty($validated['allowances'])) {
+            foreach ($validated['allowances'] as $allowance) {
+                DB::table('employee_allowance')->updateOrInsert(
+                    [
+                        'employee_id' => $employee->id,
+                        'allowance_type_id' => $allowance['allowance_type_id'],
+                    ],
+                    [
+                        'amount' => $allowance['amount'] ?? null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                );
+            }
+        }
 
         // Handle 201 files
         if ($request->hasFile('201_file')) {
@@ -346,9 +387,10 @@ class EmployeeController extends Controller
         return response()->json([
             'isSuccess' => true,
             'message' => 'Employee created successfully and email sent.',
-            'employee' => $employee->load('benefits', 'files'),
+            'employee' => $employee->load('benefits', 'allowances', 'files'),
         ], 201);
     }
+
 
     public function updateEmployee(Request $request, $id)
     {
@@ -361,7 +403,6 @@ class EmployeeController extends Controller
             ], 404);
         }
 
-        // Custom validation for benefits and allowances
         $validator = Validator::make($request->all(), [
             'email'         => 'sometimes|email|unique:employees,email,' . $employee->id,
             'department_id' => 'nullable|exists:departments,id',
@@ -369,8 +410,13 @@ class EmployeeController extends Controller
             'password'      => 'nullable|string|min:8',
             '201_file.*'    => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
 
-            'benefits'      => 'nullable',
-            'allowances'    => 'nullable',
+            // ✅ Validate allowances and benefits arrays with amount
+            'allowances'                => 'nullable|array',
+            'allowances.*.id' => 'required_with:allowances|exists:allowance_types,id',
+            'allowances.*.amount'       => 'required_with:allowances|numeric|min:0',
+            'benefits'                  => 'nullable|array',
+            'benefits.*.id' => 'required_with:benefits|exists:benefit_types,id',
+            'benefits.*.amount'         => 'required_with:benefits|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -389,7 +435,7 @@ class EmployeeController extends Controller
 
         $employee->update($data);
 
-        // Handle 201 Files
+        // ✅ Handle 201 Files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
                 $filePath = $this->saveFileToPublic($file, 'employee_201');
@@ -402,52 +448,43 @@ class EmployeeController extends Controller
             }
         }
 
-        // Handle Benefits - manually validate and process
-        if ($request->has('benefits')) {
-            $benefits = $request->benefits;
-
-            // If benefits is empty or contains invalid values, clear all benefits
-            if (empty($benefits) || !is_array($benefits)) {
-                $employee->benefits()->sync([]);
-            } else {
-                // Validate each benefit ID
-                $validBenefits = [];
-                foreach ($benefits as $benefitId) {
-                    if (is_numeric($benefitId) && BenefitType::where('id', $benefitId)->exists()) {
-                        $validBenefits[] = $benefitId;
-                    }
-                }
-                $employee->benefits()->sync($validBenefits);
-            }
-        }
-        // If benefits is not sent, preserve existing
-
-        // Handle Allowances - same logic
+        // ✅ Handle Allowances (with amounts)
         if ($request->has('allowances')) {
             $allowances = $request->allowances;
 
-            // If allowances is empty or contains invalid values, clear all allowances
-            if (empty($allowances) || !is_array($allowances)) {
-                $employee->allowances()->sync([]);
-            } else {
-                // Validate each allowance ID
-                $validAllowances = [];
-                foreach ($allowances as $allowanceId) {
-                    if (is_numeric($allowanceId) && AllowanceType::where('id', $allowanceId)->exists()) {
-                        $validAllowances[] = $allowanceId;
-                    }
-                }
-                $employee->allowances()->sync($validAllowances);
+            // Clear old data before re-inserting
+            $employee->employeeAllowances()->delete();
+
+            foreach ($allowances as $allowance) {
+                $employee->employeeAllowances()->create([
+                    'allowance_id' => $allowance['id'],
+                    'amount'       => $allowance['amount'],
+                ]);
             }
         }
-        // If allowances is not sent, preserve existing
+
+        // ✅ Handle Benefits (with amounts)
+        if ($request->has('benefits')) {
+            $benefits = $request->benefits;
+
+            // Clear old data before re-inserting
+            $employee->employeeBenefits()->delete();
+
+            foreach ($benefits as $benefit) {
+                $employee->employeeBenefits()->create([
+                    'benefit_id' => $benefit['id'],
+                    'amount'     => $benefit['amount'],
+                ]);
+            }
+        }
 
         return response()->json([
             'isSuccess' => true,
-            'message'   => 'Employee updated successfully.',
-            'employee'  => $employee->load(['files', 'benefits', 'allowances']),
+            'message'   => 'Employee updated successfully with allowances and benefits.',
+            'employee'  => $employee->load(['files', 'employeeAllowances.allowance', 'employeeBenefits.benefit']),
         ]);
     }
+
 
 
     // Archive employee

@@ -12,7 +12,6 @@ class AllowanceType extends Model
     protected $fillable = [
         'type_name',
         'description',
-        'value',
     ];
 
     public function employees()

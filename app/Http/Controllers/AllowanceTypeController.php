@@ -57,7 +57,6 @@ class AllowanceTypeController extends Controller
         $validator = Validator::make($request->all(), [
             'type_name' => 'required|string|max:100|unique:allowance_types,type_name',
             'description' => 'nullable|string',
-            'value' => 'required|integer|min:0'
         ]);
 
         if ($validator->fails()) {
@@ -94,7 +93,6 @@ class AllowanceTypeController extends Controller
         $validator = Validator::make($request->all(), [
             'type_name' => 'required|string|max:100|unique:allowance_types,type_name,' . $allowance->id,
             'description' => 'nullable|string',
-            'value' => 'required|integer|min:0'
         ]);
 
         if ($validator->fails()) {
