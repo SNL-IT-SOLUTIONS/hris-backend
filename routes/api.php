@@ -104,9 +104,6 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::post('adjustment/approve/{adjustmentId}', 'approveAdjustment');
     Route::post('adjustment/reject/{adjustmentId}', 'rejectAdjustment');
 
-
-
-
     Route::post('confirm-leave/{leaveId}', 'confirmLeave');
     Route::get('leaves', 'getAllLeaves');
     Route::get('attendances', 'getAllAttendances');
