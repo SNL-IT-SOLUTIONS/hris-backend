@@ -411,25 +411,26 @@ class AttendanceController extends Controller
     public function requestAdjustment(Request $request, $attendanceId)
     {
         $request->validate([
-            'adjusted_clock_in' => 'nullable|date',
+            'adjusted_clock_in'  => 'nullable|date',
             'adjusted_clock_out' => 'nullable|date',
-            'reason' => 'required|string|max:255',
+            'reason'             => 'required|string|max:255',
         ]);
 
         $attendance = Attendance::findOrFail($attendanceId);
 
         $attendance->update([
-            'adjusted_clock_in' => $request->adjusted_clock_in,
-            'adjusted_clock_out' => $request->adjusted_clock_out,
-            'adjustment_reason' => $request->reason,
-            'adjustment_status' => 'pending',
+            'adjusted_clock_in'  => $request->adjusted_clock_in ? Carbon::parse($request->adjusted_clock_in)->format('Y-m-d H:i:s') : null,
+            'adjusted_clock_out' => $request->adjusted_clock_out ? Carbon::parse($request->adjusted_clock_out)->format('Y-m-d H:i:s') : null,
+            'adjustment_reason'  => $request->reason,
+            'adjustment_status'  => 'pending',
         ]);
 
         return response()->json([
-            'message' => 'Adjustment request submitted successfully.',
+            'message'    => 'Adjustment request submitted successfully.',
             'attendance' => $attendance
         ], 200);
     }
+
 
     public function getAdjustments(Request $request)
     {
