@@ -174,7 +174,7 @@ class DropdownController extends Controller
     public function getAllowanceTypesDropdown()
     {
         try {
-            $allowanceTypes = AllowanceType::select('id', 'type_name', 'value')
+            $allowanceTypes = AllowanceType::select('id', 'type_name')
                 ->where('is_archived', 0)
                 ->orderBy('type_name', 'asc')
                 ->get();

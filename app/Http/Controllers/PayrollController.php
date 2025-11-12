@@ -75,7 +75,7 @@ class PayrollController extends Controller
                     )
                     ->get();
 
-                // ✅ Calculate total allowances directly
+                // Calculate total allowances directly
                 $total_allowances = $employeeAllowances->sum('allowance_amount');
                 $gross_with_allowances = $gross_base + $total_allowances;
 
@@ -627,7 +627,7 @@ class PayrollController extends Controller
 
 
     /**
-     * ✅ Mark payroll period as processed
+     * Mark payroll period as processed
      */
     public function processPayroll($id)
     {
@@ -654,7 +654,7 @@ class PayrollController extends Controller
 
 
     /**
-     * 📊 Get payroll summary stats
+     *  Get payroll summary stats
      */
     public function getPayrollSummary()
     {
