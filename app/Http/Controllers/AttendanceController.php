@@ -431,6 +431,50 @@ class AttendanceController extends Controller
         ], 200);
     }
 
+    public function getAdjustments(Request $request)
+    {
+        try {
+            $perPage = $request->input('per_page', 10);
+            $status = $request->input('status');
+            $search = $request->input('search');
+
+            $query = Attendance::query()
+                ->with('employee:id,first_name,last_name,employee_id')
+                ->where(function ($q) {
+                    $q->whereNotNull('adjusted_clock_in')
+                        ->orWhereNotNull('adjusted_clock_out')
+                        ->orWhereNotNull('adjustment_reason');
+                });
+
+            // ✅ Optional filter by adjustment status
+            if ($status) {
+                $query->where('adjustment_status', $status);
+            }
+
+            // 🔍 Optional search by employee ID or name
+            if ($search) {
+                $query->whereHas('employee', function ($q) use ($search) {
+                    $q->where('employee_id', 'like', "%{$search}%")
+                        ->orWhere('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%");
+                });
+            }
+
+            $adjustments = $query->orderBy('created_at', 'desc')->paginate($perPage);
+
+            return response()->json([
+                'message' => 'Attendance adjustments retrieved successfully.',
+                'data' => $adjustments,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to retrieve adjustments.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
 
     public function approveAdjustment(Request $request, $attendanceId)
     {
@@ -476,19 +520,6 @@ class AttendanceController extends Controller
         ], 200);
     }
 
-
-    public function getAllAdjustments()
-    {
-        $adjustments = Attendance::whereNotNull('adjustment_status')
-            ->with('employee:id,first_name,last_name,email')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        return response()->json([
-            'isSuccess' => true,
-            'data' => $adjustments,
-        ]);
-    }
 
 
 
@@ -556,8 +587,8 @@ class AttendanceController extends Controller
             $validated['status'] = 'Pending';
             $validated['is_paid'] = $leaveType->is_paid ?? false;
 
-            // ✅ Save to DB
-            $leave = \App\Models\Leave::create($validated);
+            // ✅ Save to DB 
+            $leave = Leave::create($validated);
 
             Log::info("Leave request created for employee ID {$validated['employee_id']} ({$days} days, {$leaveType->leave_name})");
 
