@@ -296,12 +296,12 @@ class ApplicantController extends Controller
     public function moveStage(Request $request, $id)
     {
         try {
-            // ✅ Validation
+            // Validation
             $validated = $request->validate([
                 'stage' => 'required|in:new_application,screening,phone_screening,assessment,technical_interview,final_interview,offer_extended,hired',
             ]);
 
-            // ✅ Update applicant
+            // Update applicant
             $applicant = Applicant::findOrFail($id);
             $applicant->update(['stage' => $validated['stage']]);
 
@@ -324,7 +324,7 @@ class ApplicantController extends Controller
                 'message'   => 'Applicant not found.',
             ], 404);
         } catch (\Exception $e) {
-            // ⚠️ Unexpected error
+            // Unexpected error
             Log::error('Error moving applicant stage: ' . $e->getMessage(), [
                 'stack' => $e->getTraceAsString(),
             ]);

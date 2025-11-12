@@ -348,7 +348,7 @@ class EmployeeController extends Controller
             $employee->allowances()->sync($validated['allowance_type_ids']);
         }
 
-        // ✅ NEW: Insert benefit and allowance values
+        // Insert benefit and allowance values
         if (!empty($validated['benefits'])) {
             foreach ($validated['benefits'] as $benefit) {
                 DB::table('employee_benefit')->updateOrInsert(
