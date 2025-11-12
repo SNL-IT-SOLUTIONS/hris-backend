@@ -15,7 +15,6 @@ use App\Models\EmployeeFace;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
-
 use Exception;
 
 
