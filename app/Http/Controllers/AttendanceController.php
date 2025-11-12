@@ -408,7 +408,7 @@ class AttendanceController extends Controller
 
     //DTR ADJUSTMENTS
 
-    use Carbon\Carbon;
+
 
     public function requestAdjustment(Request $request, $attendanceId)
     {
