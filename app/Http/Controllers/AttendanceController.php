@@ -413,27 +413,25 @@ class AttendanceController extends Controller
     public function requestAdjustment(Request $request, $attendanceId)
     {
         $request->validate([
-            'adjusted_clock_in'  => 'nullable|string', // accept string to handle AM/PM
-            'adjusted_clock_out' => 'nullable|string',
+            'adjusted_clock_in'  => 'nullable|date',
+            'adjusted_clock_out' => 'nullable|date',
             'reason'             => 'required|string|max:255',
         ]);
 
         $attendance = Attendance::findOrFail($attendanceId);
 
-        $parseTime = function ($time) {
-            if (!$time) return null;
+        // Convert ISO strings (with 'T' and 'Z') to MySQL DATETIME
+        $adjustedClockIn  = $request->adjusted_clock_in
+            ? Carbon::parse($request->adjusted_clock_in)->setTimezone('Asia/Manila')->format('Y-m-d H:i:s')
+            : null;
 
-            // If time contains only HH:MM AM/PM, prepend today's date
-            if (!preg_match('/\d{4}-\d{2}-\d{2}/', $time)) {
-                $time = now()->format('Y-m-d') . ' ' . $time;
-            }
-
-            return Carbon::parse($time)->format('Y-m-d H:i:s');
-        };
+        $adjustedClockOut = $request->adjusted_clock_out
+            ? Carbon::parse($request->adjusted_clock_out)->setTimezone('Asia/Manila')->format('Y-m-d H:i:s')
+            : null;
 
         $attendance->update([
-            'adjusted_clock_in'  => $parseTime($request->adjusted_clock_in),
-            'adjusted_clock_out' => $parseTime($request->adjusted_clock_out),
+            'adjusted_clock_in'  => $adjustedClockIn,
+            'adjusted_clock_out' => $adjustedClockOut,
             'adjustment_reason'  => $request->reason,
             'adjustment_status'  => 'pending',
         ]);
@@ -443,7 +441,6 @@ class AttendanceController extends Controller
             'attendance' => $attendance
         ], 200);
     }
-
 
 
     public function getAdjustments(Request $request)
