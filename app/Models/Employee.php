@@ -145,14 +145,34 @@ class Employee extends Authenticatable
         return $this->hasMany(EmployeeFile::class, 'employee_id');
     }
 
-    public function benefits()
+    // Relationship to employee allowances
+    public function employeeAllowances()
     {
-        return $this->belongsToMany(BenefitType::class, 'employee_benefit', 'employee_id', 'benefit_type_id');
+        return $this->hasMany(EmployeeAllowance::class, 'employee_id');
     }
+
+    // Relationship to allowances table through pivot
     public function allowances()
     {
-        return $this->belongsToMany(AllowanceType::class, 'employee_allowance', 'employee_id', 'allowance_type_id');
+        return $this->belongsToMany(AllowanceType::class, 'employee_allowance', 'employee_id', 'allowance_type_id')
+            ->withPivot('amount')
+            ->withTimestamps();
     }
+
+    // Relationship to employee benefits
+    public function employeeBenefits()
+    {
+        return $this->hasMany(EmployeeBenefit::class, 'employee_id');
+    }
+
+    // Relationship to benefits table through pivot
+    public function benefits()
+    {
+        return $this->belongsToMany(BenefitType::class, 'employee_benefit', 'employee_id', 'benefit_type_id')
+            ->withPivot('amount')
+            ->withTimestamps();
+    }
+
 
     public function attendances()
     {

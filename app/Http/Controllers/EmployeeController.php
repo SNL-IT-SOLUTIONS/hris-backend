@@ -26,8 +26,8 @@ class EmployeeController extends Controller
             'manager',
             'supervisor',
             'files',
-            'benefits',
-            'allowances' //  added
+            'employeeBenefits.benefit',   // include pivot relationship
+            'employeeAllowances.allowance' // include pivot relationship
         ])->where('is_archived', 0);
 
         // Search
@@ -39,8 +39,8 @@ class EmployeeController extends Controller
                     ->orWhere('email', 'LIKE', "%$search%")
                     ->orWhereHas('department', fn($dq) => $dq->where('department_name', 'LIKE', "%$search%"))
                     ->orWhereHas('position', fn($pq) => $pq->where('position_name', 'LIKE', "%$search%"))
-                    ->orWhereHas('benefits', fn($bq) => $bq->where('benefit_name', 'LIKE', "%$search%"))
-                    ->orWhereHas('allowances', fn($aq) => $aq->where('type_name', 'LIKE', "%$search%"));
+                    ->orWhereHas('employeeBenefits.benefit', fn($bq) => $bq->where('benefit_name', 'LIKE', "%$search%"))
+                    ->orWhereHas('employeeAllowances.allowance', fn($aq) => $aq->where('type_name', 'LIKE', "%$search%"));
             });
         }
 
@@ -49,19 +49,19 @@ class EmployeeController extends Controller
             $query->where('department_id', $request->department_id);
         }
 
-        //  Filter by position
+        // Filter by position
         if ($request->filled('position_id')) {
             $query->where('position_id', $request->position_id);
         }
 
-        //  Filter by benefit
+        // Filter by benefit
         if ($request->filled('benefit_id')) {
-            $query->whereHas('benefits', fn($q) => $q->where('benefit_types.id', $request->benefit_id));
+            $query->whereHas('employeeBenefits', fn($q) => $q->where('benefit_type_id', $request->benefit_id));
         }
 
-        //  Filter by allowance
+        // Filter by allowance
         if ($request->filled('allowance_id')) {
-            $query->whereHas('allowances', fn($q) => $q->where('allowance_types.id', $request->allowance_id));
+            $query->whereHas('employeeAllowances', fn($q) => $q->where('allowance_type_id', $request->allowance_id));
         }
 
         $perPage = $request->input('per_page', 5);
@@ -75,7 +75,7 @@ class EmployeeController extends Controller
         }
 
         $employees->getCollection()->transform(function ($emp) {
-            //  Attach file URLs
+            // Attach file URLs
             $emp->files->transform(function ($file) {
                 $file->file_path = asset($file->file_path);
                 return $file;
@@ -84,36 +84,35 @@ class EmployeeController extends Controller
             // Resume URL
             $emp->resume = $emp->resume ? asset($emp->resume) : null;
 
-            // Transform benefits
-            $emp->benefits = $emp->benefits->map(fn($b) => [
-                'id' => $b->id,
-                'benefit_name' => $b->benefit_name,
-                'category' => $b->category,
-                'rate' => $b->rate,
+            // Transform benefits with amount
+            $emp->benefits = $emp->employeeBenefits->map(fn($eb) => [
+                'id'           => $eb->benefit->id,
+                'benefit_name' => $eb->benefit->benefit_name,
+                'category'     => $eb->benefit->category,
+                'amount'       => $eb->amount,
             ]);
 
-            //  Transform allowances
-            $emp->allowances = $emp->allowances->map(fn($a) => [
-                'id' => $a->id,
-                'type_name' => $a->type_name,
-                'value' => $a->value,
-                'description' => $a->description,
+            // Transform allowances with amount
+            $emp->allowances = $emp->employeeAllowances->map(fn($ea) => [
+                'id'          => $ea->allowance->id,
+                'type_name'   => $ea->allowance->type_name,
+                'value'       => $ea->amount, // actual assigned amount
+                'description' => $ea->allowance->description,
             ]);
 
             return $emp;
         });
 
-        // Summary counts
         return response()->json([
-            'isSuccess' => true,
-            'message'   => 'Employees retrieved successfully.',
-            'employees' => $employees->items(),
-            'summary'   => [
+            'isSuccess'   => true,
+            'message'     => 'Employees retrieved successfully.',
+            'employees'   => $employees->items(),
+            'summary'     => [
                 'total_employees'    => Employee::where('is_archived', false)->count(),
                 'active_employees'   => Employee::where('is_archived', false)->where('is_active', true)->count(),
                 'inactive_employees' => Employee::where('is_archived', true)->count(),
             ],
-            'pagination' => [
+            'pagination'  => [
                 'current_page' => $employees->currentPage(),
                 'per_page'     => $employees->perPage(),
                 'total'        => $employees->total(),
@@ -121,6 +120,7 @@ class EmployeeController extends Controller
             ],
         ]);
     }
+
 
 
 
@@ -134,8 +134,8 @@ class EmployeeController extends Controller
                 'manager:id,first_name,last_name',
                 'supervisor:id,first_name,last_name',
                 'files',
-                'benefits:id,benefit_name,description',
-                'allowances:id,type_name,description,value'
+                'employeeBenefits.benefit:id,benefit_name,category',   // include pivot and type
+                'employeeAllowances.allowance:id,type_name,description' // include pivot and type
             ])
                 ->where('is_archived', false)
                 ->find($id);
@@ -147,7 +147,7 @@ class EmployeeController extends Controller
                 ], 404);
             }
 
-            //  Convert file paths to full URLs
+            // Convert file paths to full URLs
             $employee->files->transform(function ($file) {
                 $file->file_path = asset('storage/' . $file->file_path);
                 return $file;
@@ -156,12 +156,28 @@ class EmployeeController extends Controller
             // Convert resume path if it exists
             $employee->resume = $employee->resume ? asset('storage/' . $employee->resume) : null;
 
-            //  Include full name for manager and supervisor
+            // Include full name for manager and supervisor
             $employee->manager_name = $employee->manager ? "{$employee->manager->first_name} {$employee->manager->last_name}" : null;
             $employee->supervisor_name = $employee->supervisor ? "{$employee->supervisor->first_name} {$employee->supervisor->last_name}" : null;
 
-            //  Optional cleanup: hide unnecessary nested objects
-            unset($employee->manager, $employee->supervisor);
+            // Transform benefits with amount
+            $employee->benefits = $employee->employeeBenefits->map(fn($eb) => [
+                'id'           => $eb->benefit->id,
+                'benefit_name' => $eb->benefit->benefit_name,
+                'category'     => $eb->benefit->category,
+                'amount'       => $eb->amount,
+            ]);
+
+            // Transform allowances with amount
+            $employee->allowances = $employee->employeeAllowances->map(fn($ea) => [
+                'id'          => $ea->allowance->id,
+                'type_name'   => $ea->allowance->type_name,
+                'description' => $ea->allowance->description,
+                'amount'      => $ea->amount,
+            ]);
+
+            // Optional cleanup: hide unnecessary nested objects
+            unset($employee->manager, $employee->supervisor, $employee->employeeBenefits, $employee->employeeAllowances);
 
             return response()->json([
                 'isSuccess' => true,
@@ -177,6 +193,7 @@ class EmployeeController extends Controller
             ], 500);
         }
     }
+
 
 
 
@@ -410,13 +427,13 @@ class EmployeeController extends Controller
             'password'      => 'nullable|string|min:8',
             '201_file.*'    => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
 
-            // ✅ Validate allowances and benefits arrays with amount
-            'allowances'                => 'nullable|array',
-            'allowances.*.id' => 'required_with:allowances|exists:allowance_types,id',
-            'allowances.*.amount'       => 'required_with:allowances|numeric|min:0',
-            'benefits'                  => 'nullable|array',
-            'benefits.*.id' => 'required_with:benefits|exists:benefit_types,id',
-            'benefits.*.amount'         => 'required_with:benefits|numeric|min:0',
+            // Validate allowances and benefits arrays with amount
+            'allowances'           => 'nullable|array',
+            'allowances.*.id'      => 'required_with:allowances|exists:allowance_types,id',
+            'allowances.*.amount'  => 'required_with:allowances|numeric|min:0',
+            'benefits'             => 'nullable|array',
+            'benefits.*.id'        => 'required_with:benefits|exists:benefit_types,id',
+            'benefits.*.amount'    => 'required_with:benefits|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -435,7 +452,7 @@ class EmployeeController extends Controller
 
         $employee->update($data);
 
-        // ✅ Handle 201 Files
+        // Handle 201 Files
         if ($request->hasFile('201_file')) {
             foreach ($request->file('201_file') as $file) {
                 $filePath = $this->saveFileToPublic($file, 'employee_201');
@@ -448,7 +465,7 @@ class EmployeeController extends Controller
             }
         }
 
-        // ✅ Handle Allowances (with amounts)
+        // Handle Allowances (with amounts)
         if ($request->has('allowances')) {
             $allowances = $request->allowances;
 
@@ -457,13 +474,13 @@ class EmployeeController extends Controller
 
             foreach ($allowances as $allowance) {
                 $employee->employeeAllowances()->create([
-                    'allowance_id' => $allowance['id'],
-                    'amount'       => $allowance['amount'],
+                    'allowance_type_id' => $allowance['id'],
+                    'amount'            => $allowance['amount'],
                 ]);
             }
         }
 
-        // ✅ Handle Benefits (with amounts)
+        // Handle Benefits (with amounts)
         if ($request->has('benefits')) {
             $benefits = $request->benefits;
 
@@ -472,8 +489,8 @@ class EmployeeController extends Controller
 
             foreach ($benefits as $benefit) {
                 $employee->employeeBenefits()->create([
-                    'benefit_id' => $benefit['id'],
-                    'amount'     => $benefit['amount'],
+                    'benefit_type_id' => $benefit['id'],
+                    'amount'          => $benefit['amount'],
                 ]);
             }
         }
@@ -484,6 +501,7 @@ class EmployeeController extends Controller
             'employee'  => $employee->load(['files', 'employeeAllowances.allowance', 'employeeBenefits.benefit']),
         ]);
     }
+
 
 
 
