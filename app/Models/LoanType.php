@@ -14,6 +14,7 @@ class LoanType extends Model
         'description',
         'amount',
         'amount_limit',
+        'interest_rate',
         'is_archived',
     ];
 

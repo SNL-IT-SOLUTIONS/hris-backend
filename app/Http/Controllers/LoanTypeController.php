@@ -63,6 +63,7 @@ class LoanTypeController extends Controller
             'description' => 'nullable|string',
             'amount' => 'nullable|numeric|min:0',
             'amount_limit' => 'nullable|numeric|min:0',
+            'interest_rate' => 'nullable|numeric|min:0'
         ]);
 
         $loanType = LoanType::create($validated);
@@ -86,6 +87,7 @@ class LoanTypeController extends Controller
             'description' => 'nullable|string',
             'amount' => 'nullable|numeric|min:0',
             'amount_limit' => 'nullable|numeric|min:0',
+            'interest_rate' => 'nullable|numeric|min:0'
         ]);
 
         $loanType->update($validated);
