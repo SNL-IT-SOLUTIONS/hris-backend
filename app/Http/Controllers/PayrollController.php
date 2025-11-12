@@ -221,6 +221,26 @@ class PayrollController extends Controller
         ]);
     }
 
+    public function archivePayrollPeriod($id)
+    {
+        $period = PayrollPeriod::find($id);
+
+        if (!$period) {
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Payroll period not found.',
+            ], 404);
+        }
+
+        $period->update(['is_archived' => true]);
+
+        return response()->json([
+            'isSuccess' => true,
+            'message'   => 'Payroll period archived successfully.',
+            'data'      => $period,
+        ]);
+    }
+
 
 
 
