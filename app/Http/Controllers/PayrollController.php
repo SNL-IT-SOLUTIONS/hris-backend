@@ -65,10 +65,15 @@ class PayrollController extends Controller
                 $gross_base   = ($daily * $days) + ($overtime * $overtimeRate);
 
                 // === Employee Allowances ===
-                $employeeAllowanceIds = DB::table('employee_allowance')
-                    ->where('employee_id', $employee->id)
-                    ->pluck('allowance_type_id')
-                    ->toArray();
+                $employeeAllowances = DB::table('employee_allowance')
+                    ->join('allowance_types', 'employee_allowance.allowance_type_id', '=', 'allowance_types.id')
+                    ->where('employee_allowance.employee_id', $employee->id)
+                    ->select(
+                        'employee_allowance.allowance_type_id',
+                        'allowance_types.allowance_name',
+                        'employee_allowance.amount as allowance_amount'
+                    )
+                    ->get();
 
                 $allowanceValues = collect($employeeAllowanceIds)
                     ->map(fn($id) => $allAllowances[$id] ?? null)
@@ -157,11 +162,11 @@ class PayrollController extends Controller
                 }
 
                 // === Record allowances ===
-                foreach ($allowanceValues as $allowance) {
+                foreach ($employeeAllowances as $allowance) {
                     PayrollAllowance::create([
                         'payroll_record_id' => $record->id,
-                        'allowance_type_id' => $allowance->id,
-                        'allowance_amount'  => $allowance->value,
+                        'allowance_type_id' => $allowance->allowance_type_id,
+                        'allowance_amount'  => $allowance->allowance_amount ?? 0,
                     ]);
                 }
             }
