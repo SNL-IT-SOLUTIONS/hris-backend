@@ -70,16 +70,13 @@ class PayrollController extends Controller
                     ->where('employee_allowance.employee_id', $employee->id)
                     ->select(
                         'employee_allowance.allowance_type_id',
-                        'allowance_types.allowance_name',
+                        'allowance_types.type_name as allowance_name',
                         'employee_allowance.amount as allowance_amount'
                     )
                     ->get();
 
-                $allowanceValues = collect($employeeAllowanceIds)
-                    ->map(fn($id) => $allAllowances[$id] ?? null)
-                    ->filter();
-
-                $total_allowances      = $allowanceValues->sum('value');
+                // ✅ Calculate total allowances directly
+                $total_allowances = $employeeAllowances->sum('allowance_amount');
                 $gross_with_allowances = $gross_base + $total_allowances;
 
                 // === Employee Benefits (deductions) ===
@@ -94,7 +91,7 @@ class PayrollController extends Controller
                     ->map(fn($benefit) => [
                         'benefit_type_id' => $benefit->id,
                         'benefit_name'    => $benefit->benefit_name,
-                        'amount'          => 0, // default
+                        'amount'          => 0, // default, can update later
                     ])
                     ->toArray();
 
