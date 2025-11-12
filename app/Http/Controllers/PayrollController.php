@@ -33,7 +33,6 @@ class PayrollController extends Controller
             'employees.*.days_worked'    => 'required|numeric|min:0',
             'employees.*.overtime_hours' => 'nullable|numeric|min:0',
             'employees.*.absences'       => 'nullable|numeric|min:0',
-            'employees.*.other_deductions' => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -60,7 +59,6 @@ class PayrollController extends Controller
                 $days     = $emp['days_worked'];
                 $overtime = $emp['overtime_hours'] ?? 0;
                 $absences = $emp['absences'] ?? 0;
-                $other_deductions = $emp['other_deductions'] ?? 0;
 
                 // === Calculate gross pay with OT premium (25%) ===
                 $overtimeRate = ($daily / 8) * 1.25;
@@ -91,7 +89,7 @@ class PayrollController extends Controller
                     ->map(fn($benefit) => [
                         'benefit_type_id' => $benefit->id,
                         'benefit_name'    => $benefit->benefit_name,
-                        'amount'          => 0, // default, can adjust later if needed
+                        'amount'          => 0, // default
                     ])
                     ->toArray();
 
@@ -103,8 +101,7 @@ class PayrollController extends Controller
                 $total_loan_deductions = $activeLoans->sum('monthly_amortization');
 
                 // === Total deductions ===
-                $total_deductions = $other_deductions
-                    + $total_loan_deductions
+                $total_deductions = $total_loan_deductions
                     + collect($benefitDeductions)->sum('amount');
 
                 // === Net pay ===
@@ -118,7 +115,6 @@ class PayrollController extends Controller
                     'days_worked'           => $days,
                     'overtime_hours'        => $overtime,
                     'absences'              => $absences,
-                    'other_deductions'      => $other_deductions,
                     'gross_base'            => $gross_base,
                     'gross_pay'             => $gross_with_allowances,
                     'total_allowances'      => $total_allowances,
@@ -133,9 +129,7 @@ class PayrollController extends Controller
                         'payroll_record_id' => $record->id,
                         'benefit_type_id'   => $benefit['benefit_type_id'],
                         'deduction_name'    => $benefit['benefit_name'],
-                        'deduction_rate'    => null,
                         'deduction_amount'  => $benefit['amount'],
-                        'loan_id'           => null,
                     ]);
                 }
 
@@ -154,7 +148,6 @@ class PayrollController extends Controller
 
                         PayrollDeduction::create([
                             'payroll_record_id' => $record->id,
-                            'benefit_type_id'   => null,
                             'loan_id'           => $loan->id,
                             'deduction_name'    => 'Loan Payment',
                             'deduction_rate'    => $loan->interest_rate,
@@ -171,14 +164,6 @@ class PayrollController extends Controller
                         'allowance_amount'  => $allowance->value,
                     ]);
                 }
-
-                Log::info("Payroll generated for {$employee->first_name} {$employee->last_name} (ID: {$employee->id})", [
-                    'BaseGross' => $gross_base,
-                    'Allowances' => $total_allowances,
-                    'GrossWithAllowances' => $gross_with_allowances,
-                    'TotalDeductions' => $total_deductions,
-                    'NetPay' => $net,
-                ]);
             }
 
             DB::commit();
@@ -202,6 +187,40 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
+
+    public function updatePayrollPeriod(Request $request, $id)
+    {
+        $request->validate([
+            'period_name'       => 'required|string',
+            'pay_date'          => 'required|date',
+            'cutoff_start_date' => 'required|date',
+            'cutoff_end_date'   => 'required|date|after_or_equal:cutoff_start_date',
+        ]);
+
+        $period = PayrollPeriod::find($id);
+
+        if (!$period) {
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Payroll period not found.',
+            ], 404);
+        }
+
+        $period->update([
+            'period_name'       => $request->period_name,
+            'pay_date'          => $request->pay_date,
+            'cutoff_start_date' => $request->cutoff_start_date,
+            'cutoff_end_date'   => $request->cutoff_end_date,
+        ]);
+
+        return response()->json([
+            'isSuccess' => true,
+            'message'   => 'Payroll period updated successfully.',
+            'data'      => $period,
+        ]);
+    }
+
 
 
 
