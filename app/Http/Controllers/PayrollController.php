@@ -79,22 +79,23 @@ class PayrollController extends Controller
                 $total_allowances = $employeeAllowances->sum('allowance_amount');
                 $gross_with_allowances = $gross_base + $total_allowances;
 
-                // === Employee Benefits (deductions) ===
-                $employeeBenefitIds = DB::table('employee_benefit')
-                    ->where('employee_id', $employee->id)
-                    ->pluck('benefit_type_id')
-                    ->toArray();
+                $employeeBenefits = DB::table('employee_benefit')
+                    ->join('benefit_types', 'employee_benefit.benefit_type_id', '=', 'benefit_types.id')
+                    ->where('employee_benefit.employee_id', $employee->id)
+                    ->select(
+                        'employee_benefit.benefit_type_id',
+                        'benefit_types.benefit_name',
+                        'employee_benefit.amount'
+                    )
+                    ->get();
 
-                $benefitDeductions = collect($employeeBenefitIds)
-                    ->map(fn($id) => $allBenefits[$id] ?? null)
-                    ->filter()
-                    ->map(fn($benefit) => [
-                        'benefit_type_id' => $benefit->id,
-                        'benefit_name'    => $benefit->benefit_name,
-                        'amount'          => 0, // default, can update later
-                    ])
-                    ->toArray();
+                $benefitDeductions = $employeeBenefits->map(fn($benefit) => [
+                    'benefit_type_id' => $benefit->benefit_type_id,
+                    'benefit_name'    => $benefit->benefit_name,
+                    'amount'          => $benefit->amount ?? 0,
+                ])->toArray();
 
+                $total_benefit_deductions = collect($benefitDeductions)->sum('amount');
                 // === Loans (deductions) ===
                 $activeLoans = Loan::where('employee_id', $employee->id)
                     ->where('status', 'active')
@@ -103,8 +104,8 @@ class PayrollController extends Controller
                 $total_loan_deductions = $activeLoans->sum('monthly_amortization');
 
                 // === Total deductions ===
-                $total_deductions = $total_loan_deductions
-                    + collect($benefitDeductions)->sum('amount');
+                $total_deductions = $total_loan_deductions + $total_benefit_deductions;
+
 
                 // === Net pay ===
                 $net = $gross_with_allowances - $total_deductions;
