@@ -319,6 +319,54 @@ class PayrollController extends Controller
     }
 
 
+    /**
+     * Get payroll periods for the logged-in user
+     */
+    public function getMyPayrollPeriods()
+    {
+        try {
+            $user = auth()->user();
+
+            if (!$user) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'Unauthorized access.',
+                ], 401);
+            }
+
+            //  Fetch periods that have payroll records for the logged-in user
+            $periods = PayrollPeriod::whereHas('payrollRecords', function ($query) use ($user) {
+                $query->where('employee_id', $user->id);
+            })
+                ->with([
+                    'payrollRecords' => function ($query) use ($user) {
+                        $query->where('employee_id', $user->id)
+                            ->select('id', 'payroll_period_id', 'employee_id', 'gross_pay', 'total_deductions', 'net_pay');
+                    },
+                    'payrollRecords.employee:id,first_name,last_name,department_id,position_id',
+                    'payrollRecords.employee.department:id,department_name',
+                    'payrollRecords.employee.position:id,position_name'
+                ])
+                ->orderByDesc('created_at')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'periods'   => $periods,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching user payroll periods: ' . $e->getMessage());
+
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to fetch payroll periods.',
+                'error'     => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+
 
     /**
      *  Get payroll details by period
@@ -378,6 +426,76 @@ class PayrollController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+    public function getMyPayrollDetails(Request $request, $id)
+    {
+        try {
+            $user = auth()->user();
+
+            if (!$user || !$user->employee) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'Unauthorized or employee record not found.',
+                ], 403);
+            }
+
+            $perPage = $request->input('per_page', 5);
+            $search  = $request->input('search');
+
+            $query = PayrollRecord::with([
+                'employee:id,employee_id,first_name,last_name,email,department_id,position_id,base_salary',
+                'employee.department:id,department_name',
+                'employee.position:id,position_name',
+                'deductions.benefitType:id,benefit_name',
+                'deductions.loan.loanType:id,type_name',
+                'allowances.allowanceType:id,type_name',
+                'payrollPeriod:id,period_name,cutoff_start_date,cutoff_end_date,pay_date'
+            ])
+                ->where('payroll_period_id', $id)
+                ->where('employee_id', $user->employee->id)
+                ->where('is_archived', false);
+
+            if ($search) {
+                $query->whereHas('payrollPeriod', function ($q) use ($search) {
+                    $q->where('period_name', 'like', "%{$search}%");
+                });
+            }
+
+            // ✅ Clone query for totals
+            $totalsQuery = clone $query;
+
+            // 🧮 Compute summary for user’s record(s)
+            $summary = [
+                'total_gross'      => number_format($totalsQuery->sum('gross_pay'), 2),
+                'total_deductions' => number_format($totalsQuery->sum('total_deductions'), 2),
+                'total_net'        => number_format($totalsQuery->sum('net_pay'), 2),
+            ];
+
+            // 📄 Paginate (usually just one record per period per user, but still for consistency)
+            $details = $query->paginate($perPage);
+
+            return response()->json([
+                'isSuccess' => true,
+                'payrolldetails' => $details->items(),
+                'pagination' => [
+                    'current_page' => $details->currentPage(),
+                    'per_page'     => $details->perPage(),
+                    'total'        => $details->total(),
+                    'last_page'    => $details->lastPage(),
+                ],
+                'summary' => $summary,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching user payroll details: ' . $e->getMessage());
+
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to fetch payroll details.',
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }

@@ -199,6 +199,8 @@ Route::controller(PayrollController::class)->group(function () {
 
     Route::middleware('auth:sanctum')->get('my-payroll-records', [PayrollController::class, 'getMyPayrollRecords']);
     Route::middleware('auth:sanctum')->get('my-payslip/{recordId}', [PayrollController::class, 'getMyPayslip']);
+    Route::middleware('auth:sanctum')->get('my-payroll-periods', [PayrollController::class, 'getMyPayrollPeriods']);
+    Route::middleware('auth:sanctum')->get('my-payroll-details', [PayrollController::class, 'getMyPayrollDetails']);
 });
 
 //Allowances
