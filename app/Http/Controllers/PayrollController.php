@@ -500,6 +500,14 @@ class PayrollController extends Controller
         try {
             $user = auth()->user();
 
+            // ✅ Prevent accessing employee if null
+            if (!$user || !$user->employee) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Unauthorized or employee record not found.',
+                ], 403);
+            }
+
             $perPage = $request->input('per_page', 10);
             $search  = $request->input('search');
 
@@ -580,6 +588,7 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
 
 
     /**
