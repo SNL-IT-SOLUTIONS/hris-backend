@@ -436,13 +436,6 @@ class PayrollController extends Controller
         try {
             $user = auth()->user();
 
-            if (!$user || !$user->employee) {
-                return response()->json([
-                    'isSuccess' => false,
-                    'message'   => 'Unauthorized or employee record not found.',
-                ], 403);
-            }
-
             $perPage = $request->input('per_page', 5);
             $search  = $request->input('search');
 
