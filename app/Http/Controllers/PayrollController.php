@@ -235,14 +235,20 @@ class PayrollController extends Controller
             ], 404);
         }
 
+        // Archive the payroll period
         $period->update(['is_archived' => true]);
+
+        // Archive all payroll records under this period
+        PayrollRecord::where('payroll_period_id', $id)
+            ->update(['is_archived' => true]);
 
         return response()->json([
             'isSuccess' => true,
-            'message'   => 'Payroll period archived successfully.',
-            'data'      => $period,
+            'message'   => 'Payroll period and related records archived successfully.',
+            'data'      => $period->load('payrollRecords:id,payroll_period_id,is_archived'),
         ]);
     }
+
 
 
 
@@ -315,7 +321,7 @@ class PayrollController extends Controller
 
 
     /**
-     * 💰 Get payroll details by period
+     *  Get payroll details by period
      */
     public function getPayrollDetails(Request $request, $id)
     {

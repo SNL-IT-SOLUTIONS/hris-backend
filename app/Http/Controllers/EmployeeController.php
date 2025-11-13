@@ -96,7 +96,7 @@ class EmployeeController extends Controller
             $emp->allowances = $emp->employeeAllowances->map(fn($ea) => [
                 'id'          => $ea->allowance->id,
                 'type_name'   => $ea->allowance->type_name,
-                'value'       => $ea->amount, // actual assigned amount
+                'amount'       => $ea->amount, // actual assigned amount
                 'description' => $ea->allowance->description,
             ]);
 
