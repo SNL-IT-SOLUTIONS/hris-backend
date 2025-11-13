@@ -524,7 +524,6 @@ class EmployeeController extends Controller
 
 
 
-
     //HELPERS
     private function saveFileToPublic($fileInput, $prefix)
     {

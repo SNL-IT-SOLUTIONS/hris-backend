@@ -348,13 +348,18 @@ class PayrollController extends Controller
                 });
             }
 
-            $payrollDetails = $query->paginate($perPage);
+            // ✅ Clone query for totals
+            $totalsQuery = clone $query;
 
+            // 🧮 Compute totals for all records (not just current page)
             $summary = [
-                'total_gross'      => number_format($payrollDetails->sum('gross_pay'), 2),
-                'total_deductions' => number_format($payrollDetails->sum('total_deductions'), 2),
-                'total_net'        => number_format($payrollDetails->sum('net_pay'), 2),
+                'total_gross'      => number_format($totalsQuery->sum('gross_pay'), 2),
+                'total_deductions' => number_format($totalsQuery->sum('total_deductions'), 2),
+                'total_net'        => number_format($totalsQuery->sum('net_pay'), 2),
             ];
+
+            // 📄 Now paginate for display
+            $payrollDetails = $query->paginate($perPage);
 
             return response()->json([
                 'isSuccess' => true,
@@ -376,6 +381,7 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
 
 
     public function getMyPayrollRecords(Request $request)
