@@ -421,6 +421,7 @@ class EmployeeController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
+            'employee_id'   => 'sometimes|string|unique:employees,employee_id,',
             'email'         => 'sometimes|email|unique:employees,email,' . $employee->id,
             'department_id' => 'nullable|exists:departments,id',
             'position_id'   => 'nullable|exists:position_types,id',
