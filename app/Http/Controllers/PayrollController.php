@@ -449,7 +449,8 @@ class PayrollController extends Controller
                 'payrollPeriod:id,period_name,cutoff_start_date,cutoff_end_date,pay_date'
             ])
                 ->where('payroll_period_id', $id)
-                ->where('employee_id', $user->employee->id)
+                ->where('employee_id', $user->id)
+
                 ->where('is_archived', false);
 
             if ($search) {
