@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Exception;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 
 
 class ApplicantController extends Controller
@@ -137,6 +138,7 @@ class ApplicantController extends Controller
                 ->orderBy('updated_at', 'desc')
                 ->get();
 
+
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Hired applicants retrieved successfully.',
@@ -159,7 +161,8 @@ class ApplicantController extends Controller
                         'updated_at'            => $applicant->updated_at,
 
 
-                        'department_name'       => optional($applicant->jobPosting->department)->department_name,
+                        'department_name' => $applicant->jobPosting?->department?->department_name ?? null,
+
                         'job_posting'           => $applicant->jobPosting,
                     ];
                 }),

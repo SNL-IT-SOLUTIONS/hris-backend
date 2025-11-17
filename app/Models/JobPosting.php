@@ -26,8 +26,9 @@ class JobPosting extends Model
     // Relationships
     public function department()
     {
-        return $this->belongsTo(Department::class);
+        return $this->belongsTo(Department::class, 'department_id'); // adjust if your column is named differently
     }
+
 
     public function jobPosting()
     {

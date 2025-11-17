@@ -26,42 +26,38 @@ class EmployeeController extends Controller
             'manager',
             'supervisor',
             'files',
-            'employeeBenefits.benefit',   // include pivot relationship
-            'employeeAllowances.allowance' // include pivot relationship
+            'employeeBenefits.benefit',
+            'employeeAllowances.allowance'
         ])->where('is_archived', 0);
 
         // Search
-        if ($request->has('search') && $request->search != '') {
+        if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('first_name', 'LIKE', "%$search%")
-                    ->orWhere('last_name', 'LIKE', "%$search%")
-                    ->orWhere('email', 'LIKE', "%$search%")
-                    ->orWhereHas('department', fn($dq) => $dq->where('department_name', 'LIKE', "%$search%"))
-                    ->orWhereHas('position', fn($pq) => $pq->where('position_name', 'LIKE', "%$search%"))
-                    ->orWhereHas('employeeBenefits.benefit', fn($bq) => $bq->where('benefit_name', 'LIKE', "%$search%"))
-                    ->orWhereHas('employeeAllowances.allowance', fn($aq) => $aq->where('type_name', 'LIKE', "%$search%"));
+                $q->where('first_name', 'LIKE', "%{$search}%")
+                    ->orWhere('last_name', 'LIKE', "%{$search}%")
+                    ->orWhere('email', 'LIKE', "%{$search}%")
+                    ->orWhereHas('department', fn($dq) => $dq->where('department_name', 'LIKE', "%{$search}%"))
+                    ->orWhereHas('position', fn($pq) => $pq->where('position_name', 'LIKE', "%{$search}%"))
+                    ->orWhereHas('employeeBenefits.benefit', fn($bq) => $bq->where('benefit_name', 'LIKE', "%{$search}%"))
+                    ->orWhereHas('employeeAllowances.allowance', fn($aq) => $aq->where('type_name', 'LIKE', "%{$search}%"));
             });
         }
 
-        // Filter by department
-        if ($request->filled('department_id')) {
-            $query->where('department_id', $request->department_id);
-        }
-
-        // Filter by position
-        if ($request->filled('position_id')) {
-            $query->where('position_id', $request->position_id);
-        }
-
-        // Filter by benefit
-        if ($request->filled('benefit_id')) {
-            $query->whereHas('employeeBenefits', fn($q) => $q->where('benefit_type_id', $request->benefit_id));
-        }
-
-        // Filter by allowance
-        if ($request->filled('allowance_id')) {
-            $query->whereHas('employeeAllowances', fn($q) => $q->where('allowance_type_id', $request->allowance_id));
+        // Filters
+        foreach (['department_id', 'position_id', 'benefit_id', 'allowance_id'] as $filter) {
+            if ($request->filled($filter)) {
+                switch ($filter) {
+                    case 'benefit_id':
+                        $query->whereHas('employeeBenefits', fn($q) => $q->where('benefit_type_id', $request->benefit_id));
+                        break;
+                    case 'allowance_id':
+                        $query->whereHas('employeeAllowances', fn($q) => $q->where('allowance_type_id', $request->allowance_id));
+                        break;
+                    default:
+                        $query->where($filter, $request->$filter);
+                }
+            }
         }
 
         $perPage = $request->input('per_page', 5);
@@ -74,17 +70,15 @@ class EmployeeController extends Controller
             ], 404);
         }
 
+        // Transform the paginated collection
         $employees->getCollection()->transform(function ($emp) {
-            // Attach file URLs
-            $emp->files->transform(function ($file) {
-                $file->file_path = asset($file->file_path);
-                return $file;
-            });
+            // File URLs
+            $emp->files->transform(fn($file) => $file->file_path = asset($file->file_path) ?: $file);
 
             // Resume URL
             $emp->resume = $emp->resume ? asset($emp->resume) : null;
 
-            // Transform benefits with amount
+            // Benefits
             $emp->benefits = $emp->employeeBenefits->map(fn($eb) => [
                 'id'           => $eb->benefit->id,
                 'benefit_name' => $eb->benefit->benefit_name,
@@ -92,11 +86,11 @@ class EmployeeController extends Controller
                 'amount'       => $eb->amount,
             ]);
 
-            // Transform allowances with amount
+            // Allowances
             $emp->allowances = $emp->employeeAllowances->map(fn($ea) => [
                 'id'          => $ea->allowance->id,
                 'type_name'   => $ea->allowance->type_name,
-                'amount'       => $ea->amount,
+                'amount'      => $ea->amount,
                 'description' => $ea->allowance->description,
             ]);
 
@@ -104,15 +98,15 @@ class EmployeeController extends Controller
         });
 
         return response()->json([
-            'isSuccess'   => true,
-            'message'     => 'Employees retrieved successfully.',
-            'employees'   => $employees->items(),
-            'summary'     => [
+            'isSuccess'  => true,
+            'message'    => 'Employees retrieved successfully.',
+            'employees'  => $employees->items(),
+            'summary'    => [
                 'total_employees'    => Employee::where('is_archived', false)->count(),
                 'active_employees'   => Employee::where('is_archived', false)->where('is_active', true)->count(),
                 'inactive_employees' => Employee::where('is_archived', true)->count(),
             ],
-            'pagination'  => [
+            'pagination' => [
                 'current_page' => $employees->currentPage(),
                 'per_page'     => $employees->perPage(),
                 'total'        => $employees->total(),
