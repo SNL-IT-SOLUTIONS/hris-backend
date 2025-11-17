@@ -16,6 +16,8 @@ class PayrollPeriod extends Model
         'pay_date',
         'cutoff_start_date',
         'cutoff_end_date',
+        'is_archived',
+        'status',
     ];
 
     // Relationships

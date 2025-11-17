@@ -22,6 +22,7 @@ class PayrollRecord extends Model
         'gross_pay',
         'total_deductions',
         'net_pay',
+        'is_archived',
     ];
 
     // Relationships
