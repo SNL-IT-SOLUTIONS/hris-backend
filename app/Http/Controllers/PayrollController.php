@@ -501,26 +501,30 @@ class PayrollController extends Controller
         try {
             $user = auth()->user();
 
-            // ✅ Prevent accessing employee if null
-            if (!$user || !$user->employee) {
+            if (!$user) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message' => 'Unauthorized or employee record not found.',
+                    'message' => 'Unauthorized.',
                 ], 403);
             }
+
+            $employeeId = $user->id; // employee primary key
+
 
             $perPage = $request->input('per_page', 10);
             $search  = $request->input('search');
 
             $query = PayrollRecord::with([
-                'payrollPeriod:id,period_name,start_date,end_date',
+                'payrollPeriod:id,period_name,pay_date,cutoff_start_date,cutoff_end_date',
+
                 'allowances.allowanceType:id,type_name',
                 'deductions.benefitType:id,benefit_name',
                 'deductions.loan.loanType:id,type_name',
             ])
-                ->where('employee_id', $user->employee->id)
+                ->where('employee_id', $employeeId)
                 ->where('is_archived', false)
                 ->orderByDesc('created_at');
+
 
             if ($search) {
                 $query->whereHas('payrollPeriod', function ($q) use ($search) {
