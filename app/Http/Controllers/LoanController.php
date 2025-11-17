@@ -79,9 +79,26 @@ class LoanController extends Controller
 
             $loans = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
+            // Transform paginator collection
+            $loans->getCollection()->transform(function ($loan) {
+                return [
+                    'id'           => $loan->id,
+                    'loan_type'    => $loan->loanType->type_name ?? 'Other Loan',
+                    'amount'       => number_format($loan->amount, 2),
+                    'status'       => $loan->status,
+                    'applied_at'   => $loan->created_at->format('F d, Y'),
+                ];
+            });
+
             return response()->json([
-                'success' => true,
-                'data'    => $loans,
+                'success'    => true,
+                'data'       => $loans->items(),
+                'pagination' => [
+                    'total'        => $loans->total(),
+                    'per_page'     => $loans->perPage(),
+                    'current_page' => $loans->currentPage(),
+                    'last_page'    => $loans->lastPage(),
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching employee loans: ' . $e->getMessage());

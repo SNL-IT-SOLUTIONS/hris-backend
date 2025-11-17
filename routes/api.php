@@ -228,7 +228,7 @@ Route::controller(LoanController::class)->group(function () {
     Route::get('loans/{id}', 'getLoanById');
     Route::post('loans/{id}/approve', 'approveLoan');
     Route::post('loans/{id}/cancel', 'cancelLoan');
-    Route::middleware('auth:sanctum')->get('my-loans/{recordId}', [LoanController::class, 'getMyLoans']);
+    Route::middleware('auth:sanctum')->get('my-loans', [LoanController::class, 'getMyLoans']);
 });
 
 
