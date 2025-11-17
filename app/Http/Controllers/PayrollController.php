@@ -203,6 +203,7 @@ class PayrollController extends Controller
 
         $period = PayrollPeriod::find($id);
 
+
         if (!$period) {
             return response()->json([
                 'isSuccess' => false,
@@ -267,6 +268,8 @@ class PayrollController extends Controller
                     'position:id,position_name',
                 ])
                 ->orderBy('last_name')
+                ->where('is_archived', false)
+
                 ->get()
                 ->map(fn($emp) => [
                     'employee_id' => $emp->id,
@@ -303,6 +306,8 @@ class PayrollController extends Controller
                 'payrollRecords.employee.position:id,position_name'
             ])
                 ->orderBy('created_at', 'desc')
+                ->where('is_archived', false)
+
                 ->get();
 
             return response()->json([
@@ -336,7 +341,8 @@ class PayrollController extends Controller
 
             //  Fetch periods that have payroll records for the logged-in user
             $periods = PayrollPeriod::whereHas('payrollRecords', function ($query) use ($user) {
-                $query->where('employee_id', $user->id);
+                $query->where('employee_id', $user->id)
+                    ->where('is_archived', false);
             })
                 ->with([
                     'payrollRecords' => function ($query) use ($user) {
@@ -608,7 +614,9 @@ class PayrollController extends Controller
                 'deductions.loan.loanType',
                 'allowances.allowanceType',
                 'payrollPeriod'
-            ])->findOrFail($recordId);
+            ])->findOrFail($recordId)
+                ->where('is_archived', false);
+
 
             $allowances = $record->allowances->map(fn($a) => [
                 'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
@@ -684,6 +692,8 @@ class PayrollController extends Controller
             ])
                 ->where('employee_id', $employee->id)
                 ->where('id', $recordId)
+                ->where('is_archived', false)
+
                 ->first();
 
             if (!$record) {
@@ -787,9 +797,9 @@ class PayrollController extends Controller
     {
         try {
             $summary = [
-                'total_periods'    => DB::table('payroll_periods')->count(),
-                'processed'        => DB::table('payroll_periods')->where('status', 'processed')->count(),
-                'drafts'           => DB::table('payroll_periods')->where('status', 'draft')->count(),
+                'total_periods'    => DB::table('payroll_periods')->where('is_archived', false)->count(),
+                'processed'        => DB::table('payroll_periods')->where('status', 'processed')->where('is_archived', false)->count(),
+                'drafts'           => DB::table('payroll_periods')->where('status', 'draft')->where('is_archived', false)->count(),
                 'active_employees' => DB::table('employees')->where('is_active', 1)->count(),
             ];
 
