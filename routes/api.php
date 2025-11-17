@@ -198,7 +198,7 @@ Route::controller(PayrollController::class)->group(function () {
     Route::post('thrirteenth-month/generate', 'generateThirteenthMonthPay');
 
     Route::middleware('auth:sanctum')->get('my-payroll-records', [PayrollController::class, 'getMyPayrollRecords']);
-    Route::middleware('auth:sanctum')->get('my-payslip/{recordId}', [PayrollController::class, 'getMyPayslip']);
+    Route::middleware('auth:sanctum')->get('my-payslip/{recordId}', [PayrollController::class, 'getMyPayslips']);
     Route::middleware('auth:sanctum')->get('my-payroll-periods', [PayrollController::class, 'getMyPayrollPeriods']);
     Route::middleware('auth:sanctum')->get('my-payroll-details/{id}', [PayrollController::class, 'getMyPayrollDetails']);
 });

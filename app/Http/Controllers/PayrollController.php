@@ -667,12 +667,12 @@ class PayrollController extends Controller
     public function getMyPayslips(Request $request)
     {
         try {
-            $user = auth()->user();
+            $employee = auth()->user(); // THIS IS ALREADY THE EMPLOYEE
 
-            if (!$user || !$user->employee) {
+            if (!$employee) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'Unauthorized or employee record not found.',
+                    'message'   => 'Unauthorized.',
                 ], 403);
             }
 
@@ -684,7 +684,7 @@ class PayrollController extends Controller
                 'deductions.benefitType',
                 'deductions.loan.loanType',
             ])
-                ->where('employee_id', $user->employee->id)
+                ->where('employee_id', $employee->id)
                 ->orderByDesc('created_at')
                 ->paginate($perPage);
 
@@ -696,7 +696,9 @@ class PayrollController extends Controller
                 ]);
             }
 
-            $data = $records->map(function ($record) {
+            // Transform the collection
+            $records->getCollection()->transform(function ($record) {
+
                 $allowances = $record->allowances->map(fn($a) => [
                     'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
                     'allowance_amount' => number_format($a->allowance_amount, 2),
@@ -736,7 +738,7 @@ class PayrollController extends Controller
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Payslips retrieved successfully.',
-                'data'      => $data,
+                'data'      => $records->items(),
                 'pagination' => [
                     'total'         => $records->total(),
                     'per_page'      => $records->perPage(),
@@ -754,6 +756,9 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
+
+
 
 
     /**
