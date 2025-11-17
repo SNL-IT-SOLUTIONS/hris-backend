@@ -664,7 +664,7 @@ class PayrollController extends Controller
 
 
 
-    public function getMyPayslips(Request $request)
+    public function getMyPayslips(Request $request, $recordId)
     {
         try {
             $employee = auth()->user(); // THIS IS ALREADY THE EMPLOYEE
@@ -676,54 +676,51 @@ class PayrollController extends Controller
                 ], 403);
             }
 
-            $perPage = $request->get('per_page', 10);
-
-            $records = PayrollRecord::with([
+            $record = PayrollRecord::with([
                 'payrollPeriod',
                 'allowances.allowanceType',
                 'deductions.benefitType',
                 'deductions.loan.loanType',
             ])
                 ->where('employee_id', $employee->id)
-                ->orderByDesc('created_at')
-                ->paginate($perPage);
+                ->where('id', $recordId)
+                ->first();
 
-            if ($records->isEmpty()) {
+            if (!$record) {
                 return response()->json([
-                    'isSuccess' => true,
-                    'message'   => 'No payslips found for this employee.',
-                    'data'      => [],
-                ]);
+                    'isSuccess' => false,
+                    'message'   => 'Payslip not found.',
+                ], 404);
             }
 
-            // Transform the collection
-            $records->getCollection()->transform(function ($record) {
+            $allowances = $record->allowances->map(fn($a) => [
+                'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
+                'allowance_amount' => number_format($a->allowance_amount, 2),
+            ]);
 
-                $allowances = $record->allowances->map(fn($a) => [
-                    'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
-                    'allowance_amount' => number_format($a->allowance_amount, 2),
-                ]);
-
-                $deductions = $record->deductions->map(function ($ded) {
-                    if ($ded->loan_id) {
-                        return [
-                            'deduction_type'   => 'Loan Payment',
-                            'loan_name'        => $ded->loan->loanType->type_name ?? 'Loan',
-                            'deduction_amount' => number_format($ded->deduction_amount, 2),
-                        ];
-                    } elseif ($ded->benefit_type_id) {
-                        return [
-                            'deduction_type'   => $ded->benefitType->benefit_name ?? 'Other Deduction',
-                            'deduction_amount' => number_format($ded->deduction_amount, 2),
-                        ];
-                    }
+            $deductions = $record->deductions->map(function ($ded) {
+                if ($ded->loan_id) {
                     return [
-                        'deduction_type'   => $ded->deduction_name ?? 'Other Deduction',
+                        'deduction_type'   => 'Loan Payment',
+                        'loan_name'        => $ded->loan->loanType->type_name ?? 'Loan',
                         'deduction_amount' => number_format($ded->deduction_amount, 2),
                     ];
-                });
-
+                } elseif ($ded->benefit_type_id) {
+                    return [
+                        'deduction_type'   => $ded->benefitType->benefit_name ?? 'Other Deduction',
+                        'deduction_amount' => number_format($ded->deduction_amount, 2),
+                    ];
+                }
                 return [
+                    'deduction_type'   => $ded->deduction_name ?? 'Other Deduction',
+                    'deduction_amount' => number_format($ded->deduction_amount, 2),
+                ];
+            });
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Payslip retrieved successfully.',
+                'data'      => [
                     'record_id'        => $record->id,
                     'period'           => $record->payrollPeriod->period_name ?? 'N/A',
                     'gross_pay'        => number_format($record->gross_pay, 2),
@@ -732,30 +729,19 @@ class PayrollController extends Controller
                     'generated_at'     => $record->created_at->format('F d, Y'),
                     'allowances'       => $allowances,
                     'deductions'       => $deductions,
-                ];
-            });
-
-            return response()->json([
-                'isSuccess' => true,
-                'message'   => 'Payslips retrieved successfully.',
-                'data'      => $records->items(),
-                'pagination' => [
-                    'total'         => $records->total(),
-                    'per_page'      => $records->perPage(),
-                    'current_page'  => $records->currentPage(),
-                    'last_page'     => $records->lastPage(),
                 ],
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching employee payslips: ' . $e->getMessage());
+            Log::error('Error fetching employee payslip: ' . $e->getMessage());
 
             return response()->json([
                 'isSuccess' => false,
-                'message'   => 'Failed to fetch payslips.',
+                'message'   => 'Failed to fetch payslip.',
                 'error'     => $e->getMessage(),
             ], 500);
         }
     }
+
 
 
 
