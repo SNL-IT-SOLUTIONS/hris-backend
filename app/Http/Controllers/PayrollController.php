@@ -667,7 +667,7 @@ class PayrollController extends Controller
     public function getMyPayslips(Request $request, $recordId)
     {
         try {
-            $employee = auth()->user(); // THIS IS ALREADY THE EMPLOYEE
+            $employee = auth()->user(); // THIS IS THE LOGGED-IN EMPLOYEE
 
             if (!$employee) {
                 return response()->json([
@@ -693,11 +693,13 @@ class PayrollController extends Controller
                 ], 404);
             }
 
+            // Map allowances
             $allowances = $record->allowances->map(fn($a) => [
                 'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
                 'allowance_amount' => number_format($a->allowance_amount, 2),
             ]);
 
+            // Map deductions
             $deductions = $record->deductions->map(function ($ded) {
                 if ($ded->loan_id) {
                     return [
@@ -719,16 +721,19 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-                'message'   => 'Payslip retrieved successfully.',
-                'data'      => [
-                    'record_id'        => $record->id,
-                    'period'           => $record->payrollPeriod->period_name ?? 'N/A',
-                    'gross_pay'        => number_format($record->gross_pay, 2),
-                    'total_deductions' => number_format($record->total_deductions, 2),
-                    'net_pay'          => number_format($record->net_pay, 2),
-                    'generated_at'     => $record->created_at->format('F d, Y'),
-                    'allowances'       => $allowances,
-                    'deductions'       => $deductions,
+                'payslip'   => [
+                    'employee_name'     => "{$employee->first_name} {$employee->last_name}",
+                    'period'            => $record->payrollPeriod->period_name ?? 'N/A',
+                    'daily_rate'        => number_format($record->daily_rate, 2),
+                    'days_worked'       => number_format($record->days_worked, 2),
+                    'gross_base'        => number_format($record->gross_base, 2),
+                    'gross_pay'         => number_format($record->gross_pay, 2),
+                    'allowances'        => $allowances,
+                    'total_allowances'  => number_format($record->allowances->sum('allowance_amount'), 2),
+                    'deductions'        => $deductions,
+                    'total_deductions'  => number_format($record->total_deductions, 2),
+                    'net_pay'           => number_format($record->net_pay, 2),
+                    'generated_at'      => $record->created_at->format('F d, Y h:i A'),
                 ],
             ]);
         } catch (\Exception $e) {
@@ -741,6 +746,7 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
 
 
 
