@@ -79,14 +79,20 @@ class LoanController extends Controller
 
             $loans = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
-            // Transform paginator collection
+            // Transform paginator collection with actual database columns
             $loans->getCollection()->transform(function ($loan) {
                 return [
-                    'id'           => $loan->id,
-                    'loan_type'    => $loan->loanType->type_name ?? 'Other Loan',
-                    'amount'       => number_format($loan->amount, 2),
-                    'status'       => $loan->status,
-                    'applied_at'   => $loan->created_at->format('F d, Y'),
+                    'id'                   => $loan->id,
+                    'loan_type'            => $loan->loanType->type_name ?? 'Other Loan',
+                    'principal_amount'     => number_format($loan->principal_amount, 2),
+                    'balance_amount'       => number_format($loan->balance_amount, 2),
+                    'monthly_amortization' => number_format($loan->monthly_amortization, 2),
+                    'interest_rate'        => number_format($loan->interest_rate, 2) . '%',
+                    'start_date'           => $loan->start_date ? \Carbon\Carbon::parse($loan->start_date)->format('F d, Y') : 'N/A',
+                    'end_date'             => $loan->end_date ? \Carbon\Carbon::parse($loan->end_date)->format('F d, Y') : 'N/A',
+                    'status'               => $loan->status,
+                    'remarks'              => $loan->remarks,
+                    'applied_at'           => $loan->created_at->format('F d, Y'),
                 ];
             });
 
