@@ -568,7 +568,7 @@ class AttendanceController extends Controller
     public function requestLeave(Request $request)
     {
         try {
-            // ✅ Validate input
+            // Validate input
             $validated = $request->validate([
                 'employee_id'   => 'required|exists:employees,id',
                 'leave_type_id' => 'required|exists:leave_types,id',
@@ -577,15 +577,15 @@ class AttendanceController extends Controller
                 'reason'        => 'nullable|string|max:500',
             ]);
 
-            // 🧮 Calculate total days
+            // Calculate total days
             $days = (new \DateTime($validated['start_date']))
                 ->diff(new \DateTime($validated['end_date']))
                 ->days + 1;
 
-            // 🧾 Fetch leave type details
-            $leaveType = LeaveType::find($validated['leave_type_id']);
+            // Fetch leave type details
+            $leaveType = LeaveType::find($validated['leave_type_id']); // fixed variable name
 
-            // 🧩 Optional: Check if leave exceeds max_days
+            // Optional: Check if leave exceeds max_days
             if ($leaveType && $leaveType->max_days && $days > $leaveType->max_days) {
                 return response()->json([
                     'isSuccess' => false,
@@ -593,12 +593,12 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            // ✍️ Add extra fields
+            // Add extra fields
             $validated['total_days'] = $days;
-            $validated['status'] = 'Pending';
-            $validated['is_paid'] = $leaveType->is_paid ?? false;
+            $validated['status']     = 'Pending';
+            $validated['is_paid']    = $leaveType->is_paid ?? false;
 
-            // ✅ Save to DB 
+            // Save to DB 
             $leave = Leave::create($validated);
 
             Log::info("Leave request created for employee ID {$validated['employee_id']} ({$days} days, {$leaveType->leave_name})");
@@ -613,9 +613,11 @@ class AttendanceController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message'   => 'Failed to submit leave request.',
+                'error'     => $e->getMessage(), // optional for debugging
             ], 500);
         }
     }
+
 
 
     //HELPERS

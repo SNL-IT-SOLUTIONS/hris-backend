@@ -9,10 +9,10 @@ class Leave extends Model
 {
     use HasFactory;
 
-    // ✅ Table name (optional if it's already `leaves`)
+
     protected $table = 'leaves';
 
-    // ✅ Fields that can be mass-assigned
+
     protected $fillable = [
         'employee_id',
         'leave_type_id',
@@ -21,10 +21,11 @@ class Leave extends Model
         'total_days',
         'reason',
         'status',
-        'is_archived',
+        'is_paid',
     ];
 
-    // ✅ Relationships
+
+
     public function employee()
     {
         return $this->belongsTo(Employee::class);
