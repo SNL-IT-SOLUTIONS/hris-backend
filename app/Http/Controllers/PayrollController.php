@@ -614,8 +614,11 @@ class PayrollController extends Controller
                 'deductions.loan.loanType',
                 'allowances.allowanceType',
                 'payrollPeriod'
-            ])->findOrFail($recordId)
-                ->where('is_archived', false);
+
+            ])
+                ->where('is_archived', false)
+                ->findOrFail($recordId);
+
 
 
             $allowances = $record->allowances->map(fn($a) => [
