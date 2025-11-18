@@ -38,6 +38,7 @@ class PayrollController extends Controller
         DB::beginTransaction();
 
         try {
+            // Create Period
             $period = PayrollPeriod::create([
                 'period_name'       => $request->period_name,
                 'pay_date'          => $request->pay_date,
@@ -46,15 +47,33 @@ class PayrollController extends Controller
             ]);
 
             foreach ($request->employees as $emp) {
-                $employee = Employee::findOrFail($emp['employee_id']);
-                $daily    = $employee->base_salary;
-                $days     = $emp['days_worked'];
-                $overtime = $emp['overtime_hours'] ?? 0;
-                $absences = $emp['absences'] ?? 0;
 
-                $overtimeRate = ($daily / 8) * 1.25;
-                $gross_base   = ($daily * $days) + ($overtime * $overtimeRate);
+                $employee  = Employee::findOrFail($emp['employee_id']);
+                $daily     = $employee->base_salary;
+                $days      = $emp['days_worked'];
+                $overtime  = $emp['overtime_hours'] ?? 0;
+                $absences  = $emp['absences'] ?? 0;
 
+                $hourlyRate = $daily / 8;
+
+                // ================================
+                // 🔥 NIGHT DIFFERENTIAL FORMULA
+                // ================================
+                $nightPercent = $employee->night_rate ?? 0; // e.g. 10%
+                $nightRatePerHour = $hourlyRate * ($nightPercent / 100);
+                $nightDiffPerDay  = $nightRatePerHour * 8;
+                $totalNightDiff   = $nightDiffPerDay * $days;
+                // ================================
+
+                // OT Calculation
+                $overtimeRate = $hourlyRate * 1.25;
+
+                // Add ND to gross_base
+                $gross_base = ($daily * $days)
+                    + ($overtime * $overtimeRate)
+                    + $totalNightDiff;
+
+                // Allowances
                 $employeeAllowances = DB::table('employee_allowance')
                     ->join('allowance_types', 'employee_allowance.allowance_type_id', '=', 'allowance_types.id')
                     ->where('employee_allowance.employee_id', $employee->id)
@@ -65,10 +84,10 @@ class PayrollController extends Controller
                     )
                     ->get();
 
-                // === Divide allowances by 2 ===
                 $total_allowances = $employeeAllowances->sum('allowance_amount') / 2;
                 $gross_with_allowances = $gross_base + $total_allowances;
 
+                // Benefits
                 $employeeBenefits = DB::table('employee_benefit')
                     ->join('benefit_types', 'employee_benefit.benefit_type_id', '=', 'benefit_types.id')
                     ->where('employee_benefit.employee_id', $employee->id)
@@ -85,17 +104,24 @@ class PayrollController extends Controller
                     'amount'          => $benefit->amount ?? 0,
                 ])->toArray();
 
-                $total_benefit_deductions = collect($benefitDeductions)->sum('amount') / 2; // divide by 2
+                $total_benefit_deductions = collect($benefitDeductions)->sum('amount') / 2;
 
+                // Loans
                 $activeLoans = Loan::where('employee_id', $employee->id)
                     ->where('status', 'active')
                     ->get();
 
-                $total_loan_deductions = $activeLoans->sum('monthly_amortization') / 2; // divide by 2
+                $total_loan_deductions = $activeLoans->sum('monthly_amortization') / 2;
 
+                // Final deductions
                 $total_deductions = $total_benefit_deductions + $total_loan_deductions;
+
+                // Net Pay
                 $net = $gross_with_allowances - $total_deductions;
 
+                // ================================
+                // 🔥 CREATE PAYROLL RECORD (WITH ND)
+                // ================================
                 $record = PayrollRecord::create([
                     'payroll_period_id'     => $period->id,
                     'employee_id'           => $employee->id,
@@ -103,6 +129,7 @@ class PayrollController extends Controller
                     'days_worked'           => $days,
                     'overtime_hours'        => $overtime,
                     'absences'              => $absences,
+                    'night_diff_pay'        => $totalNightDiff,   // 🔥 store ND
                     'gross_base'            => $gross_base,
                     'gross_pay'             => $gross_with_allowances,
                     'total_allowances'      => $total_allowances,
@@ -110,16 +137,19 @@ class PayrollController extends Controller
                     'total_deductions'      => $total_deductions,
                     'net_pay'               => $net,
                 ]);
+                // ================================
 
+                // Benefit Deduction Records
                 foreach ($benefitDeductions as $benefit) {
                     PayrollDeduction::create([
                         'payroll_record_id' => $record->id,
                         'benefit_type_id'   => $benefit['benefit_type_id'],
                         'deduction_name'    => $benefit['benefit_name'],
-                        'deduction_amount'  => $benefit['amount'] / 2, // divide by 2
+                        'deduction_amount'  => $benefit['amount'] / 2,
                     ]);
                 }
 
+                // Loan Deductions
                 foreach ($activeLoans as $loan) {
                     $amortization = $loan->monthly_amortization / 2;
 
@@ -142,11 +172,12 @@ class PayrollController extends Controller
                     }
                 }
 
+                // Allowance Records
                 foreach ($employeeAllowances as $allowance) {
                     PayrollAllowance::create([
                         'payroll_record_id' => $record->id,
                         'allowance_type_id' => $allowance->allowance_type_id,
-                        'allowance_amount'  => ($allowance->allowance_amount ?? 0) / 2, // divide by 2
+                        'allowance_amount'  => ($allowance->allowance_amount ?? 0) / 2,
                     ]);
                 }
             }
@@ -172,6 +203,7 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
 
 
 
@@ -609,6 +641,7 @@ class PayrollController extends Controller
             $allowances = $record->allowances->map(fn($a) => [
                 'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
                 'allowance_amount' => number_format($a->allowance_amount, 2),
+
             ]);
 
             $deductions = $record->deductions->map(function ($ded) {
@@ -639,6 +672,7 @@ class PayrollController extends Controller
                     'days_worked'       => number_format($record->days_worked, 2),
                     'gross_base'        => number_format($record->gross_base, 2),
                     'gross_pay'         => number_format($record->gross_pay, 2),
+                    'night_diff_pay'   => number_format($record->night_diff_pay, 2),
                     'allowances'        => $allowances,
                     'total_allowances'  => number_format($record->allowances->sum('allowance_amount'), 2),
                     'deductions'        => $deductions,

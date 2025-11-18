@@ -88,10 +88,11 @@ class Employee extends Authenticatable
         // Employment
         'department_id',
         'position_id',
-        'employment_type_id', // ✅ new FK column
+        'employment_type_id',
         'manager_id',
         'supervisor_id',
         'base_salary',
+        'night_rate',
         'hire_date',
 
         // Emergency Contact
