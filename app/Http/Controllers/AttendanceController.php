@@ -15,6 +15,7 @@ use App\Models\EmployeeFace;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
+use App\Models\EmployeeLeaveBalance;
 use Exception;
 
 
@@ -568,7 +569,7 @@ class AttendanceController extends Controller
     public function requestLeave(Request $request)
     {
         try {
-            // Validate input
+            // 1️⃣ Validate input
             $validated = $request->validate([
                 'employee_id'   => 'required|exists:employees,id',
                 'leave_type_id' => 'required|exists:leave_types,id',
@@ -577,29 +578,55 @@ class AttendanceController extends Controller
                 'reason'        => 'nullable|string|max:500',
             ]);
 
-            // Calculate total days
+            // 2️⃣ Calculate total days
             $days = (new \DateTime($validated['start_date']))
                 ->diff(new \DateTime($validated['end_date']))
                 ->days + 1;
 
-            // Fetch leave type details
-            $leaveType = LeaveType::find($validated['leave_type_id']); // fixed variable name
+            // 3️⃣ Fetch leave type details
+            $leaveType = LeaveType::findOrFail($validated['leave_type_id']);
 
-            // Optional: Check if leave exceeds max_days
-            if ($leaveType && $leaveType->max_days && $days > $leaveType->max_days) {
+            // 4️⃣ Fetch employee's leave balance for this leave type
+            $employeeLeave = EmployeeLeaveBalance::where('employee_id', $validated['employee_id'])
+                ->where('leave_type_id', $validated['leave_type_id'])
+                ->first();
+
+            // 5️⃣ If no balance record exists, initialize it with max_days from leave_types
+            if (!$employeeLeave) {
+                $employeeLeave = EmployeeLeaveBalance::create([
+                    'employee_id'   => $validated['employee_id'],
+                    'leave_type_id' => $validated['leave_type_id'],
+                    'remaining_days' => $leaveType->max_days,
+                ]);
+            }
+
+            // 6️⃣ Check if requested days exceed remaining days
+            if ($days > $employeeLeave->remaining_days) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => "This leave type allows a maximum of {$leaveType->max_days} days.",
+                    'message'   => "You only have {$employeeLeave->remaining_days} days remaining for this leave type.",
                 ], 422);
             }
 
-            // Add extra fields
-            $validated['total_days'] = $days;
-            $validated['status']     = 'Pending';
-            $validated['is_paid']    = $leaveType->is_paid ?? false;
+            // 7️⃣ Prepare fields for leave creation
+            $leaveData = [
+                'employee_id'   => $validated['employee_id'],
+                'leave_type_id' => $validated['leave_type_id'],
+                'start_date'    => $validated['start_date'],
+                'end_date'      => $validated['end_date'],
+                'reason'        => $validated['reason'] ?? null,
+                'total_days'    => $days,
+                'status'        => 'Pending',
+                'is_archived'   => 0, // default value
+            ];
 
-            // Save to DB 
-            $leave = Leave::create($validated);
+            // 8️⃣ Save leave
+            $leave = Leave::create($leaveData);
+
+            // 9️⃣ Deduct days from employee's leave balance
+            $employeeLeave->update([
+                'remaining_days' => $employeeLeave->remaining_days - $days,
+            ]);
 
             Log::info("Leave request created for employee ID {$validated['employee_id']} ({$days} days, {$leaveType->leave_name})");
 
@@ -613,7 +640,7 @@ class AttendanceController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message'   => 'Failed to submit leave request.',
-                'error'     => $e->getMessage(), // optional for debugging
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }
