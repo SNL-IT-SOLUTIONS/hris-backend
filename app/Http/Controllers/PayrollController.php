@@ -56,7 +56,7 @@ class PayrollController extends Controller
 
                 $hourlyRate = $daily / 8;
                 // ================================
-                // 🔥 NIGHT DIFFERENTIAL CALCULATION (CORRECTED)
+                //  NIGHT DIFFERENTIAL CALCULATION 
                 // ================================
                 $nightHours  = $employee->night_hours ?? 0;  // e.g. 7 hours
                 $nightRate   = $employee->night_rate ?? 10;  // percent (10%)
@@ -69,8 +69,7 @@ class PayrollController extends Controller
 
                 // Add ND to gross_base
                 $gross_base = ($daily * $days)
-                    + ($overtime * $overtimeRate)
-                    + $totalNightDiff;
+                    + ($overtime * $overtimeRate);
 
                 // Allowances
                 $employeeAllowances = DB::table('employee_allowance')
@@ -119,7 +118,7 @@ class PayrollController extends Controller
                 $net = $gross_with_allowances - $total_deductions;
 
                 // ================================
-                // 🔥 CREATE PAYROLL RECORD (WITH ND)
+                // CREATE PAYROLL RECORD 
                 // ================================
                 $record = PayrollRecord::create([
                     'payroll_period_id'     => $period->id,
@@ -128,7 +127,7 @@ class PayrollController extends Controller
                     'days_worked'           => $days,
                     'overtime_hours'        => $overtime,
                     'absences'              => $absences,
-                    'night_diff_pay'        => $totalNightDiff,   // 🔥 store ND
+                    'night_diff_pay'        => $totalNightDiff,
                     'gross_base'            => $gross_base,
                     'gross_pay'             => $gross_with_allowances,
                     'total_allowances'      => $total_allowances,
@@ -853,7 +852,7 @@ class PayrollController extends Controller
             // Get total salary earned within the date range
             $totalBasicSalary = PayrollRecord::where('employee_id', $employeeId)
                 ->whereBetween('created_at', [$request->start_date, $request->end_date])
-                ->sum('net_pay');
+                ->sum('gross_base');
 
             // Compute 13th month pay
             $thirteenthMonthPay = $totalBasicSalary / 12;
