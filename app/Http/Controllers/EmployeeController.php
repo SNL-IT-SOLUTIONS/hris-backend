@@ -432,6 +432,7 @@ class EmployeeController extends Controller
             'night_hours'        => 'nullable|numeric|min:0',
             'night_rate'          => 'nullable|numeric|min:0',
             'base_pay'            => 'nullable|numeric|min:0',
+            'is_regular'          => 'nullable|boolean',
 
         ]);
 
