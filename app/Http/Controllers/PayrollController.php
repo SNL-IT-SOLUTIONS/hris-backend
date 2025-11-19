@@ -872,4 +872,44 @@ class PayrollController extends Controller
 
         return response()->json(['message' => '13th month pay generated for selected employees']);
     }
+
+    public function getThirteenthMonthPays(Request $request)
+    {
+        try {
+            $perPage = $request->input('per_page', 10);
+            $search = $request->input('search');
+
+            $query = ThirteenthMonth::with('employee:id,first_name,last_name,employee_id')
+                ->where('is_archived', false)
+                ->orderByDesc('created_at');
+
+            if ($search) {
+                $query->whereHas('employee', function ($q) use ($search) {
+                    $q->where('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('employee_id', 'like', "%{$search}%");
+                });
+            }
+
+            $thirteenthMonths = $query->paginate($perPage);
+
+            return response()->json([
+                'isSuccess' => true,
+                'data' => $thirteenthMonths->items(),
+                'pagination' => [
+                    'total' => $thirteenthMonths->total(),
+                    'per_page' => $thirteenthMonths->perPage(),
+                    'current_page' => $thirteenthMonths->currentPage(),
+                    'last_page' => $thirteenthMonths->lastPage(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching 13th month pays: ' . $e->getMessage());
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to fetch 13th month pays.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
 }
