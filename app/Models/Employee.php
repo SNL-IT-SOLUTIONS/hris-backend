@@ -91,6 +91,7 @@ class Employee extends Authenticatable
         'employment_type_id',
         'manager_id',
         'supervisor_id',
+        'base_pay',
         'base_salary',
         'night_rate',
         'hire_date',

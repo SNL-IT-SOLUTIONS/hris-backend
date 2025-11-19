@@ -430,6 +430,7 @@ class EmployeeController extends Controller
             'benefits.*.id'        => 'required_with:benefits|exists:benefit_types,id',
             'benefits.*.amount'    => 'required_with:benefits|numeric|min:0',
             'night_rate'          => 'nullable|numeric|min:0',
+            'base_pay'            => 'nullable|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
