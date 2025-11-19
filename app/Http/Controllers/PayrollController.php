@@ -672,6 +672,7 @@ class PayrollController extends Controller
                     'days_worked'       => number_format($record->days_worked, 2),
                     'gross_base'        => number_format($record->gross_base, 2),
                     'gross_pay'         => number_format($record->gross_pay, 2),
+                    'base_pay'          => number_format($record->daily_rate * $record->days_worked, 2),
                     'night_diff_pay'   => number_format($record->night_diff_pay, 2),
                     'allowances'        => $allowances,
                     'total_allowances'  => number_format($record->allowances->sum('allowance_amount'), 2),
