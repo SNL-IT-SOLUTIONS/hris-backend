@@ -55,14 +55,13 @@ class PayrollController extends Controller
                 $absences  = $emp['absences'] ?? 0;
 
                 $hourlyRate = $daily / 8;
-
                 // ================================
-                // 🔥 NIGHT DIFFERENTIAL FORMULA
+                // 🔥 NIGHT DIFFERENTIAL CALCULATION (CORRECTED)
                 // ================================
-                $nightPercent = $employee->night_rate ?? 0; // e.g. 10%
-                $nightRatePerHour = $hourlyRate * ($nightPercent / 100);
-                $nightDiffPerDay  = $nightRatePerHour * 8;
-                $totalNightDiff   = $nightDiffPerDay * $days;
+                $nightHours  = $employee->night_hours ?? 0;  // e.g. 7 hours
+                $nightRate   = $employee->night_rate ?? 10;  // percent (10%)
+                $nightDiffPerDay = $hourlyRate * ($nightRate / 100) * $nightHours;
+                $totalNightDiff  = $nightDiffPerDay * $days;
                 // ================================
 
                 // OT Calculation
