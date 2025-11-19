@@ -83,7 +83,7 @@ class PayrollController extends Controller
                     ->get();
 
                 $total_allowances = $employeeAllowances->sum('allowance_amount') / 2;
-                $gross_with_allowances = $gross_base + $total_allowances;
+                $gross_with_allowances = $gross_base + $total_allowances + $totalNightDiff;
 
                 // Benefits
                 $employeeBenefits = DB::table('employee_benefit')
