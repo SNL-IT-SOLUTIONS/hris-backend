@@ -199,7 +199,7 @@ class EmployeeController extends Controller
         $validated = $request->validate([
             // File Upload
             '201_file.*'   => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
-            'resume'       => 'nullable|file|mimes:pdf,doc,docx|max:2048',
+            'resume'       => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
 
             // Basic Info
             'first_name'   => 'required|string|max:100',
