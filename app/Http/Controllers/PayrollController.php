@@ -917,7 +917,7 @@ class PayrollController extends Controller
 
     public function getThirteenthMonthPeriods()
     {
-        $periods = ThirteenthMonthPeriod::orderBy('start_date', 'desc')->get();
+        $periods = ThirteenthMonthPeriod::orderBy('created_at', 'desc')->get();
 
         return response()->json([
             'isSuccess' => true,
@@ -936,7 +936,7 @@ class PayrollController extends Controller
         ])
             ->where('period_id', $periodId)
             ->where('is_archived', false)
-            ->orderBy('created_at', 'asc')
+            ->orderBy('created_at', 'desc')
             ->paginate($perPage);
 
         // Format response to include department/position names directly
