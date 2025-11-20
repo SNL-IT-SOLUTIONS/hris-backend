@@ -11,6 +11,7 @@ class ThirteenthMonth extends Model
     protected $table = 'thirteenth_month_pays'; // 👈 fix here
 
     protected $fillable = [
+        'period_id',
         'employee_id',
         'start_date',
         'end_date',
@@ -25,6 +26,13 @@ class ThirteenthMonth extends Model
     {
         return $this->belongsTo(Employee::class);
     }
+    public function period()
+    {
+        return $this->belongsTo(ThirteenthMonthPeriod::class, 'period_id');
+    }
+
+
+
 
     /**
      * Optional: Compute 13th month amount dynamically

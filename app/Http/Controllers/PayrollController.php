@@ -11,7 +11,8 @@ use App\Models\{
     AllowanceType,
     Employee,
     Loan,
-    ThirteenthMonth
+    ThirteenthMonth,
+    ThirteenthMonthPeriod
 };
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log};
@@ -840,77 +841,79 @@ class PayrollController extends Controller
     public function generateThirteenthMonthPay(Request $request)
     {
         $request->validate([
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
+            'period_id' => 'required|integer|exists:thirteenth_month_periods,id',
             'employees' => 'required|array',
             'employees.*.employee_id' => 'required|integer|exists:employees,id',
         ]);
 
+        $period = ThirteenthMonthPeriod::findOrFail($request->period_id);
+
+        if ($period->is_locked) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'This period is locked and cannot be updated.',
+            ], 403);
+        }
+
         foreach ($request->employees as $empData) {
+
             $employeeId = $empData['employee_id'];
 
-            // Get total salary earned within the date range
             $totalBasicSalary = PayrollRecord::where('employee_id', $employeeId)
-                ->whereBetween('created_at', [$request->start_date, $request->end_date])
+                ->whereBetween('created_at', [
+                    $period->start_date,
+                    $period->end_date
+                ])
                 ->sum('gross_base');
 
-            // Compute 13th month pay
-            $thirteenthMonthPay = $totalBasicSalary / 12;
+            $amount = round($totalBasicSalary / 12, 2);
 
-            // Save to table
             ThirteenthMonth::updateOrCreate(
                 [
+                    'period_id'  => $period->id,
                     'employee_id' => $employeeId,
-                    'start_date' => $request->start_date,
-                    'end_date' => $request->end_date,
                 ],
                 [
-                    'amount' => $thirteenthMonthPay,
+                    'amount' => $amount,
                 ]
             );
         }
 
-        return response()->json(['message' => '13th month pay generated for selected employees']);
+        return response()->json([
+            'isSuccess' => true,
+            'message' => '13th month pays successfully generated.',
+        ]);
     }
 
-    public function getThirteenthMonthPays(Request $request)
+    public function getThirteenthMonthPeriods()
     {
-        try {
-            $perPage = $request->input('per_page', 10);
-            $search = $request->input('search');
+        $periods = ThirteenthMonthPeriod::orderBy('start_date', 'desc')->get();
 
-            $query = ThirteenthMonth::with('employee:id,first_name,last_name,employee_id')
-                ->where('is_archived', false)
-                ->orderByDesc('created_at');
+        return response()->json([
+            'isSuccess' => true,
+            'data' => $periods
+        ]);
+    }
 
-            if ($search) {
-                $query->whereHas('employee', function ($q) use ($search) {
-                    $q->where('first_name', 'like', "%{$search}%")
-                        ->orWhere('last_name', 'like', "%{$search}%")
-                        ->orWhere('employee_id', 'like', "%{$search}%");
-                });
-            }
+    public function getPaysByPeriod($periodId, Request $request)
+    {
+        $perPage = $request->input('per_page', 10);
 
-            $thirteenthMonths = $query->paginate($perPage);
+        $pays = ThirteenthMonth::with('employee:id,first_name,last_name,employee_id')
+            ->where('period_id', $periodId)
+            ->where('is_archived', false)
+            ->orderByDesc('created_at')
+            ->paginate($perPage);
 
-            return response()->json([
-                'isSuccess' => true,
-                'data' => $thirteenthMonths->items(),
-                'pagination' => [
-                    'total' => $thirteenthMonths->total(),
-                    'per_page' => $thirteenthMonths->perPage(),
-                    'current_page' => $thirteenthMonths->currentPage(),
-                    'last_page' => $thirteenthMonths->lastPage(),
-                ],
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Error fetching 13th month pays: ' . $e->getMessage());
-
-            return response()->json([
-                'isSuccess' => false,
-                'message' => 'Failed to fetch 13th month pays.',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'isSuccess' => true,
+            'data' => $pays->items(),
+            'pagination' => [
+                'total' => $pays->total(),
+                'per_page' => $pays->perPage(),
+                'current_page' => $pays->currentPage(),
+                'last_page' => $pays->lastPage(),
+            ],
+        ]);
     }
 }
