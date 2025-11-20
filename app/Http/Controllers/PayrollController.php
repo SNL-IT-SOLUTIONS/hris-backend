@@ -838,51 +838,81 @@ class PayrollController extends Controller
         }
     }
 
-    public function generateThirteenthMonthPay(Request $request)
+    public function createThirteenthMonthPeriod(Request $request)
     {
         $request->validate([
-            'period_id' => 'required|integer|exists:thirteenth_month_periods,id',
-            'employees' => 'required|array',
+            'period_name'   => 'required|string',
+            'start_date'    => 'required|date',
+            'end_date'      => 'required|date|after_or_equal:start_date',
+            'employees'     => 'required|array|min:1',
             'employees.*.employee_id' => 'required|integer|exists:employees,id',
         ]);
 
-        $period = ThirteenthMonthPeriod::findOrFail($request->period_id);
+        DB::beginTransaction();
 
-        if ($period->is_locked) {
+        try {
+
+            // ========================================
+            // CREATE THE PERIOD FIRST
+            // ========================================
+            $period = ThirteenthMonthPeriod::create([
+                'period_name' => $request->period_name,
+                'start_date'  => $request->start_date,
+                'end_date'    => $request->end_date,
+                'is_locked'   => false,
+            ]);
+
+            foreach ($request->employees as $empData) {
+
+                $employeeId = $empData['employee_id'];
+
+                // ========================================
+                // SUM TOTAL BASIC PAY FROM PAYROLL RECORDS
+                // ========================================
+                $totalBasicSalary = PayrollRecord::where('employee_id', $employeeId)
+                    ->whereBetween('created_at', [
+                        $period->start_date,
+                        $period->end_date
+                    ])
+                    ->sum('gross_base');
+
+                // 13th month formula
+                $amount = round($totalBasicSalary / 12, 2);
+
+                // ========================================
+                // INSERT 13TH MONTH PAY ENTRY
+                // ========================================
+                ThirteenthMonth::updateOrCreate(
+                    [
+                        'period_id'   => $period->id,
+                        'employee_id' => $employeeId,
+                    ],
+                    [
+                        'amount'      => $amount,
+                        'remarks'     => null,
+                        'is_archived' => false,
+                    ]
+                );
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => '13th month period created and pays generated successfully.',
+                'period'    => $period,
+            ], 201);
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+            Log::error('13th month generation failed: ' . $e->getMessage());
+
             return response()->json([
                 'isSuccess' => false,
-                'message' => 'This period is locked and cannot be updated.',
-            ], 403);
+                'message'   => 'Failed to generate 13th month.',
+                'error'     => $e->getMessage(),
+            ], 500);
         }
-
-        foreach ($request->employees as $empData) {
-
-            $employeeId = $empData['employee_id'];
-
-            $totalBasicSalary = PayrollRecord::where('employee_id', $employeeId)
-                ->whereBetween('created_at', [
-                    $period->start_date,
-                    $period->end_date
-                ])
-                ->sum('gross_base');
-
-            $amount = round($totalBasicSalary / 12, 2);
-
-            ThirteenthMonth::updateOrCreate(
-                [
-                    'period_id'  => $period->id,
-                    'employee_id' => $employeeId,
-                ],
-                [
-                    'amount' => $amount,
-                ]
-            );
-        }
-
-        return response()->json([
-            'isSuccess' => true,
-            'message' => '13th month pays successfully generated.',
-        ]);
     }
 
     public function getThirteenthMonthPeriods()

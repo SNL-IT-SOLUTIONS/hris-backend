@@ -195,7 +195,7 @@ Route::controller(PayrollController::class)->group(function () {
     Route::get('payroll/payslip/{recordId}', 'getPayslip');
     Route::get('payroll/summary', 'getPayrollSummary');
     Route::post('payroll/process/{periodId}', 'processPayroll');
-    Route::post('thirteenth-month/generate', 'generateThirteenthMonthPay');
+    Route::post('thirteenth-month/generate', 'createThirteenthMonthPeriod');
     Route::get('thirteenth-month/periods', 'getThirteenthMonthPeriods');
     Route::get('thirteenth-month/pays/{periodId}', 'getPaysByPeriod');
 
