@@ -943,7 +943,7 @@ class PayrollController extends Controller
         $data = $pays->map(function ($pay) {
             return [
                 'id' => $pay->id,
-                'employee_id' => $pay->employee_id,
+                'employee_id' => $pay->employee->employee_id,
                 'employee_name' => $pay->employee->first_name . ' ' . $pay->employee->last_name,
                 'department' => $pay->employee->department?->department_name,
                 'position'   => $pay->employee->position?->position_name,
