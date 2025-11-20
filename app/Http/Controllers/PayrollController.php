@@ -936,7 +936,7 @@ class PayrollController extends Controller
         ])
             ->where('period_id', $periodId)
             ->where('is_archived', false)
-            ->orderByAsc('created_at')
+            ->orderBy('created_at')
             ->paginate($perPage);
 
         // Format response to include department/position names directly
