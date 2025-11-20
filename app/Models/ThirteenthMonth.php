@@ -34,6 +34,7 @@ class ThirteenthMonth extends Model
 
 
 
+
     /**
      * Optional: Compute 13th month amount dynamically
      * (if you ever want to calculate on the fly).

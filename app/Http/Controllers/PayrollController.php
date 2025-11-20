@@ -929,15 +929,33 @@ class PayrollController extends Controller
     {
         $perPage = $request->input('per_page', 10);
 
-        $pays = ThirteenthMonth::with('employee:id,first_name,last_name,employee_id')
+        $pays = ThirteenthMonth::with([
+            'employee:id,first_name,last_name,employee_id,department_id,position_id',
+            'employee.department:id,department_name',
+            'employee.position:id,position_name'
+        ])
             ->where('period_id', $periodId)
             ->where('is_archived', false)
             ->orderByDesc('created_at')
             ->paginate($perPage);
 
+        // Format response to include department/position names directly
+        $data = $pays->map(function ($pay) {
+            return [
+                'id' => $pay->id,
+                'employee_id' => $pay->employee_id,
+                'employee_name' => $pay->employee->first_name . ' ' . $pay->employee->last_name,
+                'department' => $pay->employee->department?->department_name,
+                'position'   => $pay->employee->position?->position_name,
+                'amount' => $pay->amount,
+                'remarks' => $pay->remarks,
+                'created_at' => $pay->created_at,
+            ];
+        });
+
         return response()->json([
             'isSuccess' => true,
-            'data' => $pays->items(),
+            'data' => $data,
             'pagination' => [
                 'total' => $pays->total(),
                 'per_page' => $pays->perPage(),
