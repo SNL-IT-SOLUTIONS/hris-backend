@@ -22,6 +22,7 @@ use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\LoanController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\LoanTypeController;
+use App\Http\Controllers\DashboardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -36,6 +37,9 @@ use App\Http\Controllers\LoanTypeController;
 //AUTHENTICATION
 Route::post('login', [AuthController::class, 'login']);
 Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+
+//DASHBOARD
+Route::get('dashboard', [DashboardController::class, 'index']);
 
 
 //RECRUITMENT - JOB POSTINGS
