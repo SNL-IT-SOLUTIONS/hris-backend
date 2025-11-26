@@ -7,8 +7,6 @@ use App\Models\{
     PayrollRecord,
     PayrollDeduction,
     PayrollAllowance,
-    BenefitType,
-    AllowanceType,
     Employee,
     Loan,
     ThirteenthMonth,
@@ -418,17 +416,17 @@ class PayrollController extends Controller
                 });
             }
 
-            // ✅ Clone query for totals
+            //  Clone query for totals
             $totalsQuery = clone $query;
 
-            // 🧮 Compute totals for all records (not just current page)
+            //  Compute totals for all records (not just current page)
             $summary = [
                 'total_gross'      => number_format($totalsQuery->sum('gross_pay'), 2),
                 'total_deductions' => number_format($totalsQuery->sum('total_deductions'), 2),
                 'total_net'        => number_format($totalsQuery->sum('net_pay'), 2),
             ];
 
-            // 📄 Now paginate for display
+            // Now paginate for display
             $payrollDetails = $query->paginate($perPage);
 
             return response()->json([
@@ -481,17 +479,17 @@ class PayrollController extends Controller
                 });
             }
 
-            // ✅ Clone query for totals
+            //  Clone query for totals
             $totalsQuery = clone $query;
 
-            // 🧮 Compute summary for user’s record(s)
+            //  Compute summary for user’s record(s)
             $summary = [
                 'total_gross'      => number_format($totalsQuery->sum('gross_pay'), 2),
                 'total_deductions' => number_format($totalsQuery->sum('total_deductions'), 2),
                 'total_net'        => number_format($totalsQuery->sum('net_pay'), 2),
             ];
 
-            // 📄 Paginate (usually just one record per period per user, but still for consistency)
+            // Paginate (usually just one record per period per user, but still for consistency)
             $details = $query->paginate($perPage);
 
             return response()->json([
@@ -619,7 +617,7 @@ class PayrollController extends Controller
 
 
     /**
-     * 🧾 Get individual employee payslip
+     *  Get individual employee payslip
      */
     public function getPayslip($recordId)
     {

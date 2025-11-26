@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Hash;
 use Exception;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\DB;
 
 
 class ApplicantController extends Controller
