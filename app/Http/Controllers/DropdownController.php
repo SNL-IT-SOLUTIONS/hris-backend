@@ -15,7 +15,7 @@ use Illuminate\Http\Request;
 class DropdownController extends Controller
 {
     /**
-     * 🔽 Get all departments for dropdown
+     * Get all departments for dropdown
      */
     public function getDepartments()
     {

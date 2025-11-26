@@ -126,7 +126,7 @@ class AllowanceTypeController extends Controller
             ], 404);
         }
 
-        // ✅ Mark as archived (soft delete)
+        // Mark as archived (soft delete)
         $allowance->is_archived = true;
         $allowance->save();
 

@@ -51,7 +51,7 @@ class JobPostingController extends Controller
                 ->where('is_archived', false)
                 ->whereIn('status', ['active', 'draft', 'open']);
 
-            // 🔍 Search
+            // Search
             if ($request->filled('search')) {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {

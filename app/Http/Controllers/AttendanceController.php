@@ -455,12 +455,12 @@ class AttendanceController extends Controller
                         ->orWhereNotNull('adjustment_reason');
                 });
 
-            // ✅ Optional filter by adjustment status
+            //  Optional filter by adjustment status
             if ($status) {
                 $query->where('adjustment_status', $status);
             }
 
-            // 🔍 Optional search by employee ID or name
+            //  Optional search by employee ID or name
             if ($search) {
                 $query->whereHas('employee', function ($q) use ($search) {
                     $q->where('employee_id', 'like', "%{$search}%")
@@ -566,7 +566,7 @@ class AttendanceController extends Controller
     public function requestLeave(Request $request)
     {
         try {
-            // 1️⃣ Validate input
+            // Validate input
             $validated = $request->validate([
                 'employee_id'   => 'required|exists:employees,id',
                 'leave_type_id' => 'required|exists:leave_types,id',
@@ -575,20 +575,20 @@ class AttendanceController extends Controller
                 'reason'        => 'nullable|string|max:500',
             ]);
 
-            // 2️⃣ Calculate total days
+            // Calculate total days
             $days = (new \DateTime($validated['start_date']))
                 ->diff(new \DateTime($validated['end_date']))
                 ->days + 1;
 
-            // 3️⃣ Fetch leave type details
+            //  Fetch leave type details
             $leaveType = LeaveType::findOrFail($validated['leave_type_id']);
 
-            // 4️⃣ Fetch employee's leave balance for this leave type
+            // Fetch employee's leave balance for this leave type
             $employeeLeave = EmployeeLeaveBalance::where('employee_id', $validated['employee_id'])
                 ->where('leave_type_id', $validated['leave_type_id'])
                 ->first();
 
-            // 5️⃣ If no balance record exists, initialize it with max_days from leave_types
+            //  If no balance record exists, initialize it with max_days from leave_types
             if (!$employeeLeave) {
                 $employeeLeave = EmployeeLeaveBalance::create([
                     'employee_id'   => $validated['employee_id'],
@@ -597,7 +597,7 @@ class AttendanceController extends Controller
                 ]);
             }
 
-            // 6️⃣ Check if requested days exceed remaining days
+            // Check if requested days exceed remaining days
             if ($days > $employeeLeave->remaining_days) {
                 return response()->json([
                     'isSuccess' => false,
@@ -605,7 +605,7 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            // 7️⃣ Prepare fields for leave creation
+            //  Prepare fields for leave creation
             $leaveData = [
                 'employee_id'   => $validated['employee_id'],
                 'leave_type_id' => $validated['leave_type_id'],
@@ -617,10 +617,10 @@ class AttendanceController extends Controller
                 'is_archived'   => 0, // default value
             ];
 
-            // 8️⃣ Save leave
+            // Save leave
             $leave = Leave::create($leaveData);
 
-            // 9️⃣ Deduct days from employee's leave balance
+            // Deduct days from employee's leave balance
             $employeeLeave->update([
                 'remaining_days' => $employeeLeave->remaining_days - $days,
             ]);
