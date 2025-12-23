@@ -8,10 +8,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\EmployeeCreated;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use App\Models\Leave;
 use App\Models\EmployeeFile;
-use App\Models\BenefitType;
-use App\Models\AllowanceType;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 
