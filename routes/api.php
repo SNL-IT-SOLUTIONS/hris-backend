@@ -17,6 +17,8 @@ use App\Http\Controllers\JobPostingController;
 use App\Http\Controllers\ApplicantController;
 use App\Http\Controllers\InterviewController;
 use App\Http\Controllers\DropdownController;
+use App\Http\Controllers\AttendanceController;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -77,6 +79,13 @@ Route::controller(EmployeeController::class)->middleware(['auth:sanctum'])->grou
     Route::post('create/employees', 'createEmployee');
     Route::post('update/employees/{id}', 'updateEmployee');
     Route::post('employees/{id}/archive', 'archiveEmployee');
+});
+
+Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->group(function () {
+    Route::post('attendance/clock-in', 'clockIn');
+    Route::post('attendance/clock-out', 'clockOut');
+    Route::get('attendance/summary', 'getMyAttendance');
+    Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
 });
 
 
