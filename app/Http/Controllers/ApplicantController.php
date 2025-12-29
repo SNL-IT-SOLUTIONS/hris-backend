@@ -5,16 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Applicant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use App\Models\Employee;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\EmployeeCreated;
 use Illuminate\Support\Facades\Hash;
+use Exception;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+
 
 class ApplicantController extends Controller
 {
     /**
-     * ✅ Create a new applicant (job application submission)
+     * Create a new applicant (job application submission)
      */
     public function createApplicant(Request $request)
     {
@@ -27,14 +30,14 @@ class ApplicantController extends Controller
                 'phone_number'         => 'nullable|string|max:20',
                 'resume'               => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:2048',
                 'cover_letter'         => 'nullable|string',
-                'linkedin_profile'     => 'nullable|url|max:255',
-                'portfolio_website'    => 'nullable|url|max:255',
+                'linkedin_profile'     => 'nullable|string|max:255',
+                'portfolio_website'    => 'nullable|string|max:255',
                 'salary_expectations'  => 'nullable|string|max:100',
                 'available_start_date' => 'nullable|string|max:100',
                 'experience_years'     => 'nullable|integer|min:0',
             ]);
 
-            // ✅ Upload resume using your helper
+            //  Upload resume using your helper
             $validated['resume'] = $this->saveFileToPublic($request, 'resume', 'resume');
 
             // Default values
@@ -48,15 +51,25 @@ class ApplicantController extends Controller
                 'message' => 'Application submitted successfully!',
                 'data' => $applicant,
             ], 201);
+        } catch (ValidationException $e) {
+            //  Show validation errors in response
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
+            // Catch all other errors
             Log::error('Error creating applicant: ' . $e->getMessage());
 
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to submit application.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
 
 
     /**
@@ -67,6 +80,7 @@ class ApplicantController extends Controller
         try {
             $applicants = Applicant::with('jobPosting')
                 ->where('is_archived', false)
+                ->where('stage', '!=', 'hired')
                 ->orderBy('created_at', 'desc')
                 ->get();
 
@@ -117,16 +131,40 @@ class ApplicantController extends Controller
     public function getHiredApplicants()
     {
         try {
-            $hiredApplicants = Applicant::with('jobPosting')
+            $hiredApplicants = Applicant::with(['jobPosting.department'])
                 ->where('stage', 'hired')
                 ->where('is_archived', false)
                 ->orderBy('updated_at', 'desc')
                 ->get();
 
+
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Hired applicants retrieved successfully.',
-                'data'      => $hiredApplicants,
+                'data'      => $hiredApplicants->map(function ($applicant) {
+                    return [
+                        'id'                    => $applicant->id,
+                        'first_name'            => $applicant->first_name,
+                        'last_name'             => $applicant->last_name,
+                        'email'                 => $applicant->email,
+                        'phone_number'          => $applicant->phone_number,
+                        'resume'                => $applicant->resume ? asset('storage/' . $applicant->resume) : null,
+                        'cover_letter'          => $applicant->cover_letter,
+                        'linkedin_profile'      => $applicant->linkedin_profile,
+                        'portfolio_website'     => $applicant->portfolio_website,
+                        'salary_expectations'   => $applicant->salary_expectations,
+                        'available_start_date'  => $applicant->available_start_date,
+                        'experience_years'      => $applicant->experience_years,
+                        'stage'                 => $applicant->stage,
+                        'created_at'            => $applicant->created_at,
+                        'updated_at'            => $applicant->updated_at,
+
+
+                        'department_name' => $applicant->jobPosting?->department?->department_name ?? null,
+
+                        'job_posting'           => $applicant->jobPosting,
+                    ];
+                }),
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching hired applicants: ' . $e->getMessage());
@@ -136,6 +174,7 @@ class ApplicantController extends Controller
             ], 500);
         }
     }
+
 
 
     public function getHiredApplicantById($id)
@@ -185,7 +224,7 @@ class ApplicantController extends Controller
                 $validated['201_file'] = $filePath;
             }
 
-            // ✅ Copy applicant's resume
+            // Copy applicant's resume
             $validated['resume'] = $applicant->resume;
 
             // Auto-fill from applicant
@@ -259,23 +298,43 @@ class ApplicantController extends Controller
     public function moveStage(Request $request, $id)
     {
         try {
+            // Validation
             $validated = $request->validate([
                 'stage' => 'required|in:new_application,screening,phone_screening,assessment,technical_interview,final_interview,offer_extended,hired',
             ]);
 
+            // Update applicant
             $applicant = Applicant::findOrFail($id);
             $applicant->update(['stage' => $validated['stage']]);
 
             return response()->json([
                 'isSuccess' => true,
-                'message' => 'Applicant moved to the next stage successfully.',
-                'data' => $applicant,
+                'message'   => 'Applicant moved to the next stage successfully.',
+                'data'      => $applicant,
             ]);
-        } catch (\Exception $e) {
-            Log::error('Error moving applicant stage: ' . $e->getMessage());
+        } catch (ValidationException $e) {
+            // Specific validation errors
             return response()->json([
                 'isSuccess' => false,
-                'message' => 'Failed to move applicant stage.',
+                'message'   => 'Validation failed.',
+                'errors'    => $e->errors(),
+            ], 422);
+        } catch (ModelNotFoundException $e) {
+            // Applicant not found
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Applicant not found.',
+            ], 404);
+        } catch (\Exception $e) {
+            // Unexpected error
+            Log::error('Error moving applicant stage: ' . $e->getMessage(), [
+                'stack' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'An unexpected error occurred while moving the applicant stage.',
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }

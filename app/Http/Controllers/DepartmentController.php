@@ -18,7 +18,7 @@ class DepartmentController extends Controller
             'head:id,first_name,last_name,email,role_id',
             'head.role:id,role_name'
         ])
-            ->withCount('employees') // ✅ adds total employees count
+            ->withCount('employees') //  adds total employees count
             ->where('is_archived', 0)
             ->paginate($perPage);
 
@@ -42,7 +42,7 @@ class DepartmentController extends Controller
                     'email'      => $dept->head->email,
                     'role_name'  => $dept->head->role ? $dept->head->role->role_name : null,
                 ] : null,
-                'total_employees' => $dept->employees_count, // ✅ total employees
+                'total_employees' => $dept->employees_count, // total employees
                 'is_active'  => $dept->is_active,
                 'is_archived' => $dept->is_archived,
                 'created_at' => $dept->created_at,

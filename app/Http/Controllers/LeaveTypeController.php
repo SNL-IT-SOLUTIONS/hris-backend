@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 class LeaveTypeController extends Controller
 {
     // ================================
-    // ✅ Get All Active Leave Types
+    // Get All Active Leave Types
     // ================================
     public function getAllLeaveTypes(Request $request)
     {
@@ -36,7 +36,7 @@ class LeaveTypeController extends Controller
     }
 
     // ================================
-    // ✅ Get Single Leave Type by ID
+    //  Get Single Leave Type by ID
     // ================================
     public function getLeaveTypeById($id)
     {
@@ -90,7 +90,7 @@ class LeaveTypeController extends Controller
     }
 
     // ================================
-    // ✅ Update Leave Type
+    //  Update Leave Type
     // ================================
     public function updateLeaveType(Request $request, $id)
     {
@@ -131,7 +131,7 @@ class LeaveTypeController extends Controller
     }
 
     // ================================
-    // ✅ Archive Leave Type (Soft Delete)
+    //  Archive Leave Type (Soft Delete)
     // ================================
     public function archiveLeaveType($id)
     {
