@@ -73,17 +73,109 @@ class AuthController extends Controller
             'isSuccess' => true,
             'message' => 'Login successful.',
             'role' => $role,
-            'user' => [
-                'id'            => $user->id,
-                'first_name'    => $user->first_name,
-                'last_name'     => $user->last_name,
-                'email'         => $user->email,
-                'username'      => $role === 'user' ? $user->username : null,
-                'phone'         => $role === 'employee' ? $user->phone : null,
-                'department_id' => $role === 'employee' ? $user->department_id : null,
-                'position_id'   => $role === 'employee' ? $user->position_id : null,
-                'face_id'   => $role === 'employee' ? $user->face_id : null,
+            'user' => $role === 'employee' ? [
+                'id' => $user->id,
+                'employee_id' => $user->employee_id,
+                'face_id' => $user->face_id,
+
+                // PERSONAL INFORMATION
+                'first_name' => $user->first_name,
+                'middle_name' => $user->middle_name,
+                'last_name' => $user->last_name,
+                'suffix' => $user->suffix,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'sex' => $user->sex,
+                'salary_mode' => $user->salary_mode,
+                'date_of_birth' => $user->date_of_birth,
+                'place_of_birth' => $user->place_of_birth,
+                'civil_status' => $user->civil_status,
+                'citizenship' => $user->citizenship,
+
+                // PHYSICAL INFO
+                'height_m' => $user->height_m,
+                'weight_kg' => $user->weight_kg,
+                'blood_type' => $user->blood_type,
+
+                // GOVERNMENT IDS
+                'gsis_no' => $user->gsis_no,
+                'pagibig_no' => $user->pagibig_no,
+                'philhealth_no' => $user->philhealth_no,
+                'sss_no' => $user->sss_no,
+                'tin_no' => $user->tin_no,
+
+                // ADDRESSES
+                'residential_address' => $user->residential_address,
+                'residential_zipcode' => $user->residential_zipcode,
+                'residential_tel_no' => $user->residential_tel_no,
+                'permanent_address' => $user->permanent_address,
+                'permanent_zipcode' => $user->permanent_zipcode,
+                'permanent_tel_no' => $user->permanent_tel_no,
+
+                // FAMILY INFO
+                'spouse_name' => $user->spouse_name,
+                'spouse_occupation' => $user->spouse_occupation,
+                'spouse_employer' => $user->spouse_employer,
+                'spouse_business_address' => $user->spouse_business_address,
+                'spouse_tel_no' => $user->spouse_tel_no,
+                'father_name' => $user->father_name,
+                'mother_name' => $user->mother_name,
+                'parents_address' => $user->parents_address,
+
+                // EDUCATION
+                'elementary_school_name' => $user->elementary_school_name,
+                'elementary_degree_course' => $user->elementary_degree_course,
+                'elementary_year_graduated' => $user->elementary_year_graduated,
+                'elementary_highest_level' => $user->elementary_highest_level,
+                'elementary_inclusive_dates' => $user->elementary_inclusive_dates,
+                'elementary_honors' => $user->elementary_honors,
+
+                'secondary_school_name' => $user->secondary_school_name,
+                'secondary_degree_course' => $user->secondary_degree_course,
+                'secondary_year_graduated' => $user->secondary_year_graduated,
+                'secondary_highest_level' => $user->secondary_highest_level,
+                'secondary_inclusive_dates' => $user->secondary_inclusive_dates,
+                'secondary_honors' => $user->secondary_honors,
+
+                'vocational_school_name' => $user->vocational_school_name,
+                'vocational_degree_course' => $user->vocational_degree_course,
+                'vocational_year_graduated' => $user->vocational_year_graduated,
+                'vocational_highest_level' => $user->vocational_highest_level,
+                'vocational_inclusive_dates' => $user->vocational_inclusive_dates,
+                'vocational_honors' => $user->vocational_honors,
+
+                'college_school_name' => $user->college_school_name,
+                'college_degree_course' => $user->college_degree_course,
+                'college_year_graduated' => $user->college_year_graduated,
+                'college_highest_level' => $user->college_highest_level,
+                'college_inclusive_dates' => $user->college_inclusive_dates,
+                'college_honors' => $user->college_honors,
+
+                'graduate_school_name' => $user->graduate_school_name,
+                'graduate_degree_course' => $user->graduate_degree_course,
+                'graduate_year_graduated' => $user->graduate_year_graduated,
+                'graduate_highest_level' => $user->graduate_highest_level,
+                'graduate_inclusive_dates' => $user->graduate_inclusive_dates,
+                'graduate_honors' => $user->graduate_honors,
+
+                // EMERGENCY CONTACT
+                'emergency_contact_name' => $user->emergency_contact_name,
+                'emergency_contact_number' => $user->emergency_contact_number,
+                'emergency_contact_relation' => $user->emergency_contact_relation,
+
+                // FILE
+                'resume' => $user->resume
+                    ? asset('storage/' . $user->resume)
+                    : null,
+            ] : [
+                // NON-EMPLOYEE USER
+                'id' => $user->id,
+                'first_name' => $user->first_name,
+                'last_name' => $user->last_name,
+                'email' => $user->email,
+                'username' => $user->username,
             ],
+
             'company_information' => $company ? [
                 'id' => $company->id,
                 'company_name' => $company->company_name,
