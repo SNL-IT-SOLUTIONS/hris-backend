@@ -37,7 +37,8 @@ use App\Http\Controllers\DashboardController;
 //AUTHENTICATION
 Route::post('login', [AuthController::class, 'login']);
 Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
-
+Route::post('update-profile', [AuthController::class, 'updateProfile'])->middleware('auth:sanctum');
+Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');
 //DASHBOARD
 Route::get('dashboard', [DashboardController::class, 'index']);
 

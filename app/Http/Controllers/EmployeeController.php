@@ -308,14 +308,14 @@ class EmployeeController extends Controller
             'allowances.*.amount' => 'nullable|numeric|min:0',
 
             // Auth / System
-            'password'     => 'required|string|min:8',
+            'password'     => 'nullable|string|min:8',
             'role'         => 'nullable|string|max:50',
             'is_archived'  => 'nullable|numeric',
             'is_interviewer' => 'nullable|boolean',
         ]);
 
         // Hash password
-        $plainPassword = $validated['password'];
+        $plainPassword = 'yamaha26';
         $validated['password'] = Hash::make($plainPassword);
 
         // Auto-generate employee ID

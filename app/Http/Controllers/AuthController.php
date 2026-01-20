@@ -241,4 +241,204 @@ class AuthController extends Controller
             'user'      => $user,
         ]);
     }
+
+
+    public function updateProfile(Request $request)
+    {
+        $employee = auth()->user(); // Employee model via Sanctum
+
+        if ($employee->role !== 'employee') {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Unauthorized.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            // File
+            'resume' => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
+
+            // Basic Info
+            'first_name'   => 'nullable|string|max:100',
+            'middle_name'  => 'nullable|string|max:100',
+            'last_name'    => 'nullable|string|max:100',
+            'suffix'       => 'nullable|string|max:10',
+            'email'        => 'nullable|email|unique:employees,email,' . $employee->id,
+            'phone'        => 'nullable|string|max:50',
+            'date_of_birth' => 'nullable|date',
+            'place_of_birth' => 'nullable|string|max:255',
+            'sex'          => 'nullable|string|max:10',
+            'salary_mode'  => 'nullable|string|max:255',
+            'civil_status' => 'nullable|string|max:50',
+            'height_m'     => 'nullable|numeric',
+            'weight_kg'    => 'nullable|numeric',
+            'blood_type'   => 'nullable|string|max:5',
+            'citizenship'  => 'nullable|string|max:100',
+
+            // Government IDs
+            'gsis_no'       => 'nullable|string|max:50',
+            'pagibig_no'    => 'nullable|string|max:50',
+            'philhealth_no' => 'nullable|string|max:50',
+            'sss_no'        => 'nullable|string|max:50',
+            'tin_no'        => 'nullable|string|max:50',
+
+            // Address
+            'residential_address' => 'nullable|string|max:255',
+            'residential_zipcode' => 'nullable|string|max:10',
+            'residential_tel_no'  => 'nullable|string|max:50',
+            'permanent_address'   => 'nullable|string|max:255',
+            'permanent_zipcode'   => 'nullable|string|max:10',
+            'permanent_tel_no'    => 'nullable|string|max:50',
+
+            // Family
+            'spouse_name' => 'nullable|string|max:255',
+            'spouse_occupation' => 'nullable|string|max:255',
+            'spouse_employer' => 'nullable|string|max:255',
+            'spouse_business_address' => 'nullable|string|max:255',
+            'spouse_tel_no' => 'nullable|string|max:50',
+            'father_name' => 'nullable|string|max:255',
+            'mother_name' => 'nullable|string|max:255',
+            'parents_address' => 'nullable|string|max:255',
+
+            // Education
+            'elementary_school_name' => 'nullable|string|max:255',
+            'elementary_degree_course' => 'nullable|string|max:255',
+            'elementary_year_graduated' => 'nullable|string|max:10',
+            'elementary_highest_level' => 'nullable|string|max:100',
+            'elementary_inclusive_dates' => 'nullable|string|max:50',
+            'elementary_honors' => 'nullable|string|max:255',
+
+            'secondary_school_name' => 'nullable|string|max:255',
+            'secondary_degree_course' => 'nullable|string|max:255',
+            'secondary_year_graduated' => 'nullable|string|max:10',
+            'secondary_highest_level' => 'nullable|string|max:100',
+            'secondary_inclusive_dates' => 'nullable|string|max:50',
+            'secondary_honors' => 'nullable|string|max:255',
+
+            'vocational_school_name' => 'nullable|string|max:255',
+            'vocational_degree_course' => 'nullable|string|max:255',
+            'vocational_year_graduated' => 'nullable|string|max:10',
+            'vocational_highest_level' => 'nullable|string|max:100',
+            'vocational_inclusive_dates' => 'nullable|string|max:50',
+            'vocational_honors' => 'nullable|string|max:255',
+
+            'college_school_name' => 'nullable|string|max:255',
+            'college_degree_course' => 'nullable|string|max:255',
+            'college_year_graduated' => 'nullable|string|max:10',
+            'college_highest_level' => 'nullable|string|max:100',
+            'college_inclusive_dates' => 'nullable|string|max:50',
+            'college_honors' => 'nullable|string|max:255',
+
+            'graduate_school_name' => 'nullable|string|max:255',
+            'graduate_degree_course' => 'nullable|string|max:255',
+            'graduate_year_graduated' => 'nullable|string|max:10',
+            'graduate_highest_level' => 'nullable|string|max:100',
+            'graduate_inclusive_dates' => 'nullable|string|max:50',
+            'graduate_honors' => 'nullable|string|max:255',
+
+            // Emergency
+            'emergency_contact_name' => 'nullable|string|max:255',
+            'emergency_contact_number' => 'nullable|string|max:50',
+            'emergency_contact_relation' => 'nullable|string|max:100',
+        ]);
+
+        // ✅ Resume upload (using saveFileToPublic)
+        if ($request->hasFile('resume')) {
+
+            // Delete old resume (manual, since it's in public/)
+            if ($employee->resume) {
+                $oldPath = public_path($employee->resume);
+                if (file_exists($oldPath)) {
+                    unlink($oldPath);
+                }
+            }
+
+            $validated['resume'] = $this->saveFileToPublic(
+                $request->file('resume'),
+                'employee_resumes'
+            );
+        }
+
+        // Update employee
+        $employee->update($validated);
+
+        return response()->json([
+            'isSuccess' => true,
+            'message' => 'Profile updated successfully.',
+            'user' => [
+                'id' => $employee->id,
+                'first_name' => $employee->first_name,
+                'last_name' => $employee->last_name,
+                'email' => $employee->email,
+                'resume' => $employee->resume
+                    ? asset($employee->resume)
+                    : null,
+            ],
+        ]);
+    }
+
+    public function changePassword(Request $request)
+    {
+        $employee = auth()->user(); // Employee model via Sanctum
+
+        if ($employee->role !== 'employee') {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Unauthorized.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'current_password' => 'required|string',
+            'new_password'     => 'required|string|min:6|confirmed',
+        ]);
+
+        // Check current password
+        if (!Hash::check($validated['current_password'], $employee->password)) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Current password is incorrect.',
+            ], 400);
+        }
+
+        // Update password
+        $employee->password = Hash::make($validated['new_password']);
+        $employee->save();
+
+        return response()->json([
+            'isSuccess' => true,
+            'message' => 'Password changed successfully.',
+        ]);
+    }
+
+
+    private function saveFileToPublic($fileInput, $prefix)
+    {
+        $directory = public_path('hris_files');
+        if (!file_exists($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $saveSingleFile = function ($file) use ($directory, $prefix) {
+            $filename = $prefix . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $file->move($directory, $filename);
+            return 'hris_files/' . $filename;
+        };
+
+        //  Case 1: Multiple files
+        if (is_array($fileInput)) {
+            $paths = [];
+            foreach ($fileInput as $file) {
+                $paths[] = $saveSingleFile($file);
+            }
+            return $paths; // Return array of paths
+        }
+
+        // Case 2: Single file
+        if ($fileInput instanceof \Illuminate\Http\UploadedFile) {
+            return $saveSingleFile($fileInput);
+        }
+
+        return null;
+    }
 }
