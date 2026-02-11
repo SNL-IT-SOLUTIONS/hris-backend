@@ -17,7 +17,14 @@ class UserController extends Controller
     {
         $perPage = $request->input('per_page', 10);
 
-        $users = User::where('is_archived', 0)->paginate($perPage);
+        $users = User::select(
+            'users.*',
+            'roles.role_name'
+        )
+            ->leftJoin('roles', 'roles.id', '=', 'users.role_id')
+            ->where('users.is_archived', 0)
+            ->where('roles.is_archived', 0)
+            ->paginate($perPage);
 
         if ($users->isEmpty()) {
             return response()->json([
@@ -44,6 +51,7 @@ class UserController extends Controller
             ],
         ]);
     }
+
 
     /**
      * Get single user by ID
@@ -132,7 +140,7 @@ class UserController extends Controller
                 'last_name'  => 'sometimes|string|max:150',
                 'username'   => 'sometimes|string|unique:users,username,' . $id,
                 'email'      => 'sometimes|email|unique:users,email,' . $id,
-                'password'   => 'nullable|string|min:6',
+                'password'   => 'nullable|string|min:8',
                 'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
                 'role'       => 'nullable|in:Admin,HR,Manager,Employee',
                 'status'     => 'nullable|in:Active,Inactive,Suspended',

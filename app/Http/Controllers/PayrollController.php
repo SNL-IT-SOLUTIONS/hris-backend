@@ -32,6 +32,7 @@ class PayrollController extends Controller
             'employees.*.days_worked'    => 'required|numeric|min:0',
             'employees.*.overtime_hours' => 'nullable|numeric|min:0',
             'employees.*.absences'       => 'nullable|numeric|min:0',
+            'employees.*.remarks'       => 'nullable|string|min:0',
         ]);
 
         DB::beginTransaction();
@@ -133,6 +134,7 @@ class PayrollController extends Controller
                     'total_loan_deductions' => $total_loan_deductions,
                     'total_deductions'      => $total_deductions,
                     'net_pay'               => $net,
+                    'remarks'               => $emp['remarks'] ?? null,
                 ]);
                 // ================================
 
@@ -361,7 +363,7 @@ class PayrollController extends Controller
                 ->with([
                     'payrollRecords' => function ($query) use ($user) {
                         $query->where('employee_id', $user->id)
-                            ->select('id', 'payroll_period_id', 'employee_id', 'gross_pay', 'total_deductions', 'net_pay');
+                            ->select('id', 'payroll_period_id', 'employee_id', 'gross_pay', 'total_deductions', 'net_pay', 'remarks');
                     },
                     'payrollRecords.employee:id,first_name,last_name,department_id,position_id',
                     'payrollRecords.employee.department:id,department_name',
@@ -531,18 +533,19 @@ class PayrollController extends Controller
             $employeeId = $user->id; // employee primary key
 
 
-            $perPage = $request->input('per_page', 10);
+            $perPage = $request->input('per_page', 1);
             $search  = $request->input('search');
 
             $query = PayrollRecord::with([
-                'payrollPeriod:id,period_name,pay_date,cutoff_start_date,cutoff_end_date',
-
+                'payrollPeriod:id,period_name,pay_date,cutoff_start_date,cutoff_end_date,status',
+                'employee:id,base_salary',
                 'allowances.allowanceType:id,type_name',
                 'deductions.benefitType:id,benefit_name',
                 'deductions.loan.loanType:id,type_name',
             ])
                 ->where('employee_id', $employeeId)
                 ->where('is_archived', false)
+                ->where('status', 'processed')
                 ->orderByDesc('created_at');
 
 
@@ -589,6 +592,7 @@ class PayrollController extends Controller
                     'generated_at'     => $record->created_at->format('F d, Y'),
                     'allowances'       => $allowances,
                     'deductions'       => $deductions,
+                    'basic salary'     => number_format($record->employee->base_salary ?? 0, 2),
                 ];
             });
 
@@ -706,6 +710,7 @@ class PayrollController extends Controller
 
             $record = PayrollRecord::with([
                 'payrollPeriod',
+                'employee:id,base_salary',
                 'allowances.allowanceType',
                 'deductions.benefitType',
                 'deductions.loan.loanType',
@@ -763,7 +768,9 @@ class PayrollController extends Controller
                     'deductions'        => $deductions,
                     'total_deductions'  => number_format($record->total_deductions, 2),
                     'net_pay'           => number_format($record->net_pay, 2),
+                    'remarks'          => $record->remarks,
                     'generated_at'      => $record->created_at->format('F d, Y h:i A'),
+                    'base_salary'      => number_format($employee->base_salary ?? 0, 2),
                 ],
             ]);
         } catch (\Exception $e) {

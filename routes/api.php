@@ -37,7 +37,9 @@ use App\Http\Controllers\DashboardController;
 //AUTHENTICATION
 Route::post('login', [AuthController::class, 'login']);
 Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+Route::get('my-profile', [AuthController::class, 'getMyProfile'])->middleware('auth:sanctum');
 Route::post('update-profile', [AuthController::class, 'updateProfile'])->middleware('auth:sanctum');
+Route::post('update-profile-picture', [AuthController::class, 'updateProfilePicture'])->middleware('auth:sanctum');
 Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');
 //DASHBOARD
 Route::get('dashboard', [DashboardController::class, 'index']);
@@ -154,7 +156,7 @@ Route::controller(RoleController::class)->group(function () {
 
 //SETUP - USERS
 Route::controller(UserController::class)->group(function () {
-    Route::get('users', 'getUsers');
+    Route::get('users', 'getAllUsers');
     Route::get('users/{id}', 'getUserById');
     Route::post('create/users', 'createUser');
     Route::post('update/users/{id}', 'updateUser');

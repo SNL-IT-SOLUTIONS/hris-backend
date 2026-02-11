@@ -77,6 +77,9 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'employee_id' => $user->employee_id,
                 'face_id' => $user->face_id,
+                'profile_picture' => $user->profile_picture
+                    ? asset($user->profile_picture)
+                    : null,
 
                 // PERSONAL INFORMATION
                 'first_name' => $user->first_name,
@@ -242,10 +245,124 @@ class AuthController extends Controller
         ]);
     }
 
+    public function getMyProfile(Request $request)
+    {
+        $employee = auth()->user(); // Employee model via Sanctum
+
+        if ($employee->role !== 'employee') {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Unauthorized.',
+            ], 403);
+        }
+
+        return response()->json([
+            'isSuccess' => true,
+            'user' => [
+                'id' => $employee->id,
+                'employee_id' => $employee->employee_id,
+                'face_id' => $employee->face_id,
+
+                // PERSONAL INFORMATION
+                'first_name' => $employee->first_name,
+                'middle_name' => $employee->middle_name,
+                'last_name' => $employee->last_name,
+                'suffix' => $employee->suffix,
+                'email' => $employee->email,
+                'phone' => $employee->phone,
+                'sex' => $employee->sex,
+                'salary_mode' => $employee->salary_mode,
+                'date_of_birth' => $employee->date_of_birth,
+                'place_of_birth' => $employee->place_of_birth,
+                'civil_status' => $employee->civil_status,
+                'citizenship' => $employee->citizenship,
+
+                // PHYSICAL INFO
+                'height_m' => $employee->height_m,
+                'weight_kg' => $employee->weight_kg,
+                'blood_type' => $employee->blood_type,
+
+                // GOVERNMENT IDS
+                'gsis_no' => $employee->gsis_no,
+                'pagibig_no' => $employee->pagibig_no,
+                'philhealth_no' => $employee->philhealth_no,
+                'sss_no' => $employee->sss_no,
+                'tin_no' => $employee->tin_no,
+
+                // ADDRESSES
+                'residential_address' => $employee->residential_address,
+                'residential_zipcode' => $employee->residential_zipcode,
+                'residential_tel_no' => $employee->residential_tel_no,
+                'permanent_address' => $employee->permanent_address,
+                'permanent_zipcode' => $employee->permanent_zipcode,
+                'permanent_tel_no' => $employee->permanent_tel_no,
+
+                // FAMILY INFO
+                'spouse_name' => $employee->spouse_name,
+                'spouse_occupation' => $employee->spouse_occupation,
+                'spouse_employer' => $employee->spouse_employer,
+                'spouse_business_address' => $employee->spouse_business_address,
+                'spouse_tel_no' => $employee->spouse_tel_no,
+                'father_name' => $employee->father_name,
+                'mother_name' => $employee->mother_name,
+                'parents_address' => $employee->parents_address,
+
+                // EDUCATION
+                'elementary_school_name' => $employee->elementary_school_name,
+                'elementary_degree_course' => $employee->elementary_degree_course,
+                'elementary_year_graduated' => $employee->elementary_year_graduated,
+                'elementary_highest_level' => $employee->elementary_highest_level,
+                'elementary_inclusive_dates' => $employee->elementary_inclusive_dates,
+                'elementary_honors' => $employee->elementary_honors,
+
+                'secondary_school_name' => $employee->secondary_school_name,
+                'secondary_degree_course' => $employee->secondary_degree_course,
+                'secondary_year_graduated' => $employee->secondary_year_graduated,
+                'secondary_highest_level' => $employee->secondary_highest_level,
+                'secondary_inclusive_dates' => $employee->secondary_inclusive_dates,
+                'secondary_honors' => $employee->secondary_honors,
+
+                'vocational_school_name' => $employee->vocational_school_name,
+                'vocational_degree_course' => $employee->vocational_degree_course,
+                'vocational_year_graduated' => $employee->vocational_year_graduated,
+                'vocational_highest_level' => $employee->vocational_highest_level,
+                'vocational_inclusive_dates' => $employee->vocational_inclusive_dates,
+                'vocational_honors' => $employee->vocational_honors,
+
+                'college_school_name' => $employee->college_school_name,
+                'college_degree_course' => $employee->college_degree_course,
+                'college_year_graduated' => $employee->college_year_graduated,
+                'college_highest_level' => $employee->college_highest_level,
+                'college_inclusive_dates' => $employee->college_inclusive_dates,
+                'college_honors' => $employee->college_honors,
+
+                'graduate_school_name' => $employee->graduate_school_name,
+                'graduate_degree_course' => $employee->graduate_degree_course,
+                'graduate_year_graduated' => $employee->graduate_year_graduated,
+                'graduate_highest_level' => $employee->graduate_highest_level,
+                'graduate_inclusive_dates' => $employee->graduate_inclusive_dates,
+                'graduate_honors' => $employee->graduate_honors,
+
+                // EMERGENCY CONTACT
+                'emergency_contact_name' => $employee->emergency_contact_name,
+                'emergency_contact_number' => $employee->emergency_contact_number,
+                'emergency_contact_relation' => $employee->emergency_contact_relation,
+
+                // FILES
+                'resume' => $employee->resume
+                    ? asset($employee->resume)
+                    : null,
+
+                'profile_picture' => $employee->profile_picture
+                    ? asset($employee->profile_picture)
+                    : null,
+            ],
+        ]);
+    }
 
     public function updateProfile(Request $request)
     {
-        $employee = auth()->user(); // Employee model via Sanctum
+        $employee = auth()->user();
 
         if ($employee->role !== 'employee') {
             return response()->json([
@@ -257,7 +374,7 @@ class AuthController extends Controller
         $validated = $request->validate([
             // File
             'resume' => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
-
+            'profile_picture' => 'nullable|file|mimes:jpeg,png|max:2048',
             // Basic Info
             'first_name'   => 'nullable|string|max:100',
             'middle_name'  => 'nullable|string|max:100',
@@ -342,8 +459,8 @@ class AuthController extends Controller
             'emergency_contact_relation' => 'nullable|string|max:100',
         ]);
 
-        // ✅ Resume upload (using saveFileToPublic)
-        if ($request->hasFile('resume')) {
+        //  Resume upload (using saveFileToPublic)
+        if ($request->hasFile('resume', 'profile_picture')) {
 
             // Delete old resume (manual, since it's in public/)
             if ($employee->resume) {
@@ -353,9 +470,21 @@ class AuthController extends Controller
                 }
             }
 
+            if ($employee->profile_picture) {
+                $oldProfilePicturePath = public_path($employee->profile_picture);
+                if (file_exists($oldProfilePicturePath)) {
+                    unlink($oldProfilePicturePath);
+                }
+            }
+
             $validated['resume'] = $this->saveFileToPublic(
                 $request->file('resume'),
                 'employee_resumes'
+            );
+
+            $validated['profile_picture'] = $this->saveFileToPublic(
+                $request->file('profile_picture'),
+                'employee_profile_pictures'
             );
         }
 
@@ -372,6 +501,54 @@ class AuthController extends Controller
                 'email' => $employee->email,
                 'resume' => $employee->resume
                     ? asset($employee->resume)
+                    : null,
+            ],
+        ]);
+    }
+
+
+    public function updateProfilePicture(Request $request)
+    {
+        $employee = auth()->user(); // Employee model via Sanctum
+
+        if ($employee->role !== 'employee') {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Unauthorized.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'profile_picture' => 'required|file|mimes:jpeg,png|max:2048',
+        ]);
+
+        // Delete old profile picture
+        if ($employee->profile_picture) {
+            $oldPath = public_path($employee->profile_picture);
+            if (file_exists($oldPath)) {
+                unlink($oldPath);
+            }
+        }
+
+        // Save new profile picture
+        $validated['profile_picture'] = $this->saveFileToPublic(
+            $request->file('profile_picture'),
+            'employee_profile_pictures'
+        );
+
+        // Update employee
+        $employee->update($validated);
+
+        return response()->json([
+            'isSuccess' => true,
+            'message' => 'Profile picture updated successfully.',
+            'user' => [
+                'id' => $employee->id,
+                'first_name' => $employee->first_name,
+                'last_name' => $employee->last_name,
+                'email' => $employee->email,
+                'profile_picture' => $employee->profile_picture
+                    ? asset($employee->profile_picture)
                     : null,
             ],
         ]);
