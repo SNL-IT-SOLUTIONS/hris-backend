@@ -74,14 +74,31 @@ class AttendanceController extends Controller
     public function getAllAttendances()
     {
         $attendances = Attendance::with([
-            'employee:id,first_name,last_name,email,department_id,position_id'
-        ])->orderBy('created_at', 'desc')->get();
+            'employee:id,profile_picture,first_name,last_name,email,department_id,position_id'
+        ])
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         $attendances->transform(function ($attendance) {
-            $attendance->clock_in = $attendance->adjusted_clock_in ?? $attendance->clock_in;
+
+            // Override with adjusted times if exists
+            $attendance->clock_in  = $attendance->adjusted_clock_in ?? $attendance->clock_in;
             $attendance->clock_out = $attendance->adjusted_clock_out ?? $attendance->clock_out;
-            $attendance->clock_in_image = $attendance->clock_in_image ? asset($attendance->clock_in_image) : null;
-            $attendance->clock_out_image = $attendance->clock_out_image ? asset($attendance->clock_out_image) : null;
+
+            // Convert attendance images to full URL
+            $attendance->clock_in_image = $attendance->clock_in_image
+                ? asset($attendance->clock_in_image)
+                : null;
+
+            $attendance->clock_out_image = $attendance->clock_out_image
+                ? asset($attendance->clock_out_image)
+                : null;
+
+            // Convert employee profile picture to full URL
+            if ($attendance->employee && $attendance->employee->profile_picture) {
+                $attendance->employee->profile_picture = asset($attendance->employee->profile_picture);
+            }
+
             return $attendance;
         });
 
