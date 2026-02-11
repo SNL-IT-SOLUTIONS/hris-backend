@@ -537,7 +537,7 @@ class PayrollController extends Controller
             $search  = $request->input('search');
 
             $query = PayrollRecord::with([
-                'payrollPeriod:id,period_name,pay_date,cutoff_start_date,cutoff_end_date,status',
+                'payrollPeriod:id,period_name,pay_date,cutoff_start_date,cutoff_end_date',
                 'employee:id,base_salary',
                 'allowances.allowanceType:id,type_name',
                 'deductions.benefitType:id,benefit_name',
@@ -699,7 +699,7 @@ class PayrollController extends Controller
     public function getMyPayslips(Request $request, $recordId)
     {
         try {
-            $employee = auth()->user(); // THIS IS THE LOGGED-IN EMPLOYEE
+            $employee = auth()->user();
 
             if (!$employee) {
                 return response()->json([
