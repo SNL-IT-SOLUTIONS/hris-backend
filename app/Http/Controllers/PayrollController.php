@@ -533,7 +533,7 @@ class PayrollController extends Controller
             $employeeId = $user->id; // employee primary key
 
 
-            $perPage = $request->input('per_page', 1);
+            $perPage = $request->input('per_page', 5);
             $search  = $request->input('search');
 
             $query = PayrollRecord::with([
@@ -545,7 +545,6 @@ class PayrollController extends Controller
             ])
                 ->where('employee_id', $employeeId)
                 ->where('is_archived', false)
-                ->where('status', 'processed')
                 ->orderByDesc('created_at');
 
 
