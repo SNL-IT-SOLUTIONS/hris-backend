@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
-    // No auth middleware — public access
 
     /**
      * Get all active users
