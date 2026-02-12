@@ -290,8 +290,8 @@ class PayrollController extends Controller
     public function getEmployees(Request $request)
     {
         $request->validate([
-            'cutoff_start_date' => 'required|date',
-            'cutoff_end_date'   => 'required|date|after_or_equal:cutoff_start_date',
+            'cutoff_start_date' => 'nullable|date',
+            'cutoff_end_date'   => 'nullable|date|after_or_equal:cutoff_start_date',
         ]);
 
         try {
