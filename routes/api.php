@@ -192,7 +192,7 @@ Route::controller(PositionTypeController::class)->group(function () {
 
 //PAYROLL
 Route::controller(PayrollController::class)->group(function () {
-    Route::get('payroll/employees', 'getEmployees');
+    Route::post('payroll/employees', 'getEmployees');
     Route::post('payroll/generate', 'createPayrollPeriod');
     Route::post('payroll/update/{periodId}', 'updatePayrollPeriod');
     ROute::post('payroll/archive/{periodId}', 'archivePayrollPeriod');
