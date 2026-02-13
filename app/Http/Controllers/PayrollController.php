@@ -624,7 +624,7 @@ class PayrollController extends Controller
             $employeeId = $user->id; // employee primary key
 
 
-            $perPage = $request->input('per_page', 5);
+            $perPage = $request->input('per_page', 12);
             $search  = $request->input('search');
 
             $query = PayrollRecord::with([
