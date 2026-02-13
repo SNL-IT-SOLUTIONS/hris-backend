@@ -23,6 +23,7 @@ use App\Http\Controllers\LoanController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\LoanTypeController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\AnnouncementBoardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -238,6 +239,15 @@ Route::controller(LoanController::class)->group(function () {
     Route::post('loans/{id}/approve', 'approveLoan');
     Route::post('loans/{id}/cancel', 'cancelLoan');
     Route::middleware('auth:sanctum')->get('my-loans', [LoanController::class, 'getMyLoans']);
+});
+
+Route::controller(AnnouncementBoardController::class)->group(function () {
+
+    Route::post('create/announcements', 'createAnnouncement');
+    Route::post('update/announcements/{id}', 'updateAnnouncement');
+    Route::get('announcements', 'getAnnouncements');
+    Route::get('announcements/{id}', 'getAnnouncementById');
+    Route::post('announcements/{id}/archive', 'archiveAnnouncement');
 });
 
 
