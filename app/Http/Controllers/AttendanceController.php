@@ -176,13 +176,25 @@ class AttendanceController extends Controller
             $employee = $user; // use authenticated user
 
             // Check if already clocked in today
+            // Check if already clocked in (open attendance)
             $existing = Attendance::where('employee_id', $employee->id)
                 ->whereNull('clock_out')
+                ->orderBy('clock_in', 'desc')
                 ->first();
 
             if ($existing) {
-                return response()->json(['message' => 'Already clocked in today.'], 400);
+
+                $hoursOpen = Carbon::parse($existing->clock_in)
+                    ->diffInHours(Carbon::now());
+
+                // If less than 15 hours → block
+                if ($hoursOpen < 15) {
+                    return response()->json([
+                        'message' => 'Already clocked in.'
+                    ], 400);
+                }
             }
+
 
             // Save clock-in image (if provided)
             $imagePath = null;
