@@ -177,7 +177,7 @@ class AttendanceController extends Controller
 
             // Check if already clocked in today
             $existing = Attendance::where('employee_id', $employee->id)
-                ->whereDate('clock_in', Carbon::today())
+                ->whereNull('clock_out')
                 ->first();
 
             if ($existing) {
@@ -236,7 +236,8 @@ class AttendanceController extends Controller
 
             // Find today's attendance
             $attendance = Attendance::where('employee_id', $employee->id)
-                ->whereDate('clock_in', Carbon::today())
+                ->whereNull('clock_out')
+                ->orderBy('clock_in', 'desc')
                 ->first();
 
             if (!$attendance) {
