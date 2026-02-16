@@ -230,62 +230,91 @@ class AttendanceController extends Controller
             $user = auth()->user();
 
             if (!$user) {
-                return response()->json(['message' => 'Unauthorized. Please log in.'], 401);
+                return response()->json([
+                    'message' => 'Unauthorized. Please log in.'
+                ], 401);
             }
 
             $validator = Validator::make($request->all(), [
-                'face_image' => 'nullable|file|image|mimes:jpeg,png,jpg|max:5120',
+                'report_today' => 'nullable|string',
+                'face_image'   => 'nullable|file|image|mimes:jpeg,png,jpg|max:5120',
             ]);
 
             if ($validator->fails()) {
                 return response()->json([
-                    'message' => 'Invalid image.',
-                    'errors' => $validator->errors()
+                    'message' => 'Invalid input.',
+                    'errors'  => $validator->errors()
                 ], 422);
             }
 
             $employee = $user;
 
-            // Find today's attendance
+            // Find latest open attendance (no clock_out yet)
             $attendance = Attendance::where('employee_id', $employee->id)
                 ->whereNull('clock_out')
                 ->orderBy('clock_in', 'desc')
                 ->first();
 
             if (!$attendance) {
-                return response()->json(['message' => 'You have not clocked in yet.'], 400);
+                return response()->json([
+                    'message' => 'You have not clocked in yet.'
+                ], 400);
             }
 
-            if ($attendance->clock_out) {
-                return response()->json(['message' => 'Already clocked out today.'], 400);
+            // Extra safety check
+            if ($attendance->clock_out !== null) {
+                return response()->json([
+                    'message' => 'Already clocked out.'
+                ], 400);
             }
 
-            // Save clock-out image (if provided)
+            // Save clock-out image if exists
             $imagePath = null;
             if ($request->hasFile('face_image')) {
                 $uploadedFile = $request->file('face_image');
-                $imagePath = $this->saveFileToPublic($uploadedFile, 'attendance_out_' . $employee->id . '_' . time());
+                $imagePath = $this->saveFileToPublic(
+                    $uploadedFile,
+                    'attendance_out_' . $employee->id . '_' . time()
+                );
             }
 
             $attendance->clock_out = Carbon::now();
             $attendance->clock_out_image = $imagePath;
-            $attendance->method = $request->hasFile('face_image') ? 'Facial Recognition' : 'Manual';
+            $attendance->report_today = $request->report_today;
+            $attendance->method = $request->hasFile('face_image')
+                ? 'Facial Recognition'
+                : 'Manual';
 
+            // Calculate hours worked if method exists
             if (method_exists($attendance, 'calculateHoursWorked')) {
                 $attendance->calculateHoursWorked();
+            } else {
+                // Fallback manual calculation
+                if ($attendance->clock_in && $attendance->clock_out) {
+                    $attendance->hours_worked = Carbon::parse($attendance->clock_in)
+                        ->diffInMinutes(Carbon::parse($attendance->clock_out)) / 60;
+                }
             }
 
             $attendance->save();
 
             return response()->json([
-                'message' => 'Clocked out successfully!',
+                'message'  => 'Clocked out successfully!',
                 'employee' => $employee->first_name . ' ' . $employee->last_name,
-                'attendance' => $attendance,
+                'attendance' => [
+                    'id'             => $attendance->id,
+                    'clock_in'       => $attendance->clock_in,
+                    'clock_out'      => $attendance->clock_out,
+                    'hours_worked'   => $attendance->hours_worked ?? null,
+                    'method'         => $attendance->method,
+                    'report_today'   => $attendance->report_today,
+                    'clock_out_image' => $attendance->clock_out_image,
+                ]
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Failed to clock out.',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage()
             ], 500);
         }
     }

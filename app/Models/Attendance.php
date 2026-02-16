@@ -21,6 +21,7 @@ class Attendance extends Model
         'adjusted_by',
         'hours_worked',
         'status',
+        'report_today',
         'remarks',
         'clock_in_image',
         'clock_out_image',
