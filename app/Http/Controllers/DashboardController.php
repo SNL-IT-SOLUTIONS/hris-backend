@@ -164,7 +164,7 @@ class DashboardController extends Controller
                         ->orWhere('expire_at', '>=', $now);
                 })
                 ->orderBy('publish_at', 'desc')
-                ->take(3)
+                ->take(4)
                 ->get(['id', 'title', 'content', 'publish_at', 'expire_at', 'created_at']);
 
 
