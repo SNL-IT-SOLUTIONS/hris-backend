@@ -44,7 +44,7 @@ Route::post('update-profile-picture', [AuthController::class, 'updateProfilePict
 Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');
 //DASHBOARD
 Route::get('dashboard', [DashboardController::class, 'index']);
-Route::get('dashboard/employees', [DashboardController::class, 'employeesDashboard']);
+Route::get('dashboard/employees', [DashboardController::class, 'employeesDashboard'])->middleware('auth:sanctum');
 
 
 //RECRUITMENT - JOB POSTINGS
