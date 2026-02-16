@@ -111,6 +111,10 @@ class DashboardController extends Controller
             // Total Gross Amount of Payslips
             $totalPayslipAmount = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
+                ->sum('gross_pay');
+
+            $totalPayslipCount = PayrollRecord::where('employee_id', $employee->id)
+                ->where('is_archived', 0)
                 ->count();
 
 
@@ -169,6 +173,7 @@ class DashboardController extends Controller
                     'total_attendance' => $totalAttendance,
                     'total_net_pays' => $totalNetPays,
                     'total_payslip_amount' => $totalPayslipAmount,
+                    'total_payslip_count' => $totalPayslipCount,
                 ],
 
                 'announcements' => $announcements,
