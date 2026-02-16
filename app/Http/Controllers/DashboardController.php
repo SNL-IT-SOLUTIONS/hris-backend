@@ -141,7 +141,7 @@ class DashboardController extends Controller
             $recentPayslips = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
                 ->orderBy('created_at', 'desc')
-                ->take(5)
+                ->take(3)
                 ->get();
 
 
@@ -164,7 +164,7 @@ class DashboardController extends Controller
                         ->orWhere('expire_at', '>=', $now);
                 })
                 ->orderBy('publish_at', 'desc')
-                ->take(3)
+                ->take(5)
                 ->get(['id', 'title', 'content', 'publish_at', 'expire_at', 'created_at']);
 
 
