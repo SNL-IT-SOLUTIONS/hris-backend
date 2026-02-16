@@ -40,14 +40,23 @@ class AnnouncementBoardController extends Controller
      */
     public function createAnnouncement(Request $request)
     {
+        $user = auth()->user();
+
+        if (!$user) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Unauthorized.'
+            ], 401);
+        }
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'content' => 'required|string',
-            'posted_by' => 'required|exists:users,id',
             'publish_at' => 'nullable|date',
             'expire_at' => 'nullable|date|after:publish_at',
         ]);
 
+        $validated['posted_by'] = $user->id;
         $validated['is_active'] = 1;
         $validated['is_archived'] = 0;
 
@@ -59,6 +68,7 @@ class AnnouncementBoardController extends Controller
             'data' => $announcement
         ], 201);
     }
+
 
     /**
      * Get single announcement
