@@ -163,7 +163,7 @@ class DashboardController extends Controller
                     $query->whereNull('expire_at')
                         ->orWhere('expire_at', '>=', $now);
                 })
-                ->orderBy('publish_at', 'desc')
+                ->orderBy('created_at', 'desc')
                 ->take(4)
                 ->get(['id', 'title', 'content', 'publish_at', 'expire_at', 'created_at']);
 
