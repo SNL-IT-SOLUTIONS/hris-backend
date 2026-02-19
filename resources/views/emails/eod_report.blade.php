@@ -6,13 +6,16 @@
     <title>{{ $subjectLine }}</title>
 </head>
 
-<body>
-    <p>End of Day Report,</p>
-    <hr>
-    <pre>{{ $reportContent }}</pre>
+<body style="font-family: Arial, sans-serif;">
+
+    <p><strong>End of Day Report</strong></p>
     <hr>
 
+    {!! $reportContent !!}
+
+    <hr>
     <p>Thank you.</p>
+
 </body>
 
 </html>
