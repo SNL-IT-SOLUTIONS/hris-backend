@@ -759,6 +759,7 @@ class PayrollController extends Controller
                 'payslip'   => [
                     'employee_name'     => "{$record->employee->first_name} {$record->employee->last_name}",
                     'period'            => $record->payrollPeriod->period_name,
+                    'remarks'           => $record->remarks,
                     'daily_rate'        => number_format($record->daily_rate, 2),
                     'days_worked'       => number_format($record->days_worked, 2),
                     'gross_base'        => number_format($record->gross_base, 2),
