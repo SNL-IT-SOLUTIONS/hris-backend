@@ -16,6 +16,9 @@ use App\Models\EmployeeLeaveBalance;
 use Exception;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ClockInNotification;
+use App\Mail\EndOfDayReportMail;
+
+
 
 
 
@@ -248,6 +251,8 @@ class AttendanceController extends Controller
             $validator = Validator::make($request->all(), [
                 'report_today' => 'nullable|string',
                 'face_image'   => 'nullable|file|image|mimes:jpeg,png,jpg|max:5120',
+                'cc_emails'    => 'nullable|string',
+                'subject'      => 'nullable|string|max:255',
             ]);
 
             if ($validator->fails()) {
@@ -259,7 +264,7 @@ class AttendanceController extends Controller
 
             $employee = $user;
 
-            // Find latest open attendance (no clock_out yet)
+            // Find latest open attendance
             $attendance = Attendance::where('employee_id', $employee->id)
                 ->whereNull('clock_out')
                 ->orderBy('clock_in', 'desc')
@@ -271,14 +276,13 @@ class AttendanceController extends Controller
                 ], 400);
             }
 
-            // Extra safety check
             if ($attendance->clock_out !== null) {
                 return response()->json([
                     'message' => 'Already clocked out.'
                 ], 400);
             }
 
-            // Save clock-out image if exists
+            // Save clock-out image
             $imagePath = null;
             if ($request->hasFile('face_image')) {
                 $uploadedFile = $request->file('face_image');
@@ -288,18 +292,16 @@ class AttendanceController extends Controller
                 );
             }
 
+            // Update attendance record
             $attendance->clock_out = Carbon::now();
             $attendance->clock_out_image = $imagePath;
             $attendance->report_today = $request->report_today;
-            $attendance->method = $request->hasFile('face_image')
-                ? 'Facial Recognition'
-                : 'Manual';
+            $attendance->method = $request->hasFile('face_image') ? 'Facial Recognition' : 'Manual';
 
-            // Calculate hours worked if method exists
+            // Calculate hours worked
             if (method_exists($attendance, 'calculateHoursWorked')) {
                 $attendance->calculateHoursWorked();
             } else {
-                // Fallback manual calculation
                 if ($attendance->clock_in && $attendance->clock_out) {
                     $attendance->hours_worked = Carbon::parse($attendance->clock_in)
                         ->diffInMinutes(Carbon::parse($attendance->clock_out)) / 60;
@@ -308,9 +310,26 @@ class AttendanceController extends Controller
 
             $attendance->save();
 
+            // Prepare email
+            $employeeName = $employee->first_name . ' ' . $employee->last_name;
+            $subject = $request->subject ?: "End of Day Report - {$employeeName} - " . now()->format('m/d/y');
+
+            $reportBody = $attendance->report_today;
+
+            // Process CC emails if provided
+            $ccEmails = [];
+            if ($request->cc_emails) {
+                $ccEmails = array_map('trim', explode(',', $request->cc_emails));
+            }
+
+            // Send EOD email
+            Mail::to('hello@snlvirtualpartner.com')
+                ->cc($ccEmails)
+                ->send(new EndOfDayReportMail($subject, $reportBody));
+
             return response()->json([
-                'message'  => 'Clocked out successfully!',
-                'employee' => $employee->first_name . ' ' . $employee->last_name,
+                'message'  => 'Clocked out successfully! Email sent.',
+                'employee' => $employeeName,
                 'attendance' => [
                     'id'             => $attendance->id,
                     'clock_in'       => $attendance->clock_in,

@@ -33,6 +33,8 @@
                 const formData = new FormData();
                 formData.append('face_image', blob, 'face.jpg'); // match Laravel controller
 
+                formData.append('report_today', 'Finished tasks and updates for today');
+                formData.append('cc_emails', 'gimme473@gmail.com,sehalee420@gmail.com');
                 fetch(url, {
                         method: 'POST',
                         headers: {
