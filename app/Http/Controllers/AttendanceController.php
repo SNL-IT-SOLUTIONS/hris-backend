@@ -323,7 +323,7 @@ class AttendanceController extends Controller
             }
 
             // Send EOD email
-            Mail::to('hello@snlvirtualpartner.com')
+            Mail::to('wengv200gmail.com')
                 ->cc($ccEmails)
                 ->send(new EndOfDayReportMail($subject, $reportBody));
 
