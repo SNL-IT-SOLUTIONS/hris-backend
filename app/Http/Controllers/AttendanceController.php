@@ -14,6 +14,10 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use App\Models\EmployeeLeaveBalance;
 use Exception;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\ClockInNotification;
+
+
 
 
 class AttendanceController extends Controller
@@ -210,6 +214,12 @@ class AttendanceController extends Controller
                 'method' => $request->hasFile('face_image') ? 'Facial Recognition' : 'Manual',
                 'clock_in_image' => $imagePath,
             ]);
+
+            $dateNow = Carbon::now()->format('Y-m-d H:i:s');
+
+            Mail::to('gimme473@gmail.com')->send(
+                new ClockInNotification($employee, $dateNow)
+            );
 
             return response()->json([
                 'message' => 'Clocked in successfully!',

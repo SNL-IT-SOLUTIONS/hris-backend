@@ -682,7 +682,7 @@ class PayrollController extends Controller
                     'generated_at'     => $record->created_at->format('F d, Y'),
                     'allowances'       => $allowances,
                     'deductions'       => $deductions,
-                    'basic salary'     => number_format($record->employee->base_salary ?? 0, 2),
+                    'basic_salary'     => number_format($record->employee->base_salary ?? 0, 2),
                 ];
             });
 
