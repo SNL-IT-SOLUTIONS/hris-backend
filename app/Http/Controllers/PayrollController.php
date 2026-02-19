@@ -674,6 +674,7 @@ class PayrollController extends Controller
 
                 return [
                     'record_id'        => $record->id,
+                    'remarks'           => $record->remarks,
                     'period'           => $record->payrollPeriod->period_name ?? 'N/A',
                     'period_range'     => ($record->payrollPeriod->start_date ?? '') . ' - ' . ($record->payrollPeriod->end_date ?? ''),
                     'gross_pay'        => number_format($record->gross_pay, 2),
