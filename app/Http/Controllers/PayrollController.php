@@ -30,14 +30,15 @@ class PayrollController extends Controller
             'cutoff_end_date'   => 'required|date|after_or_equal:cutoff_start_date',
             'employees'         => 'required|array|min:1',
             'employees.*.employee_id' => 'required|exists:employees,id',
-            'employees.*.remarks'     => 'nullable|string|min:0',
+            'employees.*.remarks'     => 'nullable|string',
+            'employees.*.days_worked' => 'nullable|integer|min:0',
+            'employees.*.absences'    => 'nullable|integer|min:0',
         ]);
 
         DB::beginTransaction();
-        $employees = $request->employees; // <-- make a plain array copy
 
         try {
-            // Create Period
+
             $period = PayrollPeriod::create([
                 'period_name'       => $request->period_name,
                 'pay_date'          => $request->pay_date,
@@ -45,57 +46,85 @@ class PayrollController extends Controller
                 'cutoff_end_date'   => $request->cutoff_end_date,
             ]);
 
-            foreach ($employees as &$emp) {
+            foreach ($request->employees as $emp) {
+
                 $employee = Employee::findOrFail($emp['employee_id']);
 
-                // AUTOMATIC DAYS WORKED & ABSENCES
-                $attendances = DB::table('attendances')
-                    ->where('employee_id', $employee->id)
-                    ->where('status', 'Present')
-                    ->whereDate('clock_in', '>=', $request->cutoff_start_date)
-                    ->whereDate('clock_in', '<=', $request->cutoff_end_date)
-                    ->orWhere(function ($q) use ($request, $employee) {
-                        $q->where('employee_id', $employee->id)
-                            ->where('status', 'Present')
-                            ->whereDate('clock_out', '>=', $request->cutoff_start_date)
-                            ->whereDate('clock_out', '<=', $request->cutoff_end_date);
-                    })
-                    ->get()
-                    ->unique('id') // avoid double counting if both clock_in & clock_out exist
-                    ->count();
+                /*
+            |--------------------------------------------------------------------------
+            | DAYS WORKED & ABSENCES (AUTO + MANUAL SUPPORT)
+            |--------------------------------------------------------------------------
+            */
 
+                $manualDays = $emp['days_worked'] ?? null;
+                $manualAbs  = $emp['absences'] ?? null;
 
-                $total_days = $attendances;
-                $start = now()->parse($request->cutoff_start_date);
-                $end   = now()->parse($request->cutoff_end_date);
+                if ($manualDays === null) {
+
+                    $attendanceCount = DB::table('attendances')
+                        ->where('employee_id', $employee->id)
+                        ->where('status', 'Present')
+                        ->where(function ($query) use ($request) {
+                            $query->whereBetween(DB::raw('DATE(clock_in)'), [
+                                $request->cutoff_start_date,
+                                $request->cutoff_end_date
+                            ])
+                                ->orWhereBetween(DB::raw('DATE(clock_out)'), [
+                                    $request->cutoff_start_date,
+                                    $request->cutoff_end_date
+                                ]);
+                        })
+                        ->get()
+                        ->unique('id')
+                        ->count();
+
+                    $daysWorked = $attendanceCount;
+                } else {
+                    $daysWorked = $manualDays;
+                }
+
+                $start = \Carbon\Carbon::parse($request->cutoff_start_date);
+                $end   = \Carbon\Carbon::parse($request->cutoff_end_date);
 
                 $cutoffDays = 0;
                 for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
-                    if (!$date->isWeekend()) { // skip Saturday & Sunday
+                    if (!$date->isWeekend()) {
                         $cutoffDays++;
                     }
                 }
 
-                $absences = max($cutoffDays - $total_days, 0);
+                if ($manualAbs !== null) {
+                    $absences = $manualAbs;
+                } else {
+                    $absences = max($cutoffDays - $daysWorked, 0);
+                }
 
-                $emp['days_worked'] = $total_days;
-                $emp['absences']    = $absences;
-                // END AUTOMATION
+                /*
+            |--------------------------------------------------------------------------
+            | PAYROLL COMPUTATION
+            |--------------------------------------------------------------------------
+            */
 
                 $daily     = $employee->base_salary;
-                $days      = $emp['days_worked'];
+                $days      = $daysWorked;
                 $overtime  = $emp['overtime_hours'] ?? 0;
-                $absences  = $emp['absences'] ?? 0;
 
-                // === The rest of your existing payroll calculation stays the same ===
                 $hourlyRate = $daily / 8;
+
                 $nightHours  = $employee->night_hours ?? 0;
                 $nightRate   = $employee->night_rate ?? 10;
                 $nightDiffPerDay = $hourlyRate * ($nightRate / 100) * $nightHours;
                 $totalNightDiff  = $nightDiffPerDay * $days;
 
                 $overtimeRate = $hourlyRate * 1.25;
+
                 $gross_base = ($daily * $days) + ($overtime * $overtimeRate);
+
+                /*
+            |--------------------------------------------------------------------------
+            | ALLOWANCES
+            |--------------------------------------------------------------------------
+            */
 
                 $employeeAllowances = DB::table('employee_allowance')
                     ->join('allowance_types', 'employee_allowance.allowance_type_id', '=', 'allowance_types.id')
@@ -108,7 +137,14 @@ class PayrollController extends Controller
                     ->get();
 
                 $total_allowances = $employeeAllowances->sum('allowance_amount') / 2;
+
                 $gross_with_allowances = $gross_base + $total_allowances + $totalNightDiff;
+
+                /*
+            |--------------------------------------------------------------------------
+            | BENEFITS (DEDUCTIONS)
+            |--------------------------------------------------------------------------
+            */
 
                 $employeeBenefits = DB::table('employee_benefit')
                     ->join('benefit_types', 'employee_benefit.benefit_type_id', '=', 'benefit_types.id')
@@ -128,20 +164,33 @@ class PayrollController extends Controller
 
                 $total_benefit_deductions = collect($benefitDeductions)->sum('amount') / 2;
 
+                /*
+            |--------------------------------------------------------------------------
+            | LOANS
+            |--------------------------------------------------------------------------
+            */
+
                 $activeLoans = Loan::where('employee_id', $employee->id)
                     ->where('status', 'active')
                     ->get();
 
                 $total_loan_deductions = $activeLoans->sum('monthly_amortization') / 2;
+
                 $total_deductions = $total_benefit_deductions + $total_loan_deductions;
+
                 $net = $gross_with_allowances - $total_deductions;
 
-                // === CREATE PAYROLL RECORD ===
+                /*
+            |--------------------------------------------------------------------------
+            | CREATE PAYROLL RECORD
+            |--------------------------------------------------------------------------
+            */
+
                 $record = PayrollRecord::create([
                     'payroll_period_id'     => $period->id,
                     'employee_id'           => $employee->id,
                     'daily_rate'            => $daily,
-                    'days_worked'           => $days,
+                    'days_worked'           => $daysWorked,
                     'overtime_hours'        => $overtime,
                     'absences'              => $absences,
                     'night_diff_pay'        => $totalNightDiff,
@@ -154,7 +203,12 @@ class PayrollController extends Controller
                     'remarks'               => $emp['remarks'] ?? null,
                 ]);
 
-                // === Payroll Deductions and Allowances ===
+                /*
+            |--------------------------------------------------------------------------
+            | SAVE DEDUCTIONS
+            |--------------------------------------------------------------------------
+            */
+
                 foreach ($benefitDeductions as $benefit) {
                     PayrollDeduction::create([
                         'payroll_record_id' => $record->id,
@@ -165,9 +219,13 @@ class PayrollController extends Controller
                 }
 
                 foreach ($activeLoans as $loan) {
+
                     $amortization = $loan->monthly_amortization / 2;
+
                     if ($amortization > 0 && $loan->balance_amount > 0) {
+
                         $newBalance = max($loan->balance_amount - $amortization, 0);
+
                         $loan->update([
                             'balance_amount' => $newBalance,
                             'status'         => $newBalance <= 0 ? 'paid' : 'active',
@@ -183,6 +241,12 @@ class PayrollController extends Controller
                         ]);
                     }
                 }
+
+                /*
+            |--------------------------------------------------------------------------
+            | SAVE ALLOWANCES
+            |--------------------------------------------------------------------------
+            */
 
                 foreach ($employeeAllowances as $allowance) {
                     PayrollAllowance::create([
@@ -204,6 +268,7 @@ class PayrollController extends Controller
                 ]
             ], 201);
         } catch (\Exception $e) {
+
             DB::rollBack();
             Log::error('Payroll generation failed: ' . $e->getMessage());
 
