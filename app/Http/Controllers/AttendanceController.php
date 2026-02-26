@@ -403,7 +403,8 @@ class AttendanceController extends Controller
             $monthStart = now()->startOfMonth();
 
             $todayRecord = Attendance::where('employee_id', $employeeId)
-                ->whereDate('clock_in', $today)
+                ->whereNull('clock_out')
+                ->latest('clock_in')
                 ->first();
 
             // Transform todayRecord to include adjusted times and images
