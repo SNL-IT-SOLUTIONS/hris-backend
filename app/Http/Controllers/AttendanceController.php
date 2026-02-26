@@ -571,22 +571,32 @@ class AttendanceController extends Controller
         $attendance = Attendance::findOrFail($attendanceId);
 
         if ($request->status === 'approved') {
-            // Apply the adjustment
+
+            // Save original values BEFORE changing anything
+            $attendance->original_clock_in = $attendance->clock_in;
+            $attendance->original_clock_out = $attendance->clock_out;
+
+            // Apply adjusted times
             if ($attendance->adjusted_clock_in) {
                 $attendance->clock_in = $attendance->adjusted_clock_in;
             }
+
             if ($attendance->adjusted_clock_out) {
                 $attendance->clock_out = $attendance->adjusted_clock_out;
             }
+
+            // Optional: clear adjusted after applying
+            $attendance->adjusted_clock_in = null;
+            $attendance->adjusted_clock_out = null;
         }
 
         $attendance->adjustment_status = $request->status;
-        $attendance->adjusted_by = auth()->id(); // admin/supervisor ID
+        $attendance->adjusted_by = auth()->id();
         $attendance->save();
 
         return response()->json([
             'message' => 'Adjustment ' . $request->status,
-            'attendance' => $attendance
+            'attendance' => $attendance->fresh()
         ], 200);
     }
 

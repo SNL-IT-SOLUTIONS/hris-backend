@@ -14,6 +14,8 @@ class Attendance extends Model
         'employee_id',
         'clock_in',
         'clock_out',
+        'original_clock_in',
+        'original_clock_out',
         'adjusted_clock_in',
         'adjusted_clock_out',
         'adjustment_reason',
