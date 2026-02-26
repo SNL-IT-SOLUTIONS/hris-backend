@@ -495,12 +495,12 @@ class AttendanceController extends Controller
         $attendance = Attendance::findOrFail($attendanceId);
 
         // Convert ISO strings (with 'T' and 'Z') to MySQL DATETIME
-        $adjustedClockIn  = $request->adjusted_clock_in
-            ? Carbon::parse($request->adjusted_clock_in)->setTimezone('Asia/Manila')->format('Y-m-d H:i:s')
+        $adjustedClockIn = $request->adjusted_clock_in
+            ? Carbon::parse($request->adjusted_clock_in)
             : null;
 
         $adjustedClockOut = $request->adjusted_clock_out
-            ? Carbon::parse($request->adjusted_clock_out)->setTimezone('Asia/Manila')->format('Y-m-d H:i:s')
+            ? Carbon::parse($request->adjusted_clock_out)
             : null;
 
         $attendance->update([
