@@ -484,9 +484,6 @@ class AttendanceController extends Controller
 
 
     //DTR ADJUSTMENTS
-
-
-
     public function requestAdjustment(Request $request, $attendanceId)
     {
         $request->validate([
