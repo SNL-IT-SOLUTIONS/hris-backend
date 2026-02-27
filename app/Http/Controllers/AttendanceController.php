@@ -17,6 +17,7 @@ use Exception;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ClockInNotification;
 use App\Mail\EndOfDayReportMail;
+use App\Mail\AdjustmentRequestMail;
 
 
 class AttendanceController extends Controller
@@ -583,8 +584,8 @@ class AttendanceController extends Controller
         ]);
 
         $attendance = Attendance::findOrFail($attendanceId);
+        $employee = auth()->user();
 
-        // Convert ISO strings (with 'T' and 'Z') to MySQL DATETIME
         $adjustedClockIn = $request->adjusted_clock_in
             ? Carbon::parse($request->adjusted_clock_in)
             : null;
@@ -600,8 +601,12 @@ class AttendanceController extends Controller
             'adjustment_status'  => 'pending',
         ]);
 
+        // 🔥 Send Email to HR
+        Mail::to('normanparaiso.abm12@gmail.com')
+            ->send(new AdjustmentRequestMail($attendance, $employee));
+
         return response()->json([
-            'message'    => 'Adjustment request submitted successfully.',
+            'message'    => 'Adjustment request submitted successfully. HR has been notified.',
             'attendance' => $attendance
         ], 200);
     }
