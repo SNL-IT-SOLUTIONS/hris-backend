@@ -103,6 +103,7 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::middleware('auth:sanctum')->post('attendance/clock-out', [AttendanceController::class, 'clockOut']);
     Route::middleware('auth:sanctum')->get('my-leaves', [AttendanceController::class, 'getMyLeaves']);
     Route::middleware('auth:sanctum')->get('my-attendance', [AttendanceController::class, 'getMyAttendance']);
+    Route::middleware('auth:sanctum')->get('my-absence', [AttendanceController::class, 'getMyMonthlyAbsences']);
     Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
     Route::post('request-leave', 'requestLeave');
 

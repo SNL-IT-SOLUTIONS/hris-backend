@@ -490,6 +490,61 @@ class AttendanceController extends Controller
         }
     }
 
+    public function getMyMonthlyAbsences(Request $request)
+    {
+        // Validate input
+        $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year'  => 'required|integer'
+        ]);
+
+        $user = auth()->user();
+
+        // Start and end of the month
+        $start = Carbon::create($request->year, $request->month, 1);
+        $end   = $start->copy()->endOfMonth();
+
+        $absentDates = [];
+
+        // Loop through each day of the month
+        for ($date = $start->copy(); $date <= $end; $date->addDay()) {
+
+            // Skip weekends
+            if ($date->isWeekend()) {
+                continue;
+            }
+
+            // Skip future dates
+            if ($date->gt(now())) {
+                continue;
+            }
+
+            // Check if employee has attendance record for this day
+            $attendanceExists = Attendance::where('employee_id', $user->id)
+                ->whereDate('clock_in', $date)
+                ->exists();
+
+            // Check if employee has approved leave for this day
+            $leaveExists = Leave::where('employee_id', $user->id)
+                ->where('status', 'Approved')
+                ->whereDate('start_date', '<=', $date)
+                ->whereDate('end_date', '>=', $date)
+                ->exists();
+
+            // If neither attendance nor leave exists → absent
+            if (!$attendanceExists && !$leaveExists) {
+                $absentDates[] = $date->toDateString();
+            }
+        }
+
+        return response()->json([
+            'month' => $request->month,
+            'year'  => $request->year,
+            'absent_dates' => $absentDates,
+            'total_absent' => count($absentDates)
+        ]);
+    }
+
 
     public function getMyLeaves(Request $request)
     {
