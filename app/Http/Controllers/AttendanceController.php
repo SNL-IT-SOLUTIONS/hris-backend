@@ -19,13 +19,8 @@ use App\Mail\ClockInNotification;
 use App\Mail\EndOfDayReportMail;
 
 
-
-
-
-
 class AttendanceController extends Controller
 {
-
 
     public function registerFace(Request $request)
     {
@@ -165,10 +160,11 @@ class AttendanceController extends Controller
             $user = auth()->user();
 
             if (!$user) {
-                return response()->json(['message' => 'Unauthorized. Please log in.'], 401);
+                return response()->json([
+                    'message' => 'Unauthorized. Please log in.'
+                ], 401);
             }
 
-            // Optional: Only require face image if not manual
             $validator = Validator::make($request->all(), [
                 'face_image' => 'nullable|file|image|mimes:jpeg,png,jpg|max:5120',
             ]);
@@ -180,59 +176,98 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            $employee = $user; // use authenticated user
+            $employee = $user;
 
-            // Check if already clocked in today
-            // Check if already clocked in (open attendance)
-            $existing = Attendance::where('employee_id', $employee->id)
+            /*
+        |--------------------------------------------------------------------------
+        |  Block if there is still an OPEN attendance
+        |--------------------------------------------------------------------------
+        */
+            $openAttendance = Attendance::where('employee_id', $employee->id)
                 ->whereNull('clock_out')
-                ->orderBy('clock_in', 'desc')
+                ->latest('clock_in')
                 ->first();
 
-            if ($existing) {
+            if ($openAttendance) {
+                return response()->json([
+                    'message' => 'You must clock out before clocking in again.'
+                ], 400);
+            }
 
-                $hoursOpen = Carbon::parse($existing->clock_in)
-                    ->diffInHours(Carbon::now());
+            /*
+        |--------------------------------------------------------------------------
+        |  Prevent accidental re-clock-in (cooldown protection)
+        |--------------------------------------------------------------------------
+        | This prevents:
+        | - Misclick after clocking out
+        | - Creating multiple attendances in a short time
+        |
+        | You can adjust this cooldown to 6, 8, or 10 hours
+        |--------------------------------------------------------------------------
+        */
+            $lastAttendance = Attendance::where('employee_id', $employee->id)
+                ->latest('clock_in')
+                ->first();
 
-                // If less than 15 hours → block
-                if ($hoursOpen < 15) {
+            if ($lastAttendance && $lastAttendance->clock_out) {
+
+                $hoursSinceClockOut = Carbon::parse($lastAttendance->clock_out)
+                    ->diffInHours(now());
+
+                $cooldownHours = 8; // adjust if needed
+
+                if ($hoursSinceClockOut < $cooldownHours) {
                     return response()->json([
-                        'message' => 'Already clocked in.'
+                        'message' => 'You recently clocked out. Please wait before clocking in again.'
                     ], 400);
                 }
             }
 
-
-            // Save clock-in image (if provided)
+            /*
+        |--------------------------------------------------------------------------
+        |  Save image (if any)
+        |--------------------------------------------------------------------------
+        */
             $imagePath = null;
+
             if ($request->hasFile('face_image')) {
                 $uploadedFile = $request->file('face_image');
-                $imagePath = $this->saveFileToPublic($uploadedFile, 'attendance_in_' . $employee->id . '_' . time());
+                $imagePath = $this->saveFileToPublic(
+                    $uploadedFile,
+                    'attendance_in_' . $employee->id . '_' . time()
+                );
             }
 
+            /*
+        |--------------------------------------------------------------------------
+        Create attendance
+        |--------------------------------------------------------------------------
+        */
             $attendance = Attendance::create([
-                'employee_id' => $employee->id,
-                'clock_in' => Carbon::now(),
-                'status' => 'Present',
-                'method' => $request->hasFile('face_image') ? 'Facial Recognition' : 'Manual',
+                'employee_id'    => $employee->id,
+                'clock_in'       => now(),
+                'status'         => 'Present',
+                'method'         => $request->hasFile('face_image')
+                    ? 'Facial Recognition'
+                    : 'Manual',
                 'clock_in_image' => $imagePath,
             ]);
 
-            $dateNow = Carbon::now()->format('Y-m-d H:i:s');
+            $dateNow = now()->format('Y-m-d H:i:s');
 
             Mail::to('gimme473@gmail.com')->send(
                 new ClockInNotification($employee, $dateNow)
             );
 
             return response()->json([
-                'message' => 'Clocked in successfully!',
-                'employee' => $employee->first_name . ' ' . $employee->last_name,
+                'message'    => 'Clocked in successfully!',
+                'employee'   => $employee->first_name . ' ' . $employee->last_name,
                 'attendance' => $attendance,
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Failed to clock in.',
-                'error' => $e->getMessage()
+                'error'   => $e->getMessage()
             ], 500);
         }
     }
