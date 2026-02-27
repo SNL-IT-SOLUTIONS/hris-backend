@@ -214,7 +214,7 @@ class AttendanceController extends Controller
                 $hoursSinceClockOut = Carbon::parse($lastAttendance->clock_out)
                     ->diffInHours(now());
 
-                $cooldownHours = 8; // adjust if needed
+                $cooldownHours = 1; // adjust if needed
 
                 if ($hoursSinceClockOut < $cooldownHours) {
                     return response()->json([
