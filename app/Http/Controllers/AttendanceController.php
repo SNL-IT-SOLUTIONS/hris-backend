@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\ClockInNotification;
 use App\Mail\EndOfDayReportMail;
 use App\Mail\AdjustmentRequestMail;
+use App\Models\AttendanceAdjustment;
 
 
 class AttendanceController extends Controller
@@ -77,16 +78,19 @@ class AttendanceController extends Controller
     public function getAllAttendances()
     {
         $attendances = Attendance::with([
-            'employee:id,profile_picture,first_name,last_name,email,department_id,position_id'
+            'employee:id,profile_picture,first_name,last_name,email,department_id,position_id',
+            'approvedAdjustment'
         ])
             ->orderBy('created_at', 'desc')
             ->get();
 
         $attendances->transform(function ($attendance) {
 
-            // Override with adjusted times if exists
-            $attendance->clock_in  = $attendance->adjusted_clock_in ?? $attendance->clock_in;
-            $attendance->clock_out = $attendance->adjusted_clock_out ?? $attendance->clock_out;
+            // If approved adjustment exists, override times
+            if ($attendance->approvedAdjustment) {
+                $attendance->clock_in  = $attendance->approvedAdjustment->requested_clock_in;
+                $attendance->clock_out = $attendance->approvedAdjustment->requested_clock_out;
+            }
 
             // Convert attendance images to full URL
             $attendance->clock_in_image = $attendance->clock_in_image
@@ -115,13 +119,26 @@ class AttendanceController extends Controller
 
     public function getAllLeaves()
     {
-        $leaves = Leave::with(['employee', 'leaveType'])
+        $leaves = Leave::with([
+            'employee:id,first_name,last_name,email,profile_picture',
+            'leaveType:id,name'
+        ])
             ->orderBy('created_at', 'desc')
             ->get();
 
+        $leaves->transform(function ($leave) {
+
+            // Convert profile picture to full URL
+            if ($leave->employee && $leave->employee->profile_picture) {
+                $leave->employee->profile_picture = asset($leave->employee->profile_picture);
+            }
+
+            return $leave;
+        });
+
         return response()->json([
             'isSuccess' => true,
-            'data' => $leaves,
+            'data' => $leaves
         ]);
     }
 
@@ -438,15 +455,15 @@ class AttendanceController extends Controller
             $weekStart = now()->startOfWeek();
             $monthStart = now()->startOfMonth();
 
-            $todayRecord = Attendance::where('employee_id', $employeeId)
+            $todayRecord = Attendance::with('approvedAdjustment')
+                ->where('employee_id', $employeeId)
                 ->whereNull('clock_out')
                 ->latest('clock_in')
                 ->first();
 
-            // Transform todayRecord to include adjusted times and images
-            if ($todayRecord) {
-                $todayRecord->clock_in = $todayRecord->adjusted_clock_in ?? $todayRecord->clock_in;
-                $todayRecord->clock_out = $todayRecord->adjusted_clock_out ?? $todayRecord->clock_out;
+            if ($todayRecord && $todayRecord->approvedAdjustment) {
+                $todayRecord->clock_in = $todayRecord->approvedAdjustment->requested_clock_in;
+                $todayRecord->clock_out = $todayRecord->approvedAdjustment->requested_clock_out;
             }
 
             $thisWeekHours = Attendance::where('employee_id', $employeeId)
@@ -463,10 +480,19 @@ class AttendanceController extends Controller
 
             $onTimeRate = 95; // placeholder
 
-            $recent = Attendance::where('employee_id', $employeeId)
+            $recent = Attendance::with('approvedAdjustment')
+                ->where('employee_id', $employeeId)
                 ->orderBy('clock_in', 'desc')
                 ->take(5)
                 ->get();
+
+            $recent->transform(function ($attendance) {
+                if ($attendance->approvedAdjustment) {
+                    $attendance->clock_in = $attendance->approvedAdjustment->requested_clock_in;
+                    $attendance->clock_out = $attendance->approvedAdjustment->requested_clock_out;
+                }
+                return $attendance;
+            });
 
             return response()->json([
                 'isSuccess' => true,
@@ -594,20 +620,32 @@ class AttendanceController extends Controller
             ? Carbon::parse($request->adjusted_clock_out)
             : null;
 
-        $attendance->update([
-            'adjusted_clock_in'  => $adjustedClockIn,
-            'adjusted_clock_out' => $adjustedClockOut,
-            'adjustment_reason'  => $request->reason,
-            'adjustment_status'  => 'pending',
+        $existing = AttendanceAdjustment::where('attendance_id', $attendanceId)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($existing) {
+            return response()->json([
+                'message' => 'You already have a pending adjustment request for this attendance.'
+            ], 400);
+        }
+
+        $adjustment = AttendanceAdjustment::create([
+            'attendance_id'       => $attendance->id,
+            'employee_id'         => $employee->id,
+            'requested_clock_in'  => $adjustedClockIn,
+            'requested_clock_out' => $adjustedClockOut,
+            'reason'              => $request->reason,
+            'status'              => 'pending',
         ]);
 
-        // 🔥 Send Email to HR
+        // Send Email to HR
         Mail::to('normanparaiso.abm12@gmail.com')
             ->send(new AdjustmentRequestMail($attendance, $employee));
 
         return response()->json([
             'message'    => 'Adjustment request submitted successfully. HR has been notified.',
-            'attendance' => $attendance
+            'adjustment' => $adjustment
         ], 200);
     }
 
@@ -619,20 +657,17 @@ class AttendanceController extends Controller
             $status = $request->input('status');
             $search = $request->input('search');
 
-            $query = Attendance::query()
-                ->with('employee:id,first_name,last_name,employee_id')
-                ->where(function ($q) {
-                    $q->whereNotNull('adjusted_clock_in')
-                        ->orWhereNotNull('adjusted_clock_out')
-                        ->orWhereNotNull('adjustment_reason');
-                });
+            $query = AttendanceAdjustment::with([
+                'attendance',
+                'employee:id,first_name,last_name,employee_id'
+            ]);
 
-            //  Optional filter by adjustment status
+            // Optional filter by status
             if ($status) {
-                $query->where('adjustment_status', $status);
+                $query->where('status', $status);
             }
 
-            //  Optional search by employee ID or name
+            // Optional search
             if ($search) {
                 $query->whereHas('employee', function ($q) use ($search) {
                     $q->where('employee_id', 'like', "%{$search}%")
@@ -641,7 +676,9 @@ class AttendanceController extends Controller
                 });
             }
 
-            $adjustments = $query->orderBy('created_at', 'desc')->paginate($perPage);
+            $adjustments = $query
+                ->orderBy('created_at', 'desc')
+                ->paginate($perPage);
 
             return response()->json([
                 'message' => 'Attendance adjustments retrieved successfully.',
@@ -655,59 +692,165 @@ class AttendanceController extends Controller
         }
     }
 
+    public function getMissedAdjustments(Request $request)
+    {
+        try {
+            $perPage = $request->input('per_page', 10);
+            $status = $request->input('status');
+            $search = $request->input('search');
+
+            $query = AttendanceAdjustment::with([
+                'attendance',
+                'employee:id,first_name,last_name,employee_id'
+            ])
+                ->whereHas('attendance', function ($q) {
+                    $q->where('status', 'Missed');
+                });
+
+            if ($status) {
+                $query->where('status', $status);
+            }
+
+            if ($search) {
+                $query->whereHas('employee', function ($q) use ($search) {
+                    $q->where('employee_id', 'like', "%{$search}%")
+                        ->orWhere('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%");
+                });
+            }
+
+            $adjustments = $query
+                ->orderBy('created_at', 'desc')
+                ->paginate($perPage);
+
+            return response()->json([
+                'message' => 'Missed attendance adjustments retrieved successfully.',
+                'data' => $adjustments,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to retrieve missed adjustments.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
 
-    public function approveAdjustment(Request $request, $attendanceId)
+    public function approveAdjustment(Request $request, $adjustmentId)
     {
         $request->validate([
             'status' => 'required|in:approved,rejected',
         ]);
 
-        $attendance = Attendance::findOrFail($attendanceId);
+        $adjustment = AttendanceAdjustment::findOrFail($adjustmentId);
+
+        $attendance = Attendance::findOrFail($adjustment->attendance_id);
 
         if ($request->status === 'approved') {
 
-            // Save original values BEFORE changing anything
+            // Save original values before applying adjustment
             $attendance->original_clock_in = $attendance->clock_in;
             $attendance->original_clock_out = $attendance->clock_out;
 
-            // Apply adjusted times
-            if ($attendance->adjusted_clock_in) {
-                $attendance->clock_in = $attendance->adjusted_clock_in;
-            }
+            // Apply requested times
+            $attendance->clock_in = $adjustment->requested_clock_in;
+            $attendance->clock_out = $adjustment->requested_clock_out;
 
-            if ($attendance->adjusted_clock_out) {
-                $attendance->clock_out = $attendance->adjusted_clock_out;
-            }
+            $attendance->adjusted_by = auth()->id();
 
-            // Optional: clear adjusted after applying
-            $attendance->adjusted_clock_in = null;
-            $attendance->adjusted_clock_out = null;
+            $attendance->save();
         }
 
-        $attendance->adjustment_status = $request->status;
-        $attendance->adjusted_by = auth()->id();
-        $attendance->save();
+        // Update adjustment review
+        $adjustment->status = $request->status;
+        $adjustment->reviewed_by = auth()->id();
+        $adjustment->reviewed_at = now();
+        $adjustment->save();
 
         return response()->json([
             'message' => 'Adjustment ' . $request->status,
-            'attendance' => $attendance->fresh()
+            'attendance' => $attendance->fresh(),
+            'adjustment' => $adjustment
+        ], 200);
+    }
+
+    public function requestClockDateAdjustment(Request $request)
+    {
+        $request->validate([
+            'adjusted_clock_date' => 'required|date',
+            'adjusted_clock_in'   => 'nullable|date',
+            'adjusted_clock_out'  => 'nullable|date',
+            'reason'              => 'required|string|max:255',
+        ]);
+
+        $employee = auth()->user();
+
+        $adjustedClockIn = $request->adjusted_clock_in
+            ? Carbon::parse($request->adjusted_clock_in)
+            : null;
+
+        $adjustedClockOut = $request->adjusted_clock_out
+            ? Carbon::parse($request->adjusted_clock_out)
+            : null;
+
+        // Check if attendance exists for that date
+        $attendance = Attendance::where('employee_id', $employee->id)
+            ->whereDate('clock_in', $request->adjusted_clock_date)
+            ->first();
+
+        // If attendance doesn't exist, create a "placeholder" for reference
+        if (!$attendance) {
+            $attendance = Attendance::create([
+                'employee_id' => $employee->id,
+                'status'      => 'Missed',
+                'method'      => 'manual',
+            ]);
+        }
+
+        // Create a new adjustment request
+        $adjustment = AttendanceAdjustment::create([
+            'attendance_id'       => $attendance->id,
+            'employee_id'         => $employee->id,
+            'adjusted_clock_date' => $request->adjusted_clock_date,
+            'requested_clock_in'  => $adjustedClockIn,
+            'requested_clock_out' => $adjustedClockOut,
+            'reason'              => $request->reason,
+            'status'              => 'pending',
+        ]);
+
+        // Send email to HR
+        Mail::to('normanparaiso.abm12@gmail.com')
+            ->send(new AdjustmentRequestMail($attendance, $employee));
+
+        return response()->json([
+            'message'    => 'Adjustment request submitted successfully. HR has been notified.',
+            'adjustment' => $adjustment,
         ], 200);
     }
 
 
 
-    public function rejectAdjustment(Request $request, $attendanceId)
-    {
-        $attendance = Attendance::findOrFail($attendanceId);
 
-        $attendance->update([
-            'adjustment_status' => 'rejected',
+    public function rejectAdjustment(Request $request, $adjustmentId)
+    {
+        $adjustment = AttendanceAdjustment::findOrFail($adjustmentId);
+
+        // Safety check: only pending adjustments can be rejected
+        if ($adjustment->status !== 'pending') {
+            return response()->json([
+                'message' => 'This adjustment has already been reviewed.'
+            ], 400);
+        }
+
+        $adjustment->update([
+            'status'      => 'rejected',
+            'reviewed_by' => auth()->id(),
+            'reviewed_at' => now(),
         ]);
 
         return response()->json([
-            'message' => 'Adjustment request rejected successfully.',
-            'attendance' => $attendance
+            'message'    => 'Adjustment request rejected successfully.',
+            'adjustment' => $adjustment
         ], 200);
     }
 
@@ -718,15 +861,13 @@ class AttendanceController extends Controller
     public function getMyAdjustments(Request $request)
     {
         try {
-            //  Get authenticated user
-            $user = auth()->user();
+            $employeeId = auth()->id();
 
-            // Check if this user is linked to an employee record
-            $employeeId = $user->id;
-
-            // Fetch adjustment records for this employee
-            $adjustments = Attendance::where('employee_id', $employeeId)
-                ->whereNotNull('adjustment_status')
+            $adjustments = AttendanceAdjustment::with([
+                'attendance',
+                'employee:id,first_name,last_name,employee_id'
+            ])
+                ->where('employee_id', $employeeId)
                 ->orderBy('created_at', 'desc')
                 ->get();
 

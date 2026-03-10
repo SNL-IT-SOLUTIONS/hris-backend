@@ -37,11 +37,6 @@ class Attendance extends Model
     }
 
     // Recursive relationship if needed (e.g., attendance adjustments linked to original)
-    public function adjustments()
-    {
-        return $this->hasMany(Attendance::class, 'original_attendance_id');
-    }
-
     // Calculate worked hours using clock_in and clock_out, fallback to adjusted times if available
     public function calculateHoursWorked()
     {
@@ -51,5 +46,16 @@ class Attendance extends Model
         if ($in && $out) {
             $this->hours_worked = Carbon::parse($out)->diffInMinutes(Carbon::parse($in)) / 60;
         }
+    }
+    public function adjustments()
+    {
+        return $this->hasMany(AttendanceAdjustment::class, 'attendance_id');
+    }
+
+    public function approvedAdjustment()
+    {
+        return $this->hasOne(AttendanceAdjustment::class, 'attendance_id')
+            ->where('status', 'approved')
+            ->latest();
     }
 }

@@ -109,8 +109,10 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
 
     //DTR ADJUSTMENTS
     Route::get('dtr-adjustments', 'getAdjustments');
+    Route::get('missed-adjustments', 'getMissedAdjustments');
     Route::middleware('auth:sanctum')->get('my-adjustments', [AttendanceController::class, 'getMyAdjustments']);
     Route::post('request/adjustment/{attendanceId}', 'requestAdjustment');
+    Route::post('request/clock/date', 'requestClockDateAdjustment');
     Route::post('adjustment/approve/{adjustmentId}', 'approveAdjustment');
     Route::post('adjustment/reject/{adjustmentId}', 'rejectAdjustment');
 
