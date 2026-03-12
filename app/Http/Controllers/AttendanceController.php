@@ -798,16 +798,17 @@ class AttendanceController extends Controller
             ->whereDate('clock_in', $request->adjusted_clock_date)
             ->first();
 
-        // If attendance doesn't exist, create a "placeholder" for reference
+        // If none exists create missed attendance for that date
         if (!$attendance) {
             $attendance = Attendance::create([
                 'employee_id' => $employee->id,
+                'clock_in'    => Carbon::parse($request->adjusted_clock_date)->startOfDay(),
                 'status'      => 'Missed',
-                'method'      => 'manual',
+                'method'      => 'Manual',
             ]);
         }
 
-        // Create a new adjustment request
+        // Create adjustment request
         $adjustment = AttendanceAdjustment::create([
             'attendance_id'       => $attendance->id,
             'employee_id'         => $employee->id,
@@ -815,19 +816,19 @@ class AttendanceController extends Controller
             'requested_clock_in'  => $adjustedClockIn,
             'requested_clock_out' => $adjustedClockOut,
             'reason'              => $request->reason,
-            'status'              => 'pending',
+            'status'              => 'Pending',
         ]);
 
-        // Send email to HR
+        // Notify HR
         Mail::to('normanparaiso.abm12@gmail.com')
             ->send(new AdjustmentRequestMail($attendance, $employee));
 
         return response()->json([
-            'message'    => 'Adjustment request submitted successfully. HR has been notified.',
-            'adjustment' => $adjustment,
-        ], 200);
+            'isSuccess' => true,
+            'message'   => 'Adjustment request submitted successfully. HR has been notified.',
+            'data'      => $adjustment,
+        ]);
     }
-
 
 
 

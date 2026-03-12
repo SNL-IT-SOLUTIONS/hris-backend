@@ -50,4 +50,10 @@ class AttendanceAdjustment extends Model
     {
         return $this->belongsTo(Employee::class, 'reviewed_by');
     }
+    public function approvedAdjustment()
+    {
+        return $this->hasOne(AttendanceAdjustment::class, 'attendance_id')
+            ->where('status', 'approved')
+            ->latest();
+    }
 }

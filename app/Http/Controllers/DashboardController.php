@@ -189,4 +189,146 @@ class DashboardController extends Controller
             ], 500);
         }
     }
+
+    public function attendanceCalendarDashboard(Request $request)
+    {
+        try {
+
+            $request->validate([
+                'month' => 'required|integer|min:1|max:12',
+                'year'  => 'required|integer'
+            ]);
+
+            $employee = auth()->user();
+
+            if (!$employee) {
+                return response()->json([
+                    'message' => 'Unauthorized.'
+                ], 401);
+            }
+
+            $month = $request->month;
+            $year  = $request->year;
+
+            $start = Carbon::create($year, $month, 1);
+            $end   = $start->copy()->endOfMonth();
+
+            $calendar = [];
+
+            for ($date = $start->copy(); $date <= $end; $date->addDay()) {
+
+                $attendance = Attendance::where('employee_id', $employee->id)
+                    ->whereDate('clock_in', $date)
+                    ->first();
+
+                $leave = Leave::where('employee_id', $employee->id)
+                    ->where('status', 'Approved')
+                    ->whereDate('start_date', '<=', $date)
+                    ->whereDate('end_date', '>=', $date)
+                    ->first();
+
+                $status = 'absent';
+
+                if ($attendance) {
+                    $status = strtolower($attendance->status); // present / late
+                } elseif ($leave) {
+                    $status = 'leave';
+                } elseif ($date->isWeekend()) {
+                    $status = 'weekend';
+                }
+
+                $calendar[] = [
+                    'date' => $date->toDateString(),
+                    'status' => $status,
+                    'clock_in' => $attendance->clock_in ?? null,
+                    'clock_out' => $attendance->clock_out ?? null,
+                ];
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | SUMMARY STATS
+        |--------------------------------------------------------------------------
+        */
+
+            $presentCount = collect($calendar)->where('status', 'present')->count();
+            $lateCount = collect($calendar)->where('status', 'late')->count();
+            $missedCount = collect($calendar)->where('status', 'missed')->count();
+            $absentCount = collect($calendar)->where('status', 'absent')->count();
+
+            return response()->json([
+                'success' => true,
+
+                'employee' => [
+                    'id' => $employee->id,
+                    'name' => $employee->first_name . ' ' . $employee->last_name
+                ],
+
+                'summary' => [
+                    'present' => $presentCount,
+                    'late' => $lateCount,
+                    'missed' => $missedCount,
+                    'absent' => $absentCount
+                ],
+
+                'calendar' => $calendar
+
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load attendance calendar.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function overallAttendanceDashboard(Request $request)
+    {
+        try {
+
+            $request->validate([
+                'year'  => 'required|integer'
+            ]);
+
+            $year  = $request->year;
+
+            $start = Carbon::create($year, 1, 1)->startOfDay();
+            $end   = Carbon::create($year, 12, 31)->endOfDay();
+
+            $presentCount = Attendance::where('employee_id', auth()->user()->id)
+                ->where('status', 'Present')
+                ->whereDate('clock_in', '>=', $start)
+                ->whereDate('clock_in', '<=', $end)
+                ->count();
+
+            $lateCount = Attendance::where('employee_id', auth()->user()->id)
+                ->where('status', 'missed')
+                ->whereDate('clock_in', '>=', $start)
+                ->whereDate('clock_in', '<=', $end)
+                ->count();
+
+            $absentCount = Attendance::where('employee_id', auth()->user()->id)
+                ->where('status', 'Absent')
+                ->whereDate('clock_in', '>=', $start)
+                ->whereDate('clock_in', '<=', $end)
+                ->count();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'present' => $presentCount,
+                    'missed' => $missedCount,
+                    'absent' => $absentCount
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load overall attendance data.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
