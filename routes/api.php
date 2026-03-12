@@ -45,7 +45,8 @@ Route::post('change-password', [AuthController::class, 'changePassword'])->middl
 //DASHBOARD
 Route::get('dashboard', [DashboardController::class, 'index']);
 Route::get('dashboard/employees', [DashboardController::class, 'employeesDashboard'])->middleware('auth:sanctum');
-
+Route::get('dashboard/calendar', [DashboardController::class, 'attendanceCalendarDashboard'])->middleware('auth:sanctum');
+Route::get('dashboard/attendance/overview', [DashboardController::class, 'monthlyAttendanceDashboard'])->middleware('auth:sanctum');
 
 //RECRUITMENT - JOB POSTINGS
 Route::controller(JobPostingController::class)->group(function () {
@@ -108,19 +109,19 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::post('request-leave', 'requestLeave');
 
     //DTR ADJUSTMENTS
-    Route::get('dtr-adjustments', 'getAdjustments');
+
     Route::get('missed-adjustments', 'getMissedAdjustments');
+    Route::post('request/clock/date', 'requestClockDateAdjustment');
     Route::middleware('auth:sanctum')->get('my-adjustments', [AttendanceController::class, 'getMyAdjustments']);
     Route::post('request/adjustment/{attendanceId}', 'requestAdjustment');
-    Route::post('request/clock/date', 'requestClockDateAdjustment');
     Route::post('adjustment/approve/{adjustmentId}', 'approveAdjustment');
     Route::post('adjustment/reject/{adjustmentId}', 'rejectAdjustment');
 
     Route::post('confirm-leave/{leaveId}', 'confirmLeave');
     Route::get('leaves', 'getAllLeaves');
-    Route::get('attendances', 'getAllAttendances');
 });
-
+Route::get('attendances', [AttendanceController::class, 'getAllAttendances']);
+Route::get('dtr-adjustments', [AttendanceController::class, 'getAdjustments']);
 
 //SETUP Work Locations
 Route::controller(WorkLocationController::class)->group(function () {
