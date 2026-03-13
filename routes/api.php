@@ -24,6 +24,8 @@ use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\LoanTypeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AnnouncementBoardController;
+use App\Http\Controllers\TrainingModuleController;
+use App\Http\Controllers\TrainingTestController;
 
 /*
 |--------------------------------------------------------------------------
@@ -236,6 +238,8 @@ Route::controller(LoanTypeController::class)->group(function () {
     Route::post('update/loan-types/{id}', 'updateLoanType');
     Route::post('loan-types/{id}/archive', 'archiveLoanType');
 });
+
+//Loan Applications
 Route::controller(LoanController::class)->group(function () {
     Route::post('create/loans', 'createLoan');
     Route::post('update/loans/{id}', 'updateLoan');
@@ -246,6 +250,7 @@ Route::controller(LoanController::class)->group(function () {
     Route::middleware('auth:sanctum')->get('my-loans', [LoanController::class, 'getMyLoans']);
 });
 
+//ANNOUNCEMENTS
 Route::controller(AnnouncementBoardController::class)->group(function () {
 
     Route::post('create/announcements', 'createAnnouncement')->middleware('auth:sanctum');
@@ -254,6 +259,11 @@ Route::controller(AnnouncementBoardController::class)->group(function () {
     Route::get('announcements/{id}', 'getAnnouncementById');
     Route::post('announcements/{id}/archive', 'archiveAnnouncement');
 });
+
+//TRAINING TEST
+Route::get('/training/modules', [TrainingModuleController::class, 'getModules']);
+Route::get('/training/module/{id}', [TrainingModuleController::class, 'getModuleQuestions']);
+Route::post('/training/submit-test', [TrainingTestController::class, 'submitTest']);
 
 
 //DROPDOWNS
