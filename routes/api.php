@@ -27,6 +27,7 @@ use App\Http\Controllers\AnnouncementBoardController;
 use App\Http\Controllers\TrainingModuleController;
 use App\Http\Controllers\TrainingTestController;
 use App\Http\Controllers\TrainingAdminController;
+use App\Http\Controllers\TrainingLessonController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -264,16 +265,13 @@ Route::controller(AnnouncementBoardController::class)->group(function () {
 Route::get('/training/modules', [TrainingModuleController::class, 'getModules']);
 Route::get('/training/module/{id}', [TrainingModuleController::class, 'getModuleQuestions']);
 Route::post('/training/submit-test', [TrainingTestController::class, 'submitTest']);
-
-
-
 Route::post('/training/module/create', [TrainingAdminController::class, 'createModule']);
-
+Route::get('/training/modules/lesson/{lessonId}', [TrainingAdminController::class, 'getModulesByLesson']);
 Route::post('/training/question/create', [TrainingAdminController::class, 'createQuestion']);
-
 Route::post('/training/choices/create', [TrainingAdminController::class, 'createChoices']);
-
 Route::get('/training/module/full/{id}', [TrainingAdminController::class, 'getModule']);
+Route::post('/training/lesson/create', [TrainingLessonController::class, 'createLesson']);
+Route::get('/training/lessons', [TrainingLessonController::class, 'getLessons']);
 
 
 //DROPDOWNS
