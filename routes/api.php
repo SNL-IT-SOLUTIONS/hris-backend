@@ -272,6 +272,8 @@ Route::post('/training/choices/create', [TrainingAdminController::class, 'create
 Route::get('/training/module/full/{id}', [TrainingAdminController::class, 'getModule']);
 Route::post('/training/lesson/create', [TrainingLessonController::class, 'createLesson']);
 Route::get('/training/lessons', [TrainingLessonController::class, 'getLessons']);
+Route::get('/training/lessons/{id}', [TrainingLessonController::class, 'getLessonById']);
+
 
 
 //DROPDOWNS

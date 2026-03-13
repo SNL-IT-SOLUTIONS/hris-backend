@@ -21,7 +21,7 @@ class TrainingLessonController extends Controller
 
 
     // Get single lesson
-    public function getLesson($id)
+    public function getLessonbyId($id)
     {
         $lesson = TrainingLesson::find($id);
 
