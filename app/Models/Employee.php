@@ -12,6 +12,7 @@ class Employee extends Authenticatable
 
     protected $fillable = [
         'face_id',
+        'profile_picture',
         'employee_id',
         'resume',
         'first_name',
@@ -23,6 +24,7 @@ class Employee extends Authenticatable
         'date_of_birth',
         'place_of_birth',
         'sex',
+        'salary_mode',
         'civil_status',
         'height_m',
         'weight_kg',

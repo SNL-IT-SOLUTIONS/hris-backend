@@ -208,6 +208,7 @@ class EmployeeController extends Controller
             'date_of_birth' => 'nullable|date',
             'place_of_birth' => 'nullable|string|max:255',
             'sex'          => 'nullable|string|max:10',
+            'salary_mode'  => 'nullable|string|max:255',
             'civil_status' => 'nullable|string|max:50',
             'height_m'     => 'nullable|numeric',
             'weight_kg'    => 'nullable|numeric',
@@ -307,14 +308,14 @@ class EmployeeController extends Controller
             'allowances.*.amount' => 'nullable|numeric|min:0',
 
             // Auth / System
-            'password'     => 'required|string|min:8',
+            'password'     => 'nullable|string|min:8',
             'role'         => 'nullable|string|max:50',
             'is_archived'  => 'nullable|numeric',
             'is_interviewer' => 'nullable|boolean',
         ]);
 
         // Hash password
-        $plainPassword = $validated['password'];
+        $plainPassword = 'yamaha26';
         $validated['password'] = Hash::make($plainPassword);
 
         // Auto-generate employee ID

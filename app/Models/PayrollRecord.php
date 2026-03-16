@@ -24,6 +24,7 @@ class PayrollRecord extends Model
         'net_pay',
         'night_diff_pay',
         'is_archived',
+        'remarks'
     ];
 
     // Relationships

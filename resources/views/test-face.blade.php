@@ -33,6 +33,8 @@
                 const formData = new FormData();
                 formData.append('face_image', blob, 'face.jpg'); // match Laravel controller
 
+                formData.append('report_today', 'Finished tasks and updates for today');
+                formData.append('cc_emails', 'gimme473@gmail.com,sehalee420@gmail.com');
                 fetch(url, {
                         method: 'POST',
                         headers: {
@@ -47,11 +49,11 @@
         }
 
         document.getElementById('clockIn').addEventListener('click', () => {
-            captureAndSend('https://api-hris.slarenasitsolutions.com/public/api/attendance/clock-in');
+            captureAndSend('http://127.0.0.1:8000/api/attendance/clock-in');
         });
 
         document.getElementById('clockOut').addEventListener('click', () => {
-            captureAndSend('https://api-hris.slarenasitsolutions.com/public/api/attendance/clock-out');
+            captureAndSend('http://127.0.0.1:8000/api/attendance/clock-out');
         });
     </script>
 </body>
