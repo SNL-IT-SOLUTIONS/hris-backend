@@ -6,10 +6,10 @@ use App\Models\Interview;
 use App\Models\Applicant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use App\Models\Employee;
+use App\Mail\InterviewScheduledMail;
 use Illuminate\Support\Facades\Mail;
-use App\Mail\EmployeeCreated;
-use Illuminate\Support\Facades\Hash;
+use Exception;
+
 
 class InterviewController extends Controller
 {
@@ -27,7 +27,6 @@ class InterviewController extends Controller
                 'location_link'  => 'nullable|string',
             ]);
 
-            // Fetch applicant to get stage and position
             $applicant = Applicant::findOrFail($applicantId);
 
             $validated['applicant_id'] = $applicantId;
@@ -37,9 +36,14 @@ class InterviewController extends Controller
 
             $interview = Interview::create($validated);
 
+            // Send email notification
+            if (!empty($applicant->email)) {
+                Mail::to($applicant->email)->send(new InterviewScheduledMail($applicant, $interview));
+            }
+
             return response()->json([
                 'isSuccess' => true,
-                'message'   => 'Interview scheduled successfully!',
+                'message'   => 'Interview scheduled and email notification sent!',
                 'data'      => $interview->load(['applicant', 'interviewer']),
             ], 201);
         } catch (\Exception $e) {
@@ -84,6 +88,7 @@ class InterviewController extends Controller
         try {
             $interviews = Interview::with('interviewer')
                 ->where('applicant_id', $applicantId)
+                ->where('status', '!=', 'completed')
                 ->orderBy('scheduled_at', 'desc')
                 ->get();
 
@@ -177,13 +182,13 @@ class InterviewController extends Controller
     {
         try {
             $interview = Interview::findOrFail($id);
-            $interview->update(['status' => 'no show']);
+            $interview->update(['status' => 'noshow']);
 
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Interview cancelled successfully.',
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error cancelling interview: ' . $e->getMessage());
             return response()->json([
                 'isSuccess' => false,

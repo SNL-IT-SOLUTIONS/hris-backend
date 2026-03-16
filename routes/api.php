@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AllowanceTypeController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CompanyInformationController;
@@ -18,7 +19,15 @@ use App\Http\Controllers\ApplicantController;
 use App\Http\Controllers\InterviewController;
 use App\Http\Controllers\DropdownController;
 use App\Http\Controllers\AttendanceController;
-
+use App\Http\Controllers\LoanController;
+use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\LoanTypeController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\AnnouncementBoardController;
+use App\Http\Controllers\TrainingModuleController;
+use App\Http\Controllers\TrainingTestController;
+use App\Http\Controllers\TrainingAdminController;
+use App\Http\Controllers\TrainingLessonController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -32,7 +41,15 @@ use App\Http\Controllers\AttendanceController;
 //AUTHENTICATION
 Route::post('login', [AuthController::class, 'login']);
 Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
-
+Route::get('my-profile', [AuthController::class, 'getMyProfile'])->middleware('auth:sanctum');
+Route::post('update-profile', [AuthController::class, 'updateProfile'])->middleware('auth:sanctum');
+Route::post('update-profile-picture', [AuthController::class, 'updateProfilePicture'])->middleware('auth:sanctum');
+Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');
+//DASHBOARD
+Route::get('dashboard', [DashboardController::class, 'index']);
+Route::get('dashboard/employees', [DashboardController::class, 'employeesDashboard'])->middleware('auth:sanctum');
+Route::get('dashboard/calendar', [DashboardController::class, 'attendanceCalendarDashboard'])->middleware('auth:sanctum');
+Route::get('dashboard/attendance/overview', [DashboardController::class, 'monthlyAttendanceDashboard'])->middleware('auth:sanctum');
 
 //RECRUITMENT - JOB POSTINGS
 Route::controller(JobPostingController::class)->group(function () {
@@ -59,6 +76,8 @@ Route::controller(ApplicantController::class)->group(function () {
     Route::post('create/applicants', 'createApplicant');
     Route::get('applicants', 'getApplicants');
     Route::get('applicants/{id}', 'getApplicantById');
+    Route::get('hired', 'getHiredApplicants');
+    Route::get('hired/{id}', 'getHiredApplicantById');
     Route::post('applicants/{id}/move', 'moveStage');
     Route::post('applicants/{id}/hire', 'hireApplicant');
     Route::post('update/applicants/{id}', 'updateApplicant');
@@ -81,13 +100,32 @@ Route::controller(EmployeeController::class)->middleware(['auth:sanctum'])->grou
     Route::post('employees/{id}/archive', 'archiveEmployee');
 });
 
+//ATTENDANCE & LEAVES
 Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->group(function () {
-    Route::post('attendance/clock-in', 'clockIn');
-    Route::post('attendance/clock-out', 'clockOut');
-    Route::get('attendance/summary', 'getMyAttendance');
+    Route::middleware('auth:sanctum')->post('register-face', [AttendanceController::class, 'registerFace']);
+    Route::middleware('auth:sanctum')->post('attendance/clock-in', [AttendanceController::class, 'clockIn']);
+    Route::middleware('auth:sanctum')->post('attendance/clock-out', [AttendanceController::class, 'clockOut']);
+    Route::middleware('auth:sanctum')->get('my-leaves', [AttendanceController::class, 'getMyLeaves']);
+    Route::middleware('auth:sanctum')->get('my-attendance', [AttendanceController::class, 'getMyAttendance']);
+    Route::middleware('auth:sanctum')->get('my-absence', [AttendanceController::class, 'getMyMonthlyAbsences']);
+    Route::get('/my-attendance/export', [AttendanceController::class, 'exportMyAttendanceCSV']);
+    Route::middleware('auth:sanctum')->get('employees/{id}/attendance', [AttendanceController::class, 'getEmployeeAttendanceReport']);
     Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
-});
+    Route::post('request-leave', 'requestLeave');
+    //DTR ADJUSTMENTS
 
+    Route::get('missed-adjustments', 'getMissedAdjustments');
+    Route::post('request/clock/date', 'requestClockDateAdjustment');
+    Route::middleware('auth:sanctum')->get('my-adjustments', [AttendanceController::class, 'getMyAdjustments']);
+    Route::post('request/adjustment/{attendanceId}', 'requestAdjustment');
+    Route::post('adjustment/approve/{adjustmentId}', 'approveAdjustment');
+    Route::post('adjustment/reject/{adjustmentId}', 'rejectAdjustment');
+
+    Route::post('confirm-leave/{leaveId}', 'confirmLeave');
+    Route::get('leaves', 'getAllLeaves');
+});
+Route::get('attendances', [AttendanceController::class, 'getAllAttendances']);
+Route::get('dtr-adjustments', [AttendanceController::class, 'getAdjustments']);
 
 //SETUP Work Locations
 Route::controller(WorkLocationController::class)->group(function () {
@@ -114,7 +152,7 @@ Route::controller(BenefitTypeController::class)->group(function () {
     Route::get('benefit-types/{id}', 'getBenefitType');
     Route::post('create/benefit-types', 'createBenefitType');
     Route::post('update/benefit-types/{id}', 'updateBenefitType');
-    Route::post('benefit-types/{id}/archive', 'archiveBenefitType');
+    Route::post('benefit-types/{id}/archive', 'deleteBenefitType');
 });
 
 //SETUP - ROLES
@@ -128,7 +166,7 @@ Route::controller(RoleController::class)->group(function () {
 
 //SETUP - USERS
 Route::controller(UserController::class)->group(function () {
-    Route::get('users', 'getUsers');
+    Route::get('users', 'getAllUsers');
     Route::get('users/{id}', 'getUserById');
     Route::post('create/users', 'createUser');
     Route::post('update/users/{id}', 'updateUser');
@@ -162,6 +200,82 @@ Route::controller(PositionTypeController::class)->group(function () {
     Route::post('position-types/{id}/archive', 'archivePositionType');
 });
 
+//PAYROLL
+Route::controller(PayrollController::class)->group(function () {
+    Route::post('payroll/employees', 'getEmployees');
+    Route::post('payroll/generate', 'createPayrollPeriod');
+    Route::post('payroll/update/{periodId}', 'updatePayrollPeriod');
+    ROute::post('payroll/archive/{periodId}', 'archivePayrollPeriod');
+    Route::get('payroll/periods', 'getPayrollPeriods');
+    Route::get('payroll/details/{periodId}', 'getPayrollDetails');
+    Route::get('payroll/periods/{periodId}/details', 'getPayrollDetails');
+    Route::get('payroll/payslip/{recordId}', 'getPayslip');
+    Route::get('payroll/summary', 'getPayrollSummary');
+    Route::post('payroll/process/{periodId}', 'processPayroll');
+    Route::post('thirteenth-month/generate', 'createThirteenthMonthPeriod');
+    Route::get('thirteenth-month/periods', 'getThirteenthMonthPeriods');
+    Route::get('thirteenth-month/pays/{periodId}', 'getPaysByPeriod');
+
+    Route::middleware('auth:sanctum')->get('my-payroll-records', [PayrollController::class, 'getMyPayrollRecords']);
+    Route::middleware('auth:sanctum')->get('my-payslip/{recordId}', [PayrollController::class, 'getMyPayslips']);
+    Route::middleware('auth:sanctum')->get('my-payroll-periods', [PayrollController::class, 'getMyPayrollPeriods']);
+    Route::middleware('auth:sanctum')->get('my-payroll-details/{id}', [PayrollController::class, 'getMyPayrollDetails']);
+});
+
+//Allowances
+Route::controller(AllowanceTypeController::class)->group(function () {
+    Route::get('allowance-types', 'getAllowanceTypes');
+    Route::get('allowance-types/{id}', 'getAllowanceTypeById');
+    Route::post('create/allowance-types', 'createAllowanceType');
+    Route::post('update/allowance-types/{id}', 'updateAllowanceType');
+    Route::post('allowance-types/{id}/archive', 'archiveAllowanceType');
+});
+
+
+//Loans
+Route::controller(LoanTypeController::class)->group(function () {
+    Route::get('loan-types', 'getLoanTypes');
+    Route::get('loan-types/{id}', 'getLoanTypeById');
+    Route::post('create/loan-types', 'createLoanType');
+    Route::post('update/loan-types/{id}', 'updateLoanType');
+    Route::post('loan-types/{id}/archive', 'archiveLoanType');
+});
+
+//Loan Applications
+Route::controller(LoanController::class)->group(function () {
+    Route::post('create/loans', 'createLoan');
+    Route::post('update/loans/{id}', 'updateLoan');
+    Route::get('loans', 'getLoans');
+    Route::get('loans/{id}', 'getLoanById');
+    Route::post('loans/{id}/approve', 'approveLoan');
+    Route::post('loans/{id}/cancel', 'cancelLoan');
+    Route::middleware('auth:sanctum')->get('my-loans', [LoanController::class, 'getMyLoans']);
+});
+
+//ANNOUNCEMENTS
+Route::controller(AnnouncementBoardController::class)->group(function () {
+
+    Route::post('create/announcements', 'createAnnouncement')->middleware('auth:sanctum');
+    Route::post('update/announcements/{id}', 'updateAnnouncement');
+    Route::get('announcements', 'getAnnouncements');
+    Route::get('announcements/{id}', 'getAnnouncementById');
+    Route::post('announcements/{id}/archive', 'archiveAnnouncement');
+});
+
+//TRAINING TEST
+Route::get('/training/modules', [TrainingModuleController::class, 'getModules']);
+Route::get('/training/module/{id}', [TrainingModuleController::class, 'getModuleQuestions']);
+Route::post('/training/submit-test', [TrainingTestController::class, 'submitTest']);
+Route::post('/training/module/create', [TrainingAdminController::class, 'createModule']);
+Route::get('/training/modules/lesson/{lessonId}', [TrainingAdminController::class, 'getModulesByLesson']);
+Route::post('/training/question/create', [TrainingAdminController::class, 'createQuestion']);
+Route::post('/training/choices/create', [TrainingAdminController::class, 'createChoices']);
+Route::get('/training/module/full/{id}', [TrainingAdminController::class, 'getModule']);
+Route::post('/training/lesson/create', [TrainingLessonController::class, 'createLesson']);
+Route::get('/training/lessons', [TrainingLessonController::class, 'getLessons']);
+Route::get('/training/lessons/{id}', [TrainingLessonController::class, 'getLessonById']);
+Route::get('/training/lessons/{id}/structure', [TrainingLessonController::class, 'getLessonStructure']);
+
 
 //DROPDOWNS
 Route::controller(DropdownController::class)->group(function () {
@@ -169,4 +283,9 @@ Route::controller(DropdownController::class)->group(function () {
     Route::get('dropdown/work-locations', 'getWorkLocations');
     Route::get('dropdown/employees', 'getEmployeesDropdown');
     Route::get('dropdown/position-types', 'getPostionTypesDropdown');
+    Route::get('dropdown/interviewers', 'getInterviewersDropdown');
+    Route::get('dropdown/benefit-types', 'getBenefitTypesDropdown');
+    Route::get('dropdown/allowance-types', 'getAllowanceTypesDropdown');
+    Route::get('dropdown/leave-types', 'getLeaveTypesDropdown');
+    Route::get('dropdown/loan-types', 'getLoanTypesDropdown');
 });

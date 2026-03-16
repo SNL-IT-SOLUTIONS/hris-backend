@@ -15,9 +15,9 @@ class JobPostingController extends Controller
             $validated = $request->validate([
                 'title'          => 'required|string|max:255',
                 'department_id'  => 'required|exists:departments,id',
-                'work_type'      => 'required|string|max:100',
-                'employment_type' => 'required|string|max:100',
                 'location'       => 'nullable|string|max:255',
+                'work_type'      => 'sometimes|string|max:100',
+                'employment_type' => 'sometimes|string|max:100',
                 'salary_range'   => 'nullable|string|max:100',
                 'description'    => 'nullable|string',
                 'status'         => 'in:draft,active,closed',
@@ -38,7 +38,7 @@ class JobPostingController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to create job posting.',
-                'error' => $e->getMessage(), // 👈 Show actual cause
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -48,10 +48,11 @@ class JobPostingController extends Controller
     {
         try {
             $query = JobPosting::with('department')
-                ->where('is_archived', false);
+                ->where('is_archived', false)
+                ->whereIn('status', ['active', 'draft', 'open']);
 
-            // 🔍 Search
-            if ($request->has('search') && $request->search != '') {
+            // Search
+            if ($request->filled('search')) {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('title', 'LIKE', "%$search%")
@@ -64,12 +65,12 @@ class JobPostingController extends Controller
             }
 
             //  Filter by department
-            if ($request->has('department_id')) {
+            if ($request->filled('department_id')) {
                 $query->where('department_id', $request->department_id);
             }
 
-            //  Filter by status
-            if ($request->has('status')) {
+            //  Optional: filter by status if provided (overrides default active+draft)
+            if ($request->filled('status')) {
                 $query->where('status', $request->status);
             }
 
@@ -104,6 +105,9 @@ class JobPostingController extends Controller
         }
     }
 
+
+
+
     //  Update job posting
     public function updateJobPosting(Request $request, $id)
     {
@@ -125,7 +129,7 @@ class JobPostingController extends Controller
                 'location'       => 'nullable|string|max:255',
                 'salary_range'   => 'nullable|string|max:100',
                 'description'    => 'nullable|string',
-                'status'         => 'in:draft,active,closed',
+                'status'         => 'in:draft,active,open,closed',
                 'posted_date'    => 'nullable|date',
                 'deadline_date'  => 'nullable|date|after_or_equal:posted_date',
             ]);

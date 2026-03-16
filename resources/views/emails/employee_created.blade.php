@@ -57,7 +57,7 @@
         <p>Please log in using your credentials and update your password after the first login to keep your account
             secure.</p>
 
-        <a href="{{ url('/login') }}" class="button"><span>Login to Your Account</span></a>
+        <a href="https://app-hris.slarenasitsolutions.com/" class="button"><span>Login to Your Account</span></a>
 
         <p class="footer">If you have any questions, contact HR at hr@company.com</p>
     </div>

@@ -17,7 +17,7 @@ class CompanyInformationController extends Controller
         $info = CompanyInformation::first(); // Only one record
 
         if ($info && $info->company_logo) {
-            // Convert to full URL using asset() since it's saved under /public/hris_files
+
             $info->company_logo = asset($info->company_logo);
         }
 
@@ -46,7 +46,7 @@ class CompanyInformationController extends Controller
             'state_province'      => 'nullable|string|max:100',
             'postal_code'         => 'nullable|string|max:20',
             'country'             => 'nullable|string|max:100',
-            'company_logo'        => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Added validation for logo
+            'company_logo'        => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         // Save the uploaded logo (if any)

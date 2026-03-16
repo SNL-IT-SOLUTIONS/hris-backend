@@ -28,9 +28,12 @@ class Applicant extends Model
         'status',
         'is_archived',
     ];
-
     public function jobPosting()
     {
-        return $this->belongsTo(JobPosting::class);
+        return $this->belongsTo(JobPosting::class, 'job_posting_id'); // make sure foreign key is correct
+    }
+    public function department()
+    {
+        return $this->belongsTo(Department::class, 'department_id'); // correct foreign key
     }
 }

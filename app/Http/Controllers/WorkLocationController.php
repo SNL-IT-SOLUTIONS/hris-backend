@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 
 class WorkLocationController extends Controller
 {
-    // ✅ Get all active work locations
+    // Get all active work locations
     public function getWorkLocations()
     {
         $locations = WorkLocation::where('is_archived', false)->get();
@@ -19,7 +19,7 @@ class WorkLocationController extends Controller
         ]);
     }
 
-    // ✅ Create new work location
+    // Create new work location
     public function createWorkLocation(Request $request)
     {
         $validated = $request->validate([
@@ -37,7 +37,7 @@ class WorkLocationController extends Controller
         ], 201);
     }
 
-    // ✅ Get a single work location
+    // Get a single work location
     public function getWorkLocation($id)
     {
         $location = WorkLocation::find($id);
@@ -56,7 +56,7 @@ class WorkLocationController extends Controller
         ]);
     }
 
-    // ✅ Update work location
+    //  Update work location
     public function updateWorkLocation(Request $request, $id)
     {
         $location = WorkLocation::find($id);
@@ -83,7 +83,7 @@ class WorkLocationController extends Controller
         ]);
     }
 
-    // ✅ Archive work location instead of deleting
+    // Archive work location instead of deleting
     public function archiveWorkLocation($id)
     {
         $location = WorkLocation::find($id);

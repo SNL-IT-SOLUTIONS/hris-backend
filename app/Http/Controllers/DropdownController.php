@@ -2,16 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Models\AllowanceType;
 use App\Models\Department;
 use App\Models\WorkLocation;
 use App\Models\Employee;
 use App\Models\PositionType;
+use App\Models\BenefitType;
+use App\Models\LeaveType;
+use App\Models\LoanType;
+use Illuminate\Http\Request;
 
 class DropdownController extends Controller
 {
     /**
-     * 🔽 Get all departments for dropdown
+     * Get all departments for dropdown
      */
     public function getDepartments()
     {
@@ -36,7 +40,7 @@ class DropdownController extends Controller
     }
 
     /**
-     * 🏢 Get all work locations for dropdown
+     * Get all work locations for dropdown
      */
     public function getWorkLocations()
     {
@@ -111,6 +115,123 @@ class DropdownController extends Controller
             return response()->json([
                 'isSuccess' => false,
                 'message' => 'Failed to load employees dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getInterviewersDropdown()
+    {
+        try {
+            $interviewers = Employee::select('id', 'first_name', 'last_name')
+                ->where('is_archived', 0)
+                ->where('is_interviewer', 1)
+                ->orderBy('first_name')
+                ->get()
+                ->map(function ($emp) {
+                    return [
+                        'id' => $emp->id,
+                        'interviewer_name' => "{$emp->first_name} {$emp->last_name}"
+                    ];
+                });
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Interviewers dropdown retrieved successfully.',
+                'data' => $interviewers
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load interviewers dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getBenefitTypesDropdown()
+    {
+        try {
+            $benefitTypes = BenefitType::select('id', 'benefit_name')
+                ->where('is_active', 1)
+                ->orderBy('benefit_name', 'asc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Benefit types dropdown retrieved successfully.',
+                'data' => $benefitTypes
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load benefit types dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getAllowanceTypesDropdown()
+    {
+        try {
+            $allowanceTypes = AllowanceType::select('id', 'type_name')
+                ->where('is_archived', 0)
+                ->orderBy('type_name', 'asc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Allowance types dropdown retrieved successfully.',
+                'data' => $allowanceTypes
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load allowance types dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getLeaveTypesDropdown()
+    {
+        try {
+            $leaveTypes = LeaveType::select('id', 'leave_name', 'max_days')
+                ->where('is_active', 1)
+                ->orderBy('leave_name', 'asc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Leave types dropdown retrieved successfully.',
+                'data' => $leaveTypes
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load leave types dropdown.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getLoanTypesDropdown()
+    {
+        try {
+            $loanTypes = LoanType::select('id', 'type_name')
+                ->where('is_active', 1)
+                ->orderBy('type_name', 'asc')
+                ->get();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Loan types dropdown retrieved successfully.',
+                'data' => $loanTypes
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load loan types dropdown.',
                 'error' => $e->getMessage()
             ], 500);
         }
