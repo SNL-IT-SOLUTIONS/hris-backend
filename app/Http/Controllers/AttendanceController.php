@@ -177,6 +177,16 @@ class AttendanceController extends Controller
             return $attendance;
         });
 
+        $leaves->transform(function ($leave) {
+
+            // Convert profile picture to full URL
+            if ($leave->employee && $leave->employee->profile_picture) {
+                $leave->employee->profile_picture = asset($leave->employee->profile_picture);
+            }
+
+            return $leave;
+        });
+
         return response()->json([
             'isSuccess' => true,
             'data' => $attendances
@@ -593,6 +603,61 @@ class AttendanceController extends Controller
         }
     }
 
+    public function getMyMonthlyAbsences(Request $request)
+    {
+        // Validate input
+        $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year'  => 'required|integer'
+        ]);
+
+        $user = auth()->user();
+
+        // Start and end of the month
+        $start = Carbon::create($request->year, $request->month, 1);
+        $end   = $start->copy()->endOfMonth();
+
+        $absentDates = [];
+
+        // Loop through each day of the month
+        for ($date = $start->copy(); $date <= $end; $date->addDay()) {
+
+            // Skip weekends
+            if ($date->isWeekend()) {
+                continue;
+            }
+
+            // Skip future dates
+            if ($date->gt(now())) {
+                continue;
+            }
+
+            // Check if employee has attendance record for this day
+            $attendanceExists = Attendance::where('employee_id', $user->id)
+                ->whereDate('clock_in', $date)
+                ->exists();
+
+            // Check if employee has approved leave for this day
+            $leaveExists = Leave::where('employee_id', $user->id)
+                ->where('status', 'Approved')
+                ->whereDate('start_date', '<=', $date)
+                ->whereDate('end_date', '>=', $date)
+                ->exists();
+
+            // If neither attendance nor leave exists → absent
+            if (!$attendanceExists && !$leaveExists) {
+                $absentDates[] = $date->toDateString();
+            }
+        }
+
+        return response()->json([
+            'month' => $request->month,
+            'year'  => $request->year,
+            'absent_dates' => $absentDates,
+            'total_absent' => count($absentDates)
+        ]);
+    }
+
 
     public function exportMyAttendanceCSV(Request $request)
     {
@@ -686,61 +751,6 @@ class AttendanceController extends Controller
                 'message' => $e->getMessage()
             ], 500);
         }
-    }
-
-    public function getMyMonthlyAbsences(Request $request)
-    {
-        // Validate input
-        $request->validate([
-            'month' => 'required|integer|min:1|max:12',
-            'year'  => 'required|integer'
-        ]);
-
-        $user = auth()->user();
-
-        // Start and end of the month
-        $start = Carbon::create($request->year, $request->month, 1);
-        $end   = $start->copy()->endOfMonth();
-
-        $absentDates = [];
-
-        // Loop through each day of the month
-        for ($date = $start->copy(); $date <= $end; $date->addDay()) {
-
-            // Skip weekends
-            if ($date->isWeekend()) {
-                continue;
-            }
-
-            // Skip future dates
-            if ($date->gt(now())) {
-                continue;
-            }
-
-            // Check if employee has attendance record for this day
-            $attendanceExists = Attendance::where('employee_id', $user->id)
-                ->whereDate('clock_in', $date)
-                ->exists();
-
-            // Check if employee has approved leave for this day
-            $leaveExists = Leave::where('employee_id', $user->id)
-                ->where('status', 'Approved')
-                ->whereDate('start_date', '<=', $date)
-                ->whereDate('end_date', '>=', $date)
-                ->exists();
-
-            // If neither attendance nor leave exists → absent
-            if (!$attendanceExists && !$leaveExists) {
-                $absentDates[] = $date->toDateString();
-            }
-        }
-
-        return response()->json([
-            'month' => $request->month,
-            'year'  => $request->year,
-            'absent_dates' => $absentDates,
-            'total_absent' => count($absentDates)
-        ]);
     }
 
 
@@ -953,7 +963,6 @@ class AttendanceController extends Controller
         ]);
     }
 
-
     public function approveAdjustment(Request $request, $adjustmentId)
     {
         $request->validate([
@@ -1041,6 +1050,62 @@ class AttendanceController extends Controller
             'attendance' => $attendance->fresh(),
             'adjustment' => $adjustment
         ], 200);
+    }
+
+    public function requestClockDateAdjustment(Request $request)
+    {
+        $request->validate([
+            'adjusted_clock_date' => 'required|date',
+            'adjusted_clock_in'   => 'nullable|date',
+            'adjusted_clock_out'  => 'nullable|date',
+            'reason'              => 'required|string|max:255',
+        ]);
+
+        $employee = auth()->user();
+
+        $adjustedClockIn = $request->adjusted_clock_in
+            ? Carbon::parse($request->adjusted_clock_in)
+            : null;
+
+        $adjustedClockOut = $request->adjusted_clock_out
+            ? Carbon::parse($request->adjusted_clock_out)
+            : null;
+
+        // Check if attendance exists for that date
+        $attendance = Attendance::where('employee_id', $employee->id)
+            ->whereDate('clock_in', $request->adjusted_clock_date)
+            ->first();
+
+        // If none exists create missed attendance for that date
+        if (!$attendance) {
+            $attendance = Attendance::create([
+                'employee_id' => $employee->id,
+                'clock_in'    => Carbon::parse($request->adjusted_clock_date)->startOfDay(),
+                'status'      => 'Missed',
+                'method'      => 'Manual',
+            ]);
+        }
+
+        // Create adjustment request
+        $adjustment = AttendanceAdjustment::create([
+            'attendance_id'       => $attendance->id,
+            'employee_id'         => $employee->id,
+            'adjusted_clock_date' => $request->adjusted_clock_date,
+            'requested_clock_in'  => $adjustedClockIn,
+            'requested_clock_out' => $adjustedClockOut,
+            'reason'              => $request->reason,
+            'status'              => 'Pending',
+        ]);
+
+        // Notify HR
+        Mail::to('normanparaiso.abm12@gmail.com')
+            ->send(new AdjustmentRequestMail($attendance, $employee));
+
+        return response()->json([
+            'isSuccess' => true,
+            'message'   => 'Adjustment request submitted successfully. HR has been notified.',
+            'data'      => $adjustment,
+        ]);
     }
 
 
