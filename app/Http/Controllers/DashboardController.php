@@ -106,18 +106,23 @@ class DashboardController extends Controller
             // Total Net Pays
             $totalNetPays = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
-                ->where('status', 'processed')
+                ->whereHas('payrollPeriod', function ($q) {
+                    $q->where('status', 'processed');
+                })
                 ->sum('net_pay');
-
             // Total Gross Amount of Payslips
             $totalPayslipAmount = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
-                ->where('status', 'processed')
+                ->whereHas('payrollPeriod', function ($q) {
+                    $q->where('status', 'processed');
+                })
                 ->sum('gross_pay');
 
             $totalPayslipCount = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
-                ->where('status', 'processed')
+                ->whereHas('payrollPeriod', function ($q) {
+                    $q->where('status', 'processed');
+                })
                 ->count();
 
 
@@ -174,8 +179,8 @@ class DashboardController extends Controller
             return response()->json([
                 'overview' => [
                     'total_attendance' => $totalAttendance,
-                    'total_net_pays' => $totalNetPays,
-                    'total_payslip_amount' => $totalPayslipAmount,
+                    // 'total_net_pays' => $totalNetPays,
+                    // 'total_payslip_amount' => $totalPayslipAmount,
                     'total_payslip_count' => $totalPayslipCount,
                 ],
 
@@ -210,13 +215,15 @@ class DashboardController extends Controller
                 ], 401);
             }
 
-            $month = $request->month;
-            $year  = $request->year;
-
-            $start = Carbon::create($year, $month, 1);
+            $start = Carbon::create($request->year, $request->month, 1);
             $end   = $start->copy()->endOfMonth();
 
             $calendar = [];
+
+            $presentCount = 0;
+            $lateCount = 0;
+            $missedCount = 0;
+            $absentCount = 0;
 
             for ($date = $start->copy(); $date <= $end; $date->addDay()) {
 
@@ -233,11 +240,21 @@ class DashboardController extends Controller
                 $status = 'absent';
 
                 if ($attendance) {
-                    $status = strtolower($attendance->status); // present / late
+                    $status = strtolower($attendance->status);
+
+                    if ($status === 'present') {
+                        $presentCount++;
+                    } elseif ($status === 'late') {
+                        $lateCount++;
+                    } elseif ($status === 'missed') {
+                        $missedCount++;
+                    }
                 } elseif ($leave) {
                     $status = 'leave';
                 } elseif ($date->isWeekend()) {
                     $status = 'weekend';
+                } else {
+                    $absentCount++;
                 }
 
                 $calendar[] = [
@@ -248,17 +265,6 @@ class DashboardController extends Controller
                 ];
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | SUMMARY STATS
-        |--------------------------------------------------------------------------
-        */
-
-            $presentCount = collect($calendar)->where('status', 'present')->count();
-            $lateCount = collect($calendar)->where('status', 'late')->count();
-            $missedCount = collect($calendar)->where('status', 'missed')->count();
-            $absentCount = collect($calendar)->where('status', 'absent')->count();
-
             return response()->json([
                 'success' => true,
 
@@ -266,6 +272,9 @@ class DashboardController extends Controller
                     'id' => $employee->id,
                     'name' => $employee->first_name . ' ' . $employee->last_name
                 ],
+
+                'month' => $start->format('F'),
+                'year'  => $start->year,
 
                 'summary' => [
                     'present' => $presentCount,
@@ -281,55 +290,73 @@ class DashboardController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to load attendance calendar.',
+                'message' => 'Failed to load attendance dashboard.',
                 'error' => $e->getMessage()
             ], 500);
         }
     }
 
-    public function overallAttendanceDashboard(Request $request)
+    public function monthlyAttendanceDashboard()
     {
         try {
 
-            $request->validate([
-                'year'  => 'required|integer'
-            ]);
+            $user = auth()->user();
 
-            $year  = $request->year;
+            $start = now()->startOfMonth();
+            $end   = now()->endOfMonth();
 
-            $start = Carbon::create($year, 1, 1)->startOfDay();
-            $end   = Carbon::create($year, 12, 31)->endOfDay();
-
-            $presentCount = Attendance::where('employee_id', auth()->user()->id)
+            $presentCount = Attendance::where('employee_id', $user->id)
                 ->where('status', 'Present')
-                ->whereDate('clock_in', '>=', $start)
-                ->whereDate('clock_in', '<=', $end)
+                ->whereBetween('clock_in', [$start, $end])
                 ->count();
 
-            $lateCount = Attendance::where('employee_id', auth()->user()->id)
+            $missedCount = Attendance::where('employee_id', $user->id)
                 ->where('status', 'missed')
-                ->whereDate('clock_in', '>=', $start)
-                ->whereDate('clock_in', '<=', $end)
+                ->whereBetween('clock_in', [$start, $end])
                 ->count();
 
-            $absentCount = Attendance::where('employee_id', auth()->user()->id)
-                ->where('status', 'Absent')
-                ->whereDate('clock_in', '>=', $start)
-                ->whereDate('clock_in', '<=', $end)
-                ->count();
+            $absentCount = 0;
+
+            for ($date = $start->copy(); $date <= $end; $date->addDay()) {
+
+                if ($date->isWeekend()) {
+                    continue;
+                }
+
+                if ($date->gt(now())) {
+                    continue;
+                }
+
+                $attendanceExists = Attendance::where('employee_id', $user->id)
+                    ->whereDate('clock_in', $date)
+                    ->exists();
+
+                $leaveExists = Leave::where('employee_id', $user->id)
+                    ->where('status', 'Approved')
+                    ->whereDate('start_date', '<=', $date)
+                    ->whereDate('end_date', '>=', $date)
+                    ->exists();
+
+                if (!$attendanceExists && !$leaveExists) {
+                    $absentCount++;
+                }
+            }
 
             return response()->json([
                 'success' => true,
                 'data' => [
+                    'month'   => $start->format('F'),
+                    'year'    => $start->year,
                     'present' => $presentCount,
-                    'missed' => $missedCount,
-                    'absent' => $absentCount
+                    'missed'  => $missedCount,
+                    'absent'  => $absentCount
                 ]
             ], 200);
         } catch (\Exception $e) {
+
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to load overall attendance data.',
+                'message' => 'Failed to load monthly attendance data.',
                 'error' => $e->getMessage()
             ], 500);
         }

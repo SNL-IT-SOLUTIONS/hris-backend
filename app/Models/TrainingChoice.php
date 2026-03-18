@@ -16,4 +16,5 @@ class TrainingChoice extends Model
     {
         return $this->belongsTo(TrainingQuestion::class, 'question_id');
     }
+    
 }

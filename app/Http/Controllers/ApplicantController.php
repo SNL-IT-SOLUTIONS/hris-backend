@@ -254,9 +254,11 @@ class ApplicantController extends Controller
             ], 201);
         } catch (\Exception $e) {
             Log::error('Error hiring applicant: ' . $e->getMessage());
+
             return response()->json([
                 'isSuccess' => false,
-                'message'   => 'Failed to hire applicant.'
+                'message'   => 'Failed to hire applicant.',
+                'error'     => $e->getMessage()
             ], 500);
         }
     }

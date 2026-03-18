@@ -100,35 +100,18 @@ class TrainingAdminController extends Controller
     public function createModule(Request $request)
     {
         $request->validate([
-            'lesson_id'   => 'required|exists:training_lessons,id',
-            'title'       => 'required|string|max:255',
+            'title' => 'required|string|max:255',
             'description' => 'nullable|string'
         ]);
 
         $module = TrainingModule::create([
-            'lesson_id'   => $request->lesson_id,
-            'title'       => $request->title,
+            'title' => $request->title,
             'description' => $request->description
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Module created successfully',
-            'module'  => $module
-        ]);
-    }
-
-
-    // Get modules by lesson
-    public function getModulesByLesson($lessonId)
-    {
-        $modules = TrainingModule::where('lesson_id', $lessonId)
-            ->orderBy('id')
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'modules' => $modules
+            'module' => $module
         ]);
     }
 
@@ -138,17 +121,16 @@ class TrainingAdminController extends Controller
     {
         $request->validate([
             'module_id' => 'required|exists:training_modules,id',
-            'question'  => 'required|string'
+            'question' => 'required|string'
         ]);
 
         $question = TrainingQuestion::create([
             'module_id' => $request->module_id,
-            'question'  => $request->question
+            'question' => $request->question
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Question created successfully',
             'question' => $question
         ]);
     }
@@ -159,7 +141,7 @@ class TrainingAdminController extends Controller
     {
         $request->validate([
             'question_id' => 'required|exists:training_questions,id',
-            'choices'     => 'required|array'
+            'choices' => 'required|array'
         ]);
 
         $choices = [];
@@ -169,31 +151,22 @@ class TrainingAdminController extends Controller
             $choices[] = TrainingChoice::create([
                 'question_id' => $request->question_id,
                 'choice_text' => $choice['choice_text'],
-                'is_correct'  => $choice['is_correct']
+                'is_correct' => $choice['is_correct']
             ]);
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'Choices created successfully',
             'choices' => $choices
         ]);
     }
 
 
-    // Get full module structure with questions + choices
+    // Get full module structure
     public function getModule($id)
     {
         $module = TrainingModule::with('questions.choices')
-            ->where('id', $id)
-            ->first();
-
-        if (!$module) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Module not found'
-            ], 404);
-        }
+            ->findOrFail($id);
 
         return response()->json([
             'success' => true,

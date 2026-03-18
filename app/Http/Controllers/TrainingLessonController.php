@@ -8,6 +8,29 @@ use App\Models\TrainingLesson;
 class TrainingLessonController extends Controller
 {
 
+    // Get lesson structure with modules, questions, and choices
+    public function getLessonStructure($lessonId)
+    {
+        try {
+
+            $lesson = TrainingLesson::with([
+                'modules.questions.choices'
+            ])->findOrFail($lessonId);
+
+            return response()->json([
+                'success' => true,
+                'lesson' => $lesson
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Lesson not found'
+            ], 404);
+        }
+    }
+
+
     // Get all lessons
     public function getLessons()
     {
@@ -21,21 +44,23 @@ class TrainingLessonController extends Controller
 
 
     // Get single lesson
-    public function getLessonbyId($id)
+    public function getLessonById($id)
     {
-        $lesson = TrainingLesson::find($id);
+        try {
 
-        if (!$lesson) {
+            $lesson = TrainingLesson::findOrFail($id);
+
+            return response()->json([
+                'success' => true,
+                'lesson' => $lesson
+            ]);
+        } catch (\Exception $e) {
+
             return response()->json([
                 'success' => false,
                 'message' => 'Lesson not found'
             ], 404);
         }
-
-        return response()->json([
-            'success' => true,
-            'lesson' => $lesson
-        ]);
     }
 
 
@@ -63,45 +88,49 @@ class TrainingLessonController extends Controller
     // Update lesson
     public function updateLesson(Request $request, $id)
     {
-        $lesson = TrainingLesson::find($id);
+        try {
 
-        if (!$lesson) {
+            $lesson = TrainingLesson::findOrFail($id);
+
+            $lesson->update([
+                'lesson_title' => $request->lesson_title ?? $lesson->lesson_title,
+                'lesson_description' => $request->lesson_description ?? $lesson->lesson_description
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lesson updated successfully',
+                'lesson' => $lesson
+            ]);
+        } catch (\Exception $e) {
+
             return response()->json([
                 'success' => false,
                 'message' => 'Lesson not found'
             ], 404);
         }
-
-        $lesson->update([
-            'lesson_title' => $request->lesson_title ?? $lesson->lesson_title,
-            'lesson_description' => $request->lesson_description ?? $lesson->lesson_description
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Lesson updated successfully',
-            'lesson' => $lesson
-        ]);
     }
 
 
     // Delete lesson
     public function deleteLesson($id)
     {
-        $lesson = TrainingLesson::find($id);
+        try {
 
-        if (!$lesson) {
+            $lesson = TrainingLesson::findOrFail($id);
+
+            $lesson->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lesson deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+
             return response()->json([
                 'success' => false,
                 'message' => 'Lesson not found'
             ], 404);
         }
-
-        $lesson->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Lesson deleted successfully'
-        ]);
     }
 }

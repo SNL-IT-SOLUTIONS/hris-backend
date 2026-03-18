@@ -15,4 +15,9 @@ class TrainingLesson extends Model
         'lesson_title',
         'lesson_description'
     ];
+
+    public function modules()
+    {
+        return $this->hasMany(TrainingModule::class, 'lesson_id');
+    }
 }

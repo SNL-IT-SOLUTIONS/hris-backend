@@ -374,7 +374,6 @@ class AuthController extends Controller
         $validated = $request->validate([
             // File
             'resume' => 'nullable|file|mimes:pdf,doc,docx,jpeg,png,xlsx|max:2048',
-            'profile_picture' => 'nullable|file|mimes:jpeg,png|max:2048',
             // Basic Info
             'first_name'   => 'nullable|string|max:100',
             'middle_name'  => 'nullable|string|max:100',

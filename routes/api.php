@@ -108,9 +108,10 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::middleware('auth:sanctum')->get('my-leaves', [AttendanceController::class, 'getMyLeaves']);
     Route::middleware('auth:sanctum')->get('my-attendance', [AttendanceController::class, 'getMyAttendance']);
     Route::middleware('auth:sanctum')->get('my-absence', [AttendanceController::class, 'getMyMonthlyAbsences']);
+    Route::get('/my-attendance/export', [AttendanceController::class, 'exportMyAttendanceCSV']);
+    Route::middleware('auth:sanctum')->get('employees/{id}/attendance', [AttendanceController::class, 'getEmployeeAttendanceReport']);
     Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
     Route::post('request-leave', 'requestLeave');
-
     //DTR ADJUSTMENTS
 
     Route::get('missed-adjustments', 'getMissedAdjustments');
@@ -273,7 +274,7 @@ Route::get('/training/module/full/{id}', [TrainingAdminController::class, 'getMo
 Route::post('/training/lesson/create', [TrainingLessonController::class, 'createLesson']);
 Route::get('/training/lessons', [TrainingLessonController::class, 'getLessons']);
 Route::get('/training/lessons/{id}', [TrainingLessonController::class, 'getLessonById']);
-
+Route::get('/training/lessons/{id}/structure', [TrainingLessonController::class, 'getLessonStructure']);
 
 
 //DROPDOWNS

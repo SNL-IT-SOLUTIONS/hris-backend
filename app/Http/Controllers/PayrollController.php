@@ -701,6 +701,9 @@ class PayrollController extends Controller
             ])
                 ->where('employee_id', $employeeId)
                 ->where('is_archived', false)
+                ->whereHas('payrollPeriod', function ($q) {
+                    $q->where('status', 'processed');
+                })
                 ->orderByDesc('created_at');
 
 
@@ -940,11 +943,6 @@ class PayrollController extends Controller
             ], 500);
         }
     }
-
-
-
-
-
 
 
     /**
