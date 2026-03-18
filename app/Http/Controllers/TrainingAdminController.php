@@ -6,9 +6,95 @@ use Illuminate\Http\Request;
 use App\Models\TrainingModule;
 use App\Models\TrainingQuestion;
 use App\Models\TrainingChoice;
+use App\Models\TrainingLesson;
+use App\Models\TrainingLessonModule;
+use App\Models\TrainingLessonQuestion;
+use App\Models\TrainingLessonChoice;
+use Illuminate\Support\Facades\DB;
 
 class TrainingAdminController extends Controller
 {
+
+
+    public function createFullLesson(Request $request)
+    {
+        $request->validate([
+            'lesson_title'       => 'required|string|max:255',
+            'lesson_description' => 'nullable|string',
+            'modules'            => 'required|array|min:1',
+            'modules.*.title'    => 'required|string|max:255',
+            'modules.*.description' => 'nullable|string',
+            'modules.*.questions'   => 'required|array|min:1',
+            'modules.*.questions.*.question' => 'required|string',
+            'modules.*.questions.*.choices'  => 'required|array|min:1',
+            'modules.*.questions.*.choices.*.choice_text' => 'required|string',
+            'modules.*.questions.*.choices.*.is_correct'  => 'required|boolean',
+        ]);
+
+        try {
+            DB::beginTransaction(); // Start transaction
+
+            // Create lesson
+            $lesson = TrainingLesson::create([
+                'lesson_title'       => $request->lesson_title,
+                'lesson_description' => $request->lesson_description,
+            ]);
+
+            $createdModules = [];
+
+            foreach ($request->modules as $moduleData) {
+                $module = TrainingModule::create([
+                    'lesson_id'   => $lesson->id,
+                    'title'       => $moduleData['title'],
+                    'description' => $moduleData['description'] ?? null,
+                ]);
+
+                $createdQuestions = [];
+
+                foreach ($moduleData['questions'] as $questionData) {
+                    $question = TrainingQuestion::create([
+                        'module_id' => $module->id,
+                        'question'  => $questionData['question'],
+                    ]);
+
+                    $createdChoices = [];
+
+                    foreach ($questionData['choices'] as $choiceData) {
+                        $createdChoices[] = TrainingChoice::create([
+                            'question_id' => $question->id,
+                            'choice_text' => $choiceData['choice_text'],
+                            'is_correct'  => $choiceData['is_correct'],
+                        ]);
+                    }
+
+                    $createdQuestions[] = [
+                        'question' => $question,
+                        'choices'  => $createdChoices
+                    ];
+                }
+
+                $createdModules[] = [
+                    'module'    => $module,
+                    'questions' => $createdQuestions
+                ];
+            }
+
+            DB::commit(); // Commit transaction
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lesson, modules, questions, and choices created successfully',
+                'lesson'  => $lesson,
+                'modules' => $createdModules
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack(); // Rollback if anything fails
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create lesson: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 
     // Create Module under a Lesson
     public function createModule(Request $request)
