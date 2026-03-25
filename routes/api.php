@@ -118,7 +118,7 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::post('request/clock/date', 'requestClockDateAdjustment');
     Route::middleware('auth:sanctum')->get('my-adjustments', [AttendanceController::class, 'getMyAdjustments']);
     Route::post('request/adjustment/{attendanceId}', 'requestAdjustment');
-    Route::post('adjustment/approve/{adjustmentId}', 'approveAdjustment');
+
     Route::post('adjustment/reject/{adjustmentId}', 'rejectAdjustment');
     Route::get('my-leaves-balance', 'getMyLeaveBalances');
     Route::post('confirm-leave/{leaveId}', 'confirmLeave');
@@ -126,7 +126,7 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
 Route::get('attendances', [AttendanceController::class, 'getAllAttendances']);
 Route::get('dtr-adjustments', [AttendanceController::class, 'getAdjustments']);
 Route::get('leaves', [AttendanceController::class, 'getAllLeaves']);
-
+Route::post('adjustment/approve/{adjustmentId}', [AttendanceController::class, 'approveAdjustment']);
 //SETUP Work Locations
 Route::controller(WorkLocationController::class)->group(function () {
     Route::get('work-locations', 'getWorkLocations');
