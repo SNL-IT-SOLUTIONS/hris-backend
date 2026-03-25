@@ -123,7 +123,6 @@ class LoanController extends Controller
     public function createLoan(Request $request)
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
             'loan_type_id' => 'required|exists:loan_types,id',
             'principal_amount' => 'required|numeric|min:0',
             'end_date' => 'required|date|after:today',
@@ -131,6 +130,15 @@ class LoanController extends Controller
         ]);
 
         try {
+            $employee = auth()->user();
+
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized.'
+                ], 401);
+            }
+
             $loanType = LoanType::findOrFail($validated['loan_type_id']);
 
             // 🔒 Check amount limit
@@ -145,23 +153,19 @@ class LoanController extends Controller
             $startDate = now();
             $endDate = Carbon::parse($validated['end_date']);
 
-            //  Calculate the number of months between now and end_date
+            // months
             $months = max(1, $startDate->diffInMonths($endDate) + 1);
 
-
-            //  Calculate monthly interest and amortization
             $interestRate = $loanType->interest ?? 0;
             $principal = $validated['principal_amount'];
 
-            //  Total with interest (monthly simple interest, not compounded)
+            // total with interest
             $totalWithInterest = $principal * (1 + ($interestRate / 100) * $months);
-
-            // 🧾 Monthly amortization (divide evenly by number of months)
             $monthlyAmortization = $totalWithInterest / $months;
 
-            //  Create loan record
+            // Create loan
             $loan = Loan::create([
-                'employee_id' => $validated['employee_id'],
+                'employee_id' => $employee->id,
                 'loan_type_id' => $loanType->id,
                 'principal_amount' => $principal,
                 'balance_amount' => round($totalWithInterest, 2),
@@ -169,17 +173,18 @@ class LoanController extends Controller
                 'interest_rate' => $interestRate,
                 'start_date' => $startDate,
                 'end_date' => $validated['end_date'],
-                'status' => 'pending',
+                'status' => 'Pending', // 
                 'remarks' => $validated['remarks'] ?? null,
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Loan created successfully.',
+                'message' => 'Loan request submitted successfully.',
                 'data' => $loan,
             ]);
         } catch (\Exception $e) {
             Log::error('Error creating loan: ' . $e->getMessage());
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create loan.',

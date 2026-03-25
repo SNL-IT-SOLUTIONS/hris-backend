@@ -767,6 +767,47 @@ class AttendanceController extends Controller
         }
     }
 
+    public function getMyLeaveBalances()
+    {
+        try {
+            $user = auth()->user();
+
+            // Get all leave types
+            $leaveTypes = LeaveType::where('is_active', 1)
+                ->where('is_archived', 0)
+                ->get();
+
+            $balances = $leaveTypes->map(function ($type) use ($user) {
+
+                // Total used (ONLY approved leaves)
+                $usedDays = Leave::where('employee_id', $user->id)
+                    ->where('leave_type_id', $type->id)
+                    ->where('status', 'Approved')
+                    ->sum('total_days');
+
+                $remaining = $type->max_days - $usedDays;
+
+                return [
+                    'leave_type_id' => $type->id,
+                    'leave_name'    => $type->leave_name,
+                    'max_days'      => $type->max_days,
+                    'used_days'     => $usedDays,
+                    'remaining_days' => max($remaining, 0), // avoid negative
+                ];
+            });
+
+            return response()->json([
+                'isSuccess' => true,
+                'data' => $balances
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 
     public function getMyLeaves(Request $request)
     {
