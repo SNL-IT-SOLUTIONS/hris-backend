@@ -24,6 +24,52 @@ use App\Models\AttendanceAdjustment;
 class AttendanceController extends Controller
 {
 
+    public function requestClockDateAdjustment(Request $request)
+    {
+        $request->validate([
+            'adjusted_clock_date' => 'required|date',
+            'adjusted_clock_in'   => 'nullable|date',
+            'adjusted_clock_out'  => 'nullable|date',
+            'reason'              => 'required|string|max:255',
+        ]);
+
+        $employee = auth()->user();
+
+        $adjustedClockIn = $request->adjusted_clock_in
+            ? Carbon::parse($request->adjusted_clock_in)
+            : null;
+
+        $adjustedClockOut = $request->adjusted_clock_out
+            ? Carbon::parse($request->adjusted_clock_out)
+            : null;
+
+        // Check if attendance exists for that date
+        $attendance = Attendance::where('employee_id', $employee->id)
+            ->whereDate('clock_in', $request->adjusted_clock_date)
+            ->first();
+
+        // Create adjustment request
+        $adjustment = AttendanceAdjustment::create([
+            'attendance_id'       => optional($attendance)->id, // can be null
+            'employee_id'         => $employee->id,
+            'adjusted_clock_date' => $request->adjusted_clock_date,
+            'requested_clock_in'  => $adjustedClockIn,
+            'requested_clock_out' => $adjustedClockOut,
+            'reason'              => $request->reason,
+            'status'              => 'Pending',
+        ]);
+
+        // Notify HR
+        Mail::to('normanparaiso.abm12@gmail.com')
+            ->send(new AdjustmentRequestMail($attendance, $employee));
+
+        return response()->json([
+            'isSuccess' => true,
+            'message'   => 'Adjustment request submitted successfully. HR has been notified.',
+            'data'      => $adjustment,
+        ]);
+    }
+
     public function registerFace(Request $request)
     {
         try {
@@ -128,11 +174,6 @@ class AttendanceController extends Controller
             $query->where('employee_id', $request->employee_id);
         }
 
-        // Filter by specific date
-        if ($request->date) {
-            $query->whereDate('clock_in', $request->date);
-        }
-
         // Filter by month
         if ($request->month) {
             $query->whereMonth('clock_in', $request->month);
@@ -177,29 +218,59 @@ class AttendanceController extends Controller
             return $attendance;
         });
 
-        $leaves->transform(function ($leave) {
-
-            // Convert profile picture to full URL
-            if ($leave->employee && $leave->employee->profile_picture) {
-                $leave->employee->profile_picture = asset($leave->employee->profile_picture);
-            }
-
-            return $leave;
-        });
-
         return response()->json([
             'isSuccess' => true,
             'data' => $attendances
         ]);
     }
 
+    public function getMyLeaveBalances()
+    {
+        try {
+            $user = auth()->user();
+
+            // Get all leave types
+            $leaveTypes = LeaveType::where('is_active', 1)
+                ->where('is_archived', 0)
+                ->get();
+
+            $balances = $leaveTypes->map(function ($type) use ($user) {
+
+                // Total used (ONLY approved leaves)
+                $usedDays = Leave::where('employee_id', $user->id)
+                    ->where('leave_type_id', $type->id)
+                    ->where('status', 'Approved')
+                    ->sum('total_days');
+
+                $remaining = $type->max_days - $usedDays;
+
+                return [
+                    'leave_type_id' => $type->id,
+                    'leave_name'    => $type->leave_name,
+                    'max_days'      => $type->max_days,
+                    'used_days'     => $usedDays,
+                    'remaining_days' => max($remaining, 0), // avoid negative
+                ];
+            });
+
+            return response()->json([
+                'isSuccess' => true,
+                'data' => $balances
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 
 
     public function getAllLeaves()
     {
         $leaves = Leave::with([
             'employee:id,first_name,last_name,email,profile_picture',
-            'leaveType:id,name'
+            'leaveType:id,leave_name'
         ])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -573,7 +644,7 @@ class AttendanceController extends Controller
             $onTimeRate = 95; // placeholder
 
             // Pagination for recent attendance
-            $perPage = $request->input('per_page', 5); // default 5
+            $perPage = $request->input('per_page', 31); // default 30
             $recentQuery = Attendance::with('approvedAdjustment')
                 ->where('employee_id', $employeeId)
                 ->orderBy('clock_in', 'desc');
@@ -617,6 +688,105 @@ class AttendanceController extends Controller
         }
     }
 
+
+    public function exportMyAttendanceCSV(Request $request)
+    {
+        try {
+
+            $user = auth()->user();
+            $employeeId = $user->id;
+
+            $query = Attendance::with('approvedAdjustment')
+                ->where('employee_id', $employeeId);
+
+            // Filter by date
+            if ($request->date) {
+                $query->whereDate('clock_in', $request->date);
+            }
+
+            // Filter by month
+            if ($request->month) {
+                $query->whereMonth('clock_in', $request->month);
+            }
+
+            // Filter by year
+            if ($request->year) {
+                $query->whereYear('clock_in', $request->year);
+            }
+
+            // Filter by date range
+            if ($request->start_date && $request->end_date) {
+                $query->whereBetween('clock_in', [$request->start_date, $request->end_date]);
+            }
+
+            $attendances = $query->orderBy('clock_in', 'desc')->get();
+
+            $fileName = 'my_attendance_report_' . now()->format('Ymd_His') . '.csv';
+
+            $headers = [
+                "Content-type" => "text/csv",
+                "Content-Disposition" => "attachment; filename=$fileName",
+                "Pragma" => "no-cache",
+                "Cache-Control" => "must-revalidate, post-check=0, pre-check=0",
+                "Expires" => "0"
+            ];
+
+            $columns = [
+                'Date',
+                'Clock In',
+                'Clock Out',
+                'Hours Worked',
+                'Status'
+            ];
+
+            $callback = function () use ($attendances, $columns) {
+
+                $file = fopen('php://output', 'w');
+                fputcsv($file, $columns);
+
+                foreach ($attendances as $attendance) {
+
+                    // Use approved adjustment if exists
+                    if ($attendance->approvedAdjustment) {
+                        $clockIn = $attendance->approvedAdjustment->requested_clock_in;
+                        $clockOut = $attendance->approvedAdjustment->requested_clock_out;
+                    } else {
+                        $clockIn = $attendance->clock_in;
+                        $clockOut = $attendance->clock_out;
+                    }
+
+                    $carbonClockIn = $clockIn ? \Carbon\Carbon::parse($clockIn)->timezone('Asia/Manila') : null;
+                    $carbonClockOut = $clockOut ? \Carbon\Carbon::parse($clockOut)->timezone('Asia/Manila') : null;
+
+                    // Calculate hours worked if both clock-in and clock-out exist
+                    $hoursWorked = ($carbonClockIn && $carbonClockOut)
+                        ? $carbonClockOut->diffInHours($carbonClockIn)
+                        : $attendance->hours_worked;
+
+                    // Set status
+                    $status = $attendance->status ?? 'N/A';
+
+                    fputcsv($file, [
+                        $carbonClockIn?->format('Y-m-d'),
+                        $carbonClockIn?->format('h:i A'),
+                        $carbonClockOut?->format('h:i A'),
+                        $hoursWorked,
+                        $status
+                    ]);
+                }
+
+                fclose($file);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
     public function getMyMonthlyAbsences(Request $request)
     {
         // Validate input
@@ -670,142 +840,6 @@ class AttendanceController extends Controller
             'absent_dates' => $absentDates,
             'total_absent' => count($absentDates)
         ]);
-    }
-
-
-    public function exportMyAttendanceCSV(Request $request)
-    {
-        try {
-
-            $user = auth()->user();
-            $employeeId = $user->id;
-
-            $query = Attendance::with('approvedAdjustment')
-                ->where('employee_id', $employeeId);
-
-            // Filter by date
-            if ($request->date) {
-                $query->whereDate('clock_in', $request->date);
-            }
-
-            // Filter by month
-            if ($request->month) {
-                $query->whereMonth('clock_in', $request->month);
-            }
-
-            // Filter by year
-            if ($request->year) {
-                $query->whereYear('clock_in', $request->year);
-            }
-
-            // Filter by date range
-            if ($request->start_date && $request->end_date) {
-                $query->whereBetween('clock_in', [$request->start_date, $request->end_date]);
-            }
-
-            $attendances = $query->orderBy('clock_in', 'desc')->get();
-
-            $fileName = 'my_attendance_report_' . now()->format('Ymd_His') . '.csv';
-
-            $headers = [
-                "Content-type" => "text/csv",
-                "Content-Disposition" => "attachment; filename=$fileName",
-                "Pragma" => "no-cache",
-                "Cache-Control" => "must-revalidate, post-check=0, pre-check=0",
-                "Expires" => "0"
-            ];
-
-            $columns = [
-                'Date',
-                'Clock In',
-                'Clock Out',
-                'Hours Worked'
-            ];
-
-            $callback = function () use ($attendances, $columns) {
-
-                $file = fopen('php://output', 'w');
-                fputcsv($file, $columns);
-
-                foreach ($attendances as $attendance) {
-
-                    if ($attendance->approvedAdjustment) {
-                        $clockIn = $attendance->approvedAdjustment->requested_clock_in;
-                        $clockOut = $attendance->approvedAdjustment->requested_clock_out;
-                    } else {
-                        $clockIn = $attendance->clock_in;
-                        $clockOut = $attendance->clock_out;
-                    }
-
-                    // Convert to Philippine Time and format
-                    $formattedClockIn = $clockIn ? \Carbon\Carbon::parse($clockIn)
-                        ->timezone('Asia/Manila')
-                        ->format('h:i A') : null;
-
-                    $formattedClockOut = $clockOut ? \Carbon\Carbon::parse($clockOut)
-                        ->timezone('Asia/Manila')
-                        ->format('h:i A') : null;
-
-                    fputcsv($file, [
-                        $clockIn ? \Carbon\Carbon::parse($clockIn)->timezone('Asia/Manila')->format('Y-m-d') : null,
-                        $formattedClockIn,
-                        $formattedClockOut,
-                        $attendance->hours_worked
-                    ]);
-                }
-
-                fclose($file);
-            };
-
-            return response()->stream($callback, 200, $headers);
-        } catch (\Exception $e) {
-
-            return response()->json([
-                'isSuccess' => false,
-                'message' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function getMyLeaveBalances()
-    {
-        try {
-            $user = auth()->user();
-
-            // Get all leave types
-            $leaveTypes = LeaveType::where('is_active', 1)
-                ->where('is_archived', 0)
-                ->get();
-
-            $balances = $leaveTypes->map(function ($type) use ($user) {
-
-                // Total used (ONLY approved leaves)
-                $usedDays = Leave::where('employee_id', $user->id)
-                    ->where('leave_type_id', $type->id)
-                    ->where('status', 'Approved')
-                    ->sum('total_days');
-
-                $remaining = $type->max_days - $usedDays;
-
-                return [
-                    'leave_type_id' => $type->id,
-                    'leave_name'    => $type->leave_name,
-                    'max_days'      => $type->max_days,
-                    'used_days'     => $usedDays,
-                    'remaining_days' => max($remaining, 0), // avoid negative
-                ];
-            });
-
-            return response()->json([
-                'isSuccess' => true,
-                'data' => $balances
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'isSuccess' => false,
-                'message' => $e->getMessage()
-            ], 500);
-        }
     }
 
 
@@ -1018,14 +1052,21 @@ class AttendanceController extends Controller
         ]);
     }
 
+
     public function approveAdjustment(Request $request, $adjustmentId)
     {
         $request->validate([
             'status' => 'required|in:approved,rejected',
         ]);
 
+
         $adjustment = AttendanceAdjustment::findOrFail($adjustmentId);
 
+        if ($adjustment->status !== 'Pending') {
+            return response()->json([
+                'message' => 'This adjustment has already been processed.'
+            ], 400);
+        }
         // Fetch attendance if exists
         $attendance = $adjustment->attendance_id
             ? Attendance::find($adjustment->attendance_id)
@@ -1105,62 +1146,6 @@ class AttendanceController extends Controller
             'attendance' => $attendance->fresh(),
             'adjustment' => $adjustment
         ], 200);
-    }
-
-    public function requestClockDateAdjustment(Request $request)
-    {
-        $request->validate([
-            'adjusted_clock_date' => 'required|date',
-            'adjusted_clock_in'   => 'nullable|date',
-            'adjusted_clock_out'  => 'nullable|date',
-            'reason'              => 'required|string|max:255',
-        ]);
-
-        $employee = auth()->user();
-
-        $adjustedClockIn = $request->adjusted_clock_in
-            ? Carbon::parse($request->adjusted_clock_in)
-            : null;
-
-        $adjustedClockOut = $request->adjusted_clock_out
-            ? Carbon::parse($request->adjusted_clock_out)
-            : null;
-
-        // Check if attendance exists for that date
-        $attendance = Attendance::where('employee_id', $employee->id)
-            ->whereDate('clock_in', $request->adjusted_clock_date)
-            ->first();
-
-        // If none exists create missed attendance for that date
-        if (!$attendance) {
-            $attendance = Attendance::create([
-                'employee_id' => $employee->id,
-                'clock_in'    => Carbon::parse($request->adjusted_clock_date)->startOfDay(),
-                'status'      => 'Missed',
-                'method'      => 'Manual',
-            ]);
-        }
-
-        // Create adjustment request
-        $adjustment = AttendanceAdjustment::create([
-            'attendance_id'       => $attendance->id,
-            'employee_id'         => $employee->id,
-            'adjusted_clock_date' => $request->adjusted_clock_date,
-            'requested_clock_in'  => $adjustedClockIn,
-            'requested_clock_out' => $adjustedClockOut,
-            'reason'              => $request->reason,
-            'status'              => 'Pending',
-        ]);
-
-        // Notify HR
-        Mail::to('normanparaiso.abm12@gmail.com')
-            ->send(new AdjustmentRequestMail($attendance, $employee));
-
-        return response()->json([
-            'isSuccess' => true,
-            'message'   => 'Adjustment request submitted successfully. HR has been notified.',
-            'data'      => $adjustment,
-        ]);
     }
 
 
