@@ -120,12 +120,12 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::post('request/adjustment/{attendanceId}', 'requestAdjustment');
     Route::post('adjustment/approve/{adjustmentId}', 'approveAdjustment');
     Route::post('adjustment/reject/{adjustmentId}', 'rejectAdjustment');
-
+    Route::get('my-leaves-balance', 'getMyLeaveBalances');
     Route::post('confirm-leave/{leaveId}', 'confirmLeave');
-    Route::get('leaves', 'getAllLeaves');
 });
 Route::get('attendances', [AttendanceController::class, 'getAllAttendances']);
 Route::get('dtr-adjustments', [AttendanceController::class, 'getAdjustments']);
+Route::get('leaves', [AttendanceController::class, 'getAllLeaves']);
 
 //SETUP Work Locations
 Route::controller(WorkLocationController::class)->group(function () {
@@ -243,7 +243,7 @@ Route::controller(LoanTypeController::class)->group(function () {
 
 //Loan Applications
 Route::controller(LoanController::class)->group(function () {
-    Route::post('create/loans', 'createLoan');
+    Route::post('create/loans', 'createLoan')->middleware('auth:sanctum');
     Route::post('update/loans/{id}', 'updateLoan');
     Route::get('loans', 'getLoans');
     Route::get('loans/{id}', 'getLoanById');
@@ -263,6 +263,9 @@ Route::controller(AnnouncementBoardController::class)->group(function () {
 });
 
 //TRAINING TEST
+Route::get('/assessments/tracking', [TrainingLessonController::class, 'getAssessmentTracking']);
+Route::post('training/update/full-lesson/{lessonId}', [TrainingAdminController::class, 'updateFullLesson']);
+Route::post('/training/create/full-lesson', [TrainingAdminController::class, 'createFullLesson']);
 Route::get('/training/modules', [TrainingModuleController::class, 'getModules']);
 Route::get('/training/module/{id}', [TrainingModuleController::class, 'getModuleQuestions']);
 Route::post('/training/submit-test', [TrainingTestController::class, 'submitTest']);
@@ -272,7 +275,7 @@ Route::post('/training/question/create', [TrainingAdminController::class, 'creat
 Route::post('/training/choices/create', [TrainingAdminController::class, 'createChoices']);
 Route::get('/training/module/full/{id}', [TrainingAdminController::class, 'getModule']);
 Route::post('/training/lesson/create', [TrainingLessonController::class, 'createLesson']);
-Route::get('/training/lessons', [TrainingLessonController::class, 'getLessons']);
+Route::get('/training/lessons', [TrainingLessonController::class, 'getLessons'])->middleware('auth:sanctum');
 Route::get('/training/lessons/{id}', [TrainingLessonController::class, 'getLessonById']);
 Route::get('/training/lessons/{id}/structure', [TrainingLessonController::class, 'getLessonStructure']);
 
