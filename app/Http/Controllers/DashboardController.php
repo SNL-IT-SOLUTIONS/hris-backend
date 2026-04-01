@@ -103,22 +103,23 @@ class DashboardController extends Controller
                 ->where('status', 'Present')
                 ->count();
 
-            // Total Net Pays
-            $totalNetPays = PayrollRecord::where('employee_id', $employee->id)
-                ->where('is_archived', 0)
-                ->sum('net_pay');
-
-            $totalPayslipAmount = PayrollRecord::where('employee_id', $employee->id)
+            // Total Gross Pay
+            $totalGrossPay = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
                 ->sum('gross_pay');
 
+            // Total Net Pay
+            $totalNetPay = PayrollRecord::where('employee_id', $employee->id)
+                ->where('is_archived', 0)
+                ->sum('net_pay');
+
+            // Total Payslip Count (processed)
             $totalPayslipCount = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
                 ->whereHas('payrollPeriod', function ($q) {
                     $q->where('status', 'processed');
                 })
                 ->count();
-
 
             /*
         |--------------------------------------------------------------------------
@@ -139,13 +140,12 @@ class DashboardController extends Controller
                 ->take(5)
                 ->get(['id', 'clock_out', 'report_today']);
 
-            // Recent Payslips (Last 5)
+            // Recent Payslips (Last 3)
             $recentPayslips = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
                 ->orderBy('created_at', 'desc')
                 ->take(3)
                 ->get();
-
 
             /*
         |--------------------------------------------------------------------------
@@ -169,21 +169,17 @@ class DashboardController extends Controller
                 ->take(4)
                 ->get(['id', 'title', 'content', 'publish_at', 'expire_at', 'created_at']);
 
-
             return response()->json([
                 'overview' => [
-                    'total_gross_pays' => $totalPayslipAmount,
                     'total_attendance' => $totalAttendance,
-                    'total_net_pays' => $totalNetPays,
-                    'total_payslip_amount' => $totalPayslipAmount,
+                    'total_gross_pay' => $totalGrossPay,
+                    'total_net_pay' => $totalNetPay,
                     'total_payslip_count' => $totalPayslipCount,
                 ],
-
                 'announcements' => $announcements,
                 'recent_reports' => $recentReports,
                 'recent_payslips' => $recentPayslips,
                 'recent_attendance' => $recentAttendance,
-
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
