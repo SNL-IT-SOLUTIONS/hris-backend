@@ -106,16 +106,10 @@ class DashboardController extends Controller
             // Total Net Pays
             $totalNetPays = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
-                ->whereHas('payrollPeriod', function ($q) {
-                    $q->where('status', 'processed');
-                })
                 ->sum('net_pay');
-            // Total Gross Amount of Payslips
+
             $totalPayslipAmount = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
-                ->whereHas('payrollPeriod', function ($q) {
-                    $q->where('status', 'processed');
-                })
                 ->sum('gross_pay');
 
             $totalPayslipCount = PayrollRecord::where('employee_id', $employee->id)
