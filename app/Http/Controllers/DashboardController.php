@@ -178,6 +178,7 @@ class DashboardController extends Controller
 
             return response()->json([
                 'overview' => [
+                    'total_gross_pays' => $totalPayslipAmount,
                     'total_attendance' => $totalAttendance,
                     'total_net_pays' => $totalNetPays,
                     'total_payslip_amount' => $totalPayslipAmount,
