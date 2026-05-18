@@ -1000,6 +1000,7 @@ class AttendanceController extends Controller
 
     public function getMissedAdjustments(Request $request)
     {
+        $user = auth()->user();
         $perPage = $request->input('per_page', 10);
         $status = $request->input('status');
         $search = $request->input('search');
