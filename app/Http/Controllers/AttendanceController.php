@@ -43,23 +43,25 @@ class AttendanceController extends Controller
             ? Carbon::parse($request->adjusted_clock_out)
             : null;
 
-        // Check if attendance exists
+        // Find attendance (SAFE)
         $attendance = Attendance::where('employee_id', $employee->id)
             ->whereDate('clock_in', $request->adjusted_clock_date)
             ->first();
 
+        // Create adjustment request
         $adjustment = AttendanceAdjustment::create([
-            'attendance_id'       => optional($attendance)->id,
-            'employee_id'         => $employee->id,
+            'attendance_id'        => optional($attendance)->id,
+            'employee_id'          => $employee->id,
             'requested_clock_date' => $request->adjusted_clock_date,
-            'requested_clock_in'  => $adjustedClockIn,
-            'requested_clock_out' => $adjustedClockOut,
-            'reason'              => $request->reason,
-            'status'              => 'pending',
+            'requested_clock_in'   => $adjustedClockIn,
+            'requested_clock_out'  => $adjustedClockOut,
+            'reason'               => $request->reason,
+            'status'               => 'pending',
         ]);
 
+        // Mail HR (SAFE EVEN IF attendance is NULL)
         Mail::to('normanparaiso.abm12@gmail.com')
-            ->send(new AdjustmentRequestMail($attendance, $employee));
+            ->send(new AdjustmentRequestMail($adjustment, $employee));
 
         return response()->json([
             'isSuccess' => true,
@@ -1002,14 +1004,14 @@ class AttendanceController extends Controller
         $user = auth()->user();
 
         $perPage = $request->input('per_page', 10);
-        $status = $request->input('status');
-        $search = $request->input('search');
+        $status  = $request->input('status');
+        $search  = $request->input('search');
 
         $query = AttendanceAdjustment::with([
             'attendance',
             'employee:id,profile_picture,first_name,last_name,email,employee_id,department_id,position_id'
         ])
-            ->whereNotNull('adjusted_clock_date')
+            ->whereNotNull('requested_clock_date')
             ->orderBy('created_at', 'desc');
 
         // Optional filter by status
@@ -1033,9 +1035,7 @@ class AttendanceController extends Controller
         $adjustments->getCollection()->transform(function ($adjustment) {
 
             if ($adjustment->employee && $adjustment->employee->profile_picture) {
-                $adjustment->employee->profile_picture = asset(
-                    $adjustment->employee->profile_picture
-                );
+                $adjustment->employee->profile_picture = asset($adjustment->employee->profile_picture);
             }
 
             return $adjustment;
@@ -1046,13 +1046,12 @@ class AttendanceController extends Controller
             'data' => $adjustments->items(),
             'pagination' => [
                 'current_page' => $adjustments->currentPage(),
-                'per_page' => $adjustments->perPage(),
-                'total' => $adjustments->total(),
-                'last_page' => $adjustments->lastPage(),
+                'per_page'     => $adjustments->perPage(),
+                'total'        => $adjustments->total(),
+                'last_page'    => $adjustments->lastPage(),
             ],
         ]);
     }
-
 
     public function approveAdjustment(Request $request, $adjustmentId)
     {
