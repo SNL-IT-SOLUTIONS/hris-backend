@@ -24,49 +24,49 @@ use App\Models\AttendanceAdjustment;
 class AttendanceController extends Controller
 {
 
-    public function requestClockDateAdjustment(Request $request)
-    {
-        $request->validate([
-            'adjusted_clock_date' => 'required|date',
-            'adjusted_clock_in'   => 'nullable|date',
-            'adjusted_clock_out'  => 'nullable|date',
-            'reason'              => 'required|string|max:255',
-        ]);
+    // public function requestClockDateAdjustment(Request $request)
+    // {
+    //     $request->validate([
+    //         'adjusted_clock_date' => 'required|date',
+    //         'adjusted_clock_in'   => 'nullable|date',
+    //         'adjusted_clock_out'  => 'nullable|date',
+    //         'reason'              => 'required|string|max:255',
+    //     ]);
 
-        $employee = auth()->user();
+    //     $employee = auth()->user();
 
-        $adjustedClockIn = $request->adjusted_clock_in
-            ? Carbon::parse($request->adjusted_clock_in)
-            : null;
+    //     $adjustedClockIn = $request->adjusted_clock_in
+    //         ? Carbon::parse($request->adjusted_clock_in)
+    //         : null;
 
-        $adjustedClockOut = $request->adjusted_clock_out
-            ? Carbon::parse($request->adjusted_clock_out)
-            : null;
+    //     $adjustedClockOut = $request->adjusted_clock_out
+    //         ? Carbon::parse($request->adjusted_clock_out)
+    //         : null;
 
-        // Check if attendance exists
-        $attendance = Attendance::where('employee_id', $employee->id)
-            ->whereDate('clock_in', $request->adjusted_clock_date)
-            ->first();
+    //     // Check if attendance exists
+    //     $attendance = Attendance::where('employee_id', $employee->id)
+    //         ->whereDate('clock_in', $request->adjusted_clock_date)
+    //         ->first();
 
-        $adjustment = AttendanceAdjustment::create([
-            'attendance_id'       => optional($attendance)->id,
-            'employee_id'         => $employee->id,
-            'requested_clock_date' => $request->adjusted_clock_date,
-            'requested_clock_in'  => $adjustedClockIn,
-            'requested_clock_out' => $adjustedClockOut,
-            'reason'              => $request->reason,
-            'status'              => 'pending',
-        ]);
+    //     $adjustment = AttendanceAdjustment::create([
+    //         'attendance_id'       => optional($attendance)->id,
+    //         'employee_id'         => $employee->id,
+    //         'requested_clock_date' => $request->adjusted_clock_date,
+    //         'requested_clock_in'  => $adjustedClockIn,
+    //         'requested_clock_out' => $adjustedClockOut,
+    //         'reason'              => $request->reason,
+    //         'status'              => 'pending',
+    //     ]);
 
-        Mail::to('normanparaiso.abm12@gmail.com')
-            ->send(new AdjustmentRequestMail($attendance, $employee));
+    //     Mail::to('normanparaiso.abm12@gmail.com')
+    //         ->send(new AdjustmentRequestMail($attendance, $employee));
 
-        return response()->json([
-            'isSuccess' => true,
-            'message'   => 'Adjustment request submitted successfully. HR has been notified.',
-            'data'      => $adjustment,
-        ]);
-    }
+    //     return response()->json([
+    //         'isSuccess' => true,
+    //         'message'   => 'Adjustment request submitted successfully. HR has been notified.',
+    //         'data'      => $adjustment,
+    //     ]);
+    // }
 
     public function registerFace(Request $request)
     {
@@ -785,6 +785,7 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
     public function getMyMonthlyAbsences(Request $request)
     {
         // Validate input
