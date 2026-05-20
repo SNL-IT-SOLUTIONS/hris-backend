@@ -43,23 +43,21 @@ class AttendanceController extends Controller
             ? Carbon::parse($request->adjusted_clock_out)
             : null;
 
-        // Check if attendance exists for that date
+        // Check if attendance exists
         $attendance = Attendance::where('employee_id', $employee->id)
             ->whereDate('clock_in', $request->adjusted_clock_date)
             ->first();
 
-        // Create adjustment request
         $adjustment = AttendanceAdjustment::create([
-            'attendance_id'       => optional($attendance)->id, // can be null
+            'attendance_id'       => optional($attendance)->id,
             'employee_id'         => $employee->id,
-            'adjusted_clock_date' => $request->adjusted_clock_date,
+            'requested_clock_date' => $request->adjusted_clock_date,
             'requested_clock_in'  => $adjustedClockIn,
             'requested_clock_out' => $adjustedClockOut,
             'reason'              => $request->reason,
-            'status'              => 'Pending',
+            'status'              => 'pending',
         ]);
 
-        // Notify HR
         Mail::to('normanparaiso.abm12@gmail.com')
             ->send(new AdjustmentRequestMail($attendance, $employee));
 
