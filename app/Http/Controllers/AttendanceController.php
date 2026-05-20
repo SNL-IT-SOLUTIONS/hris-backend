@@ -930,8 +930,8 @@ class AttendanceController extends Controller
             'employee:id,profile_picture,first_name,last_name,email,department_id,position_id',
             'approvedAdjustment'
         ])
-            ->where('status', '!=', 'missed') // Exclude 'Missed' status
-            ->whereNull('requested_clock_date') // exclude missed-date adjustments
+            ->where('status', '!=', 'missed')
+            ->whereNull('requested_clock_date')
             ->orderBy('created_at', 'desc');
 
         if ($status) {
@@ -1001,24 +1001,25 @@ class AttendanceController extends Controller
     public function getMissedAdjustments(Request $request)
     {
         $user = auth()->user();
+
         $perPage = $request->input('per_page', 10);
         $status = $request->input('status');
         $search = $request->input('search');
 
         $query = AttendanceAdjustment::with([
             'attendance',
-            'employee:id,profile_picture,first_name,last_name,email,department_id,position_id'
+            'employee:id,profile_picture,first_name,last_name,email,employee_id,department_id,position_id'
         ])
-            ->whereNotNull('requested_clock_date')
+            ->whereNotNull('adjusted_clock_date')
             ->orderBy('created_at', 'desc');
 
-        // Optional filter by adjustment status
-        if ($status) {
+        // Optional filter by status
+        if (!empty($status)) {
             $query->where('status', $status);
         }
 
-        // Optional search by employee
-        if ($search) {
+        // Optional search
+        if (!empty($search)) {
             $query->whereHas('employee', function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
                     ->orWhere('last_name', 'like', "%{$search}%")
@@ -1029,13 +1030,13 @@ class AttendanceController extends Controller
 
         $adjustments = $query->paginate($perPage);
 
-        // Transform collection for clean response
+        // Transform response
         $adjustments->getCollection()->transform(function ($adjustment) {
-            $employee = $adjustment->employee;
 
-            // Convert profile picture to full URL
-            if ($employee && $employee->profile_picture) {
-                $employee->profile_picture = asset($employee->profile_picture);
+            if ($adjustment->employee && $adjustment->employee->profile_picture) {
+                $adjustment->employee->profile_picture = asset(
+                    $adjustment->employee->profile_picture
+                );
             }
 
             return $adjustment;
