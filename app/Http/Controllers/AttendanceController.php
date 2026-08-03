@@ -433,19 +433,18 @@ class AttendanceController extends Controller
             $clockInTime = now();
 
             // Employee shift start
-            // Default to 08:00 AM if shift_start is null
             $shiftStart = Carbon::today()->setTimeFromTimeString(
                 $employee->shift_start ?? '08:00:00'
             );
 
-            // Add 5-minute grace period
+            // 5-minute grace period
             $gracePeriodEnd = $shiftStart->copy()->addMinutes(5);
 
             /*
-                |--------------------------------------------------------------------------
-                | Attendance Status + Late Deduction
-                |--------------------------------------------------------------------------
-                */
+        |--------------------------------------------------------------------------
+        | Attendance Status + Late Deduction
+        |--------------------------------------------------------------------------
+        */
 
             $status = 'Present';
             $isLate = 0;
@@ -460,21 +459,24 @@ class AttendanceController extends Controller
                 // Minutes late after grace period
                 $lateMinutes = $gracePeriodEnd->diffInMinutes($clockInTime);
 
-                // Convert to hours
+                // Convert minutes to hours
                 $lateHours = $lateMinutes / 60;
 
-                // Employee late_deduction = hourly deduction rate
-                $lateDeduction = round(
-                    $lateHours * ($employee->late_deduction ?? 0),
-                    2
-                );
+                // Daily rate (currently stored in late_deduction field)
+                $dailyRate = $employee->late_deduction ?? 0;
+
+                // Convert daily rate to hourly rate (8-hour workday)
+                $hourlyRate = $dailyRate / 8;
+
+                // Calculate deduction
+                $lateDeduction = round($lateHours * $hourlyRate, 2);
             }
 
             /*
-                |--------------------------------------------------------------------------
-                | Create attendance
-                |--------------------------------------------------------------------------
-                */
+        |--------------------------------------------------------------------------
+        | Create attendance
+        |--------------------------------------------------------------------------
+        */
             $attendance = Attendance::create([
                 'employee_id'      => $employee->id,
                 'clock_in'         => $clockInTime,
@@ -503,15 +505,15 @@ class AttendanceController extends Controller
                 'message'    => 'Clocked in successfully!',
                 'employee'   => $employee->first_name . ' ' . $employee->last_name,
                 'attendance' => [
-                    'id'            => $attendance->id,
-                    'clock_in'      => $attendance->clock_in,
-                    'status'        => $attendance->status,
-                    'shift_start'   => $employee->shift_start,
-                    'grace_until'   => $gracePeriodEnd->format('H:i:s'),
-                    'late_minutes'    => $attendance->late_minutes,
-                    'late_deduction'  => $attendance->late_deduction,
-                    'method'        => $attendance->method,
-                    'clock_in_image' => $attendance->clock_in_image,
+                    'id'               => $attendance->id,
+                    'clock_in'         => $attendance->clock_in,
+                    'status'           => $attendance->status,
+                    'shift_start'      => $employee->shift_start,
+                    'grace_until'      => $gracePeriodEnd->format('H:i:s'),
+                    'late_minutes'     => $attendance->late_minutes,
+                    'late_deduction'   => $attendance->late_deduction,
+                    'method'           => $attendance->method,
+                    'clock_in_image'   => $attendance->clock_in_image,
                 ],
             ], 200);
         } catch (\Exception $e) {
