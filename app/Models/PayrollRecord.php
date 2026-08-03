@@ -20,11 +20,13 @@ class PayrollRecord extends Model
         'absences',
         'gross_base',
         'gross_pay',
+        'total_allowances',
+        'total_loan_deductions',
+        'total_late_deductions',
         'total_deductions',
-        'net_pay',
         'night_diff_pay',
-        'is_archived',
-        'remarks'
+        'net_pay',
+        'remarks',
     ];
 
     // Relationships

@@ -15,7 +15,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        $schedule->command('attendance:sync-zkteco')->everyFiveMinutes();
+        $schedule->command('zk:sync')->everyMinute();
     }
 
     /**

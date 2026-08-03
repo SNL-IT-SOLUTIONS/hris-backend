@@ -113,6 +113,37 @@ class EmployeeController extends Controller
     }
 
 
+    public function getEmployeeList(Request $request)
+    {
+        $query = Employee::where('is_archived', 0);
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+
+            $query->whereRaw(
+                "CONCAT(first_name, ' ', last_name) LIKE ?",
+                ["%{$search}%"]
+            );
+        }
+
+        $employees = $query
+            ->orderBy('first_name')
+            ->get()
+            ->map(function ($employee) {
+                return [
+                    'id' => $employee->id,
+                    'full_name' => trim($employee->first_name . ' ' . $employee->last_name),
+                ];
+            });
+
+        return response()->json([
+            'isSuccess' => true,
+            'message' => 'Employee list retrieved successfully.',
+            'data' => $employees,
+        ]);
+    }
+
+
 
 
 
@@ -285,6 +316,14 @@ class EmployeeController extends Controller
             'supervisor_id'        => 'nullable|exists:employees,id',
             'base_salary'          => 'nullable|numeric|min:0',
             'hire_date'            => 'nullable|date',
+            'shift_start'    => 'nullable|date_format:H:i',
+            'shift_end'      => 'nullable|date_format:H:i',
+            'night_hours'    => 'nullable|numeric|min:0',
+            'night_rate'     => 'nullable|numeric|min:0',
+            'base_pay'       => 'nullable|numeric|min:0',
+            'late_deduction' => 'nullable|numeric|min:0',
+            'is_regular'     => 'nullable|boolean',
+            'is_active'      => 'nullable|boolean',
 
             // Emergency Contact
             'emergency_contact_name'     => 'nullable|string|max:255',
@@ -429,8 +468,12 @@ class EmployeeController extends Controller
             'benefits.*.amount'    => 'required_with:benefits|numeric|min:0',
             'night_hours'        => 'nullable|numeric|min:0',
             'night_rate'          => 'nullable|numeric|min:0',
+            'late_deduction'       => 'nullable|numeric|min:0',
             'base_pay'            => 'nullable|numeric|min:0',
             'is_regular'          => 'nullable|boolean',
+
+            'shift_start'          => 'nullable|date_format:H:i',
+            'shift_end'            => 'nullable|date_format:H:i',
 
         ]);
 

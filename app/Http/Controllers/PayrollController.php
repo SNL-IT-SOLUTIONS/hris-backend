@@ -10,7 +10,8 @@ use App\Models\{
     Employee,
     Loan,
     ThirteenthMonth,
-    ThirteenthMonthPeriod
+    ThirteenthMonthPeriod,
+    Attendance,
 };
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log};
@@ -63,7 +64,7 @@ class PayrollController extends Controller
 
                     $attendanceCount = DB::table('attendances')
                         ->where('employee_id', $employee->id)
-                        ->where('status', 'Present')
+                        ->whereIn('status', ['Present', 'Late'])
                         ->where(function ($query) use ($request) {
                             $query->whereBetween(DB::raw('DATE(clock_in)'), [
                                 $request->cutoff_start_date,
@@ -136,7 +137,44 @@ class PayrollController extends Controller
                     )
                     ->get();
 
-                $total_allowances = $employeeAllowances->sum('allowance_amount') / 2;
+                /*
+|--------------------------------------------------------------------------
+| PERFECT ATTENDANCE CHECK
+|--------------------------------------------------------------------------
+*/
+
+                $hasLate = Attendance::where('employee_id', $employee->id)
+                    ->whereBetween(DB::raw('DATE(clock_in)'), [
+                        $request->cutoff_start_date,
+                        $request->cutoff_end_date
+                    ])
+                    ->where('is_late', 1)
+                    ->exists();
+
+                /*
+|--------------------------------------------------------------------------
+| ALLOWANCES COMPUTATION
+|--------------------------------------------------------------------------
+*/
+
+                $total_allowances = 0;
+
+                foreach ($employeeAllowances as $allowance) {
+
+                    // Perfect Attendance Incentive
+                    if (strtolower(trim($allowance->allowance_name)) === 'perfect attendance incentive') {
+
+                        // Only give if no absences and no late
+                        if ($absences == 0 && !$hasLate) {
+                            $total_allowances += ($allowance->allowance_amount ?? 0) / 2;
+                        }
+
+                        continue;
+                    }
+
+                    // Regular allowances
+                    $total_allowances += ($allowance->allowance_amount ?? 0) / 2;
+                }
 
                 $gross_with_allowances = $gross_base + $total_allowances + $totalNightDiff;
 
@@ -164,6 +202,20 @@ class PayrollController extends Controller
 
                 $total_benefit_deductions = collect($benefitDeductions)->sum('amount') / 2;
 
+
+                /*
+                |--------------------------------------------------------------------------
+                | LATE DEDUCTIONS
+                |--------------------------------------------------------------------------
+                */
+
+                $totalLateDeductions = Attendance::where('employee_id', $employee->id)
+                    ->whereBetween(DB::raw('DATE(clock_in)'), [
+                        $request->cutoff_start_date,
+                        $request->cutoff_end_date
+                    ])
+                    ->sum('late_deduction');
+
                 /*
             |--------------------------------------------------------------------------
             | LOANS
@@ -176,7 +228,7 @@ class PayrollController extends Controller
 
                 $total_loan_deductions = $activeLoans->sum('monthly_amortization') / 2;
 
-                $total_deductions = $total_benefit_deductions + $total_loan_deductions;
+                $total_deductions = $total_benefit_deductions + $total_loan_deductions + $totalLateDeductions;
 
                 $net = $gross_with_allowances - $total_deductions;
 
@@ -187,22 +239,22 @@ class PayrollController extends Controller
             */
 
                 $record = PayrollRecord::create([
-                    'payroll_period_id'     => $period->id,
-                    'employee_id'           => $employee->id,
-                    'daily_rate'            => $daily,
-                    'days_worked'           => $daysWorked,
-                    'overtime_hours'        => $overtime,
-                    'absences'              => $absences,
-                    'night_diff_pay'        => $totalNightDiff,
-                    'gross_base'            => $gross_base,
-                    'gross_pay'             => $gross_with_allowances,
-                    'total_allowances'      => $total_allowances,
-                    'total_loan_deductions' => $total_loan_deductions,
-                    'total_deductions'      => $total_deductions,
-                    'net_pay'               => $net,
-                    'remarks'               => $emp['remarks'] ?? null,
+                    'payroll_period_id'      => $period->id,
+                    'employee_id'            => $employee->id,
+                    'daily_rate'             => $daily,
+                    'days_worked'            => $daysWorked,
+                    'overtime_hours'         => $overtime,
+                    'absences'               => $absences,
+                    'night_diff_pay'         => $totalNightDiff,
+                    'gross_base'             => $gross_base,
+                    'gross_pay'              => $gross_with_allowances,
+                    'total_allowances'       => $total_allowances,
+                    'total_loan_deductions'  => $total_loan_deductions,
+                    'total_late_deductions'  => $totalLateDeductions,
+                    'total_deductions'       => $total_deductions,
+                    'net_pay'                => $net,
+                    'remarks'                => $emp['remarks'] ?? null,
                 ]);
-
                 /*
             |--------------------------------------------------------------------------
             | SAVE DEDUCTIONS
@@ -249,10 +301,28 @@ class PayrollController extends Controller
             */
 
                 foreach ($employeeAllowances as $allowance) {
+
+                    $amount = ($allowance->allowance_amount ?? 0) / 2;
+
+                    // Perfect Attendance Incentive
+                    if (strtolower(trim($allowance->allowance_name)) === 'perfect attendance incentive') {
+
+                        if ($absences == 0 && !$hasLate) {
+
+                            PayrollAllowance::create([
+                                'payroll_record_id' => $record->id,
+                                'allowance_type_id' => $allowance->allowance_type_id,
+                                'allowance_amount'  => $amount,
+                            ]);
+                        }
+
+                        continue;
+                    }
+
                     PayrollAllowance::create([
                         'payroll_record_id' => $record->id,
                         'allowance_type_id' => $allowance->allowance_type_id,
-                        'allowance_amount'  => ($allowance->allowance_amount ?? 0) / 2,
+                        'allowance_amount'  => $amount,
                     ]);
                 }
             }
@@ -279,9 +349,6 @@ class PayrollController extends Controller
             ], 500);
         }
     }
-
-
-
 
 
 
@@ -343,7 +410,6 @@ class PayrollController extends Controller
             'data'      => $period->load('payrollRecords:id,payroll_period_id,is_archived'),
         ]);
     }
-
 
 
 
@@ -741,17 +807,32 @@ class PayrollController extends Controller
                 });
 
                 return [
-                    'record_id'        => $record->id,
-                    'remarks'           => $record->remarks,
-                    'period'           => $record->payrollPeriod->period_name ?? 'N/A',
-                    'period_range'     => ($record->payrollPeriod->start_date ?? '') . ' - ' . ($record->payrollPeriod->end_date ?? ''),
-                    'gross_pay'        => number_format($record->gross_pay, 2),
-                    'total_deductions' => number_format($record->total_deductions, 2),
-                    'net_pay'          => number_format($record->net_pay, 2),
-                    'generated_at'     => $record->created_at->format('F d, Y'),
-                    'allowances'       => $allowances,
-                    'deductions'       => $deductions,
-                    'basic_salary'     => number_format($record->employee->base_salary ?? 0, 2),
+                    'record_id'              => $record->id,
+                    'remarks'                => $record->remarks,
+                    'period'                 => $record->payrollPeriod->period_name ?? 'N/A',
+                    'period_range'           => ($record->payrollPeriod->cutoff_start_date ?? '') . ' - ' . ($record->payrollPeriod->cutoff_end_date ?? ''),
+
+                    'daily_rate'             => number_format($record->daily_rate, 2),
+                    'days_worked'            => $record->days_worked,
+                    'overtime_hours'         => $record->overtime_hours,
+                    'absences'               => $record->absences,
+
+                    'gross_base'             => number_format($record->gross_base, 2),
+                    'gross_pay'              => number_format($record->gross_pay, 2),
+                    'night_diff_pay'         => number_format($record->night_diff_pay, 2),
+
+                    'total_allowances'       => number_format($record->total_allowances ?? 0, 2),
+                    'total_loan_deductions'  => number_format($record->total_loan_deductions ?? 0, 2),
+                    'total_late_deductions'  => number_format($record->total_late_deductions ?? 0, 2),
+                    'total_deductions'       => number_format($record->total_deductions, 2),
+
+                    'net_pay'                => number_format($record->net_pay, 2),
+                    'generated_at'           => $record->created_at->format('F d, Y'),
+
+                    'allowances'             => $allowances,
+                    'deductions'             => $deductions,
+
+                    'basic_salary'           => number_format($record->employee->base_salary ?? 0, 2),
                 ];
             });
 
@@ -825,22 +906,40 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-                'payslip'   => [
-                    'employee_name'     => "{$record->employee->first_name} {$record->employee->last_name}",
-                    'period'            => $record->payrollPeriod->period_name,
-                    'remarks'           => $record->remarks,
-                    'daily_rate'        => number_format($record->daily_rate, 2),
-                    'days_worked'       => number_format($record->days_worked, 2),
-                    'gross_base'        => number_format($record->gross_base, 2),
-                    'gross_pay'         => number_format($record->gross_pay, 2),
-                    'base_pay'          => number_format($record->daily_rate * $record->days_worked, 2),
-                    'night_diff_pay'   => number_format($record->night_diff_pay, 2),
-                    'allowances'        => $allowances,
-                    'total_allowances'  => number_format($record->allowances->sum('allowance_amount'), 2),
-                    'deductions'        => $deductions,
-                    'total_deductions'  => number_format($record->total_deductions, 2),
-                    'net_pay'           => number_format($record->net_pay, 2),
-                    'generated_at'      => now()->format('F d, Y h:i A'),
+                'payslip' => [
+                    'employee_name'        => "{$record->employee->first_name} {$record->employee->last_name}",
+                    'period'               => $record->payrollPeriod->period_name,
+                    'period_range'         => $record->payrollPeriod->cutoff_start_date . ' - ' .
+                        $record->payrollPeriod->cutoff_end_date,
+
+                    'remarks'              => $record->remarks,
+
+                    'daily_rate'           => number_format($record->daily_rate, 2),
+                    'days_worked'          => number_format($record->days_worked, 2),
+                    'overtime_hours'       => number_format($record->overtime_hours, 2),
+                    'absences'             => $record->absences,
+
+                    'base_pay'             => number_format(
+                        $record->daily_rate * $record->days_worked,
+                        2
+                    ),
+
+                    'gross_base'           => number_format($record->gross_base, 2),
+                    'gross_pay'            => number_format($record->gross_pay, 2),
+
+                    'night_diff_pay'       => number_format($record->night_diff_pay, 2),
+
+                    'allowances'           => $allowances,
+                    'total_allowances'     => number_format($record->total_allowances ?? 0, 2),
+
+                    'deductions'           => $deductions,
+                    'total_loan_deductions' => number_format($record->total_loan_deductions ?? 0, 2),
+                    'total_late_deductions' => number_format($record->total_late_deductions ?? 0, 2),
+                    'total_deductions'     => number_format($record->total_deductions, 2),
+
+                    'net_pay'              => number_format($record->net_pay, 2),
+
+                    'generated_at'         => $record->created_at->format('F d, Y h:i A'),
                 ],
             ]);
         } catch (\Exception $e) {
@@ -916,21 +1015,27 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-                'payslip'   => [
-                    'employee_name'     => "{$employee->first_name} {$employee->last_name}",
-                    'period'            => $record->payrollPeriod->period_name ?? 'N/A',
-                    'daily_rate'        => number_format($record->daily_rate, 2),
-                    'days_worked'       => number_format($record->days_worked, 2),
-                    'gross_base'        => number_format($record->gross_base, 2),
-                    'gross_pay'         => number_format($record->gross_pay, 2),
-                    'allowances'        => $allowances,
-                    'total_allowances'  => number_format($record->allowances->sum('allowance_amount'), 2),
-                    'deductions'        => $deductions,
-                    'total_deductions'  => number_format($record->total_deductions, 2),
-                    'net_pay'           => number_format($record->net_pay, 2),
-                    'remarks'          => $record->remarks,
-                    'generated_at'      => $record->created_at->format('F d, Y h:i A'),
-                    'base_salary'      => number_format($employee->base_salary ?? 0, 2),
+                'payslip' => [
+                    'employee_name'        => "{$employee->first_name} {$employee->last_name}",
+                    'period'               => $record->payrollPeriod->period_name ?? 'N/A',
+                    'daily_rate'           => number_format($record->daily_rate, 2),
+                    'days_worked'          => number_format($record->days_worked, 2),
+                    'gross_base'           => number_format($record->gross_base, 2),
+                    'gross_pay'            => number_format($record->gross_pay, 2),
+
+                    'allowances'           => $allowances,
+                    'total_allowances'     => number_format($record->allowances->sum('allowance_amount'), 2),
+
+                    'deductions'           => $deductions,
+
+                    'total_late_deductions' => number_format($record->total_late_deductions ?? 0, 2),
+
+                    'total_deductions'     => number_format($record->total_deductions, 2),
+                    'net_pay'              => number_format($record->net_pay, 2),
+
+                    'remarks'              => $record->remarks,
+                    'generated_at'         => $record->created_at->format('F d, Y h:i A'),
+                    'base_salary'          => number_format($employee->base_salary ?? 0, 2),
                 ],
             ]);
         } catch (\Exception $e) {

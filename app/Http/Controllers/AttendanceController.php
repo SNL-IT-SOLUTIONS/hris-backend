@@ -123,6 +123,15 @@ class AttendanceController extends Controller
      */
     public function getAllAttendances()
     {
+        $user = auth()->user();
+
+        if (!$user) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
+
         $attendances = Attendance::with([
             'employee:id,profile_picture,first_name,last_name,email,department_id,position_id',
             'approvedAdjustment'
@@ -361,7 +370,7 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        |  Block if there is still an OPEN attendance
+        | Block if there is still an OPEN attendance
         |--------------------------------------------------------------------------
         */
             $openAttendance = Attendance::where('employee_id', $employee->id)
@@ -377,13 +386,7 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        |  Prevent accidental re-clock-in (cooldown protection)
-        |--------------------------------------------------------------------------
-        | This prevents:
-        | - Misclick after clocking out
-        | - Creating multiple attendances in a short time
-        |
-        | You can adjust this cooldown to 6, 8, or 10 hours
+        | Prevent accidental re-clock-in (cooldown protection)
         |--------------------------------------------------------------------------
         */
             $lastAttendance = Attendance::where('employee_id', $employee->id)
@@ -395,7 +398,7 @@ class AttendanceController extends Controller
                 $hoursSinceClockOut = Carbon::parse($lastAttendance->clock_out)
                     ->diffInHours(now());
 
-                $cooldownHours = 1; // adjust if needed
+                $cooldownHours = 1;
 
                 if ($hoursSinceClockOut < $cooldownHours) {
                     return response()->json([
@@ -406,13 +409,14 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        |  Save image (if any)
+        | Save image (if any)
         |--------------------------------------------------------------------------
         */
             $imagePath = null;
 
             if ($request->hasFile('face_image')) {
                 $uploadedFile = $request->file('face_image');
+
                 $imagePath = $this->saveFileToPublic(
                     $uploadedFile,
                     'attendance_in_' . $employee->id . '_' . time()
@@ -421,19 +425,74 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        Create attendance
+        | Shift Logic
         |--------------------------------------------------------------------------
         */
+
+            // Current clock-in time
+            $clockInTime = now();
+
+            // Employee shift start
+            // Default to 08:00 AM if shift_start is null
+            $shiftStart = Carbon::today()->setTimeFromTimeString(
+                $employee->shift_start ?? '08:00:00'
+            );
+
+            // Add 5-minute grace period
+            $gracePeriodEnd = $shiftStart->copy()->addMinutes(5);
+
+            /*
+                |--------------------------------------------------------------------------
+                | Attendance Status + Late Deduction
+                |--------------------------------------------------------------------------
+                */
+
+            $status = 'Present';
+            $isLate = 0;
+            $lateMinutes = 0;
+            $lateDeduction = 0;
+
+            if ($clockInTime->gt($gracePeriodEnd)) {
+
+                $status = 'Late';
+                $isLate = 1;
+
+                // Minutes late after grace period
+                $lateMinutes = $gracePeriodEnd->diffInMinutes($clockInTime);
+
+                // Convert to hours
+                $lateHours = $lateMinutes / 60;
+
+                // Employee late_deduction = hourly deduction rate
+                $lateDeduction = round(
+                    $lateHours * ($employee->late_deduction ?? 0),
+                    2
+                );
+            }
+
+            /*
+                |--------------------------------------------------------------------------
+                | Create attendance
+                |--------------------------------------------------------------------------
+                */
             $attendance = Attendance::create([
-                'employee_id'    => $employee->id,
-                'clock_in'       => now(),
-                'status'         => 'Present',
-                'method'         => $request->hasFile('face_image')
+                'employee_id'      => $employee->id,
+                'clock_in'         => $clockInTime,
+                'status'           => $status,
+                'is_late'          => $isLate,
+                'late_minutes'     => $lateMinutes,
+                'late_deduction'   => $lateDeduction,
+                'method'           => $request->hasFile('face_image')
                     ? 'Facial Recognition'
                     : 'Manual',
-                'clock_in_image' => $imagePath,
+                'clock_in_image'   => $imagePath,
             ]);
 
+            /*
+        |--------------------------------------------------------------------------
+        | Send email
+        |--------------------------------------------------------------------------
+        */
             $dateNow = now()->format('Y-m-d H:i:s');
 
             Mail::to('gimme473@gmail.com')->send(
@@ -443,9 +502,20 @@ class AttendanceController extends Controller
             return response()->json([
                 'message'    => 'Clocked in successfully!',
                 'employee'   => $employee->first_name . ' ' . $employee->last_name,
-                'attendance' => $attendance,
+                'attendance' => [
+                    'id'            => $attendance->id,
+                    'clock_in'      => $attendance->clock_in,
+                    'status'        => $attendance->status,
+                    'shift_start'   => $employee->shift_start,
+                    'grace_until'   => $gracePeriodEnd->format('H:i:s'),
+                    'late_minutes'    => $attendance->late_minutes,
+                    'late_deduction'  => $attendance->late_deduction,
+                    'method'        => $attendance->method,
+                    'clock_in_image' => $attendance->clock_in_image,
+                ],
             ], 200);
         } catch (\Exception $e) {
+
             return response()->json([
                 'message' => 'Failed to clock in.',
                 'error'   => $e->getMessage()
@@ -565,6 +635,61 @@ class AttendanceController extends Controller
     }
 
 
+    public function markAbsent(Request $request)
+    {
+        try {
+
+            $request->validate([
+                'employee_ids'   => 'required|array|min:1',
+                'employee_ids.*' => 'exists:employees,id',
+            ]);
+
+            $marked = [];
+            $skipped = [];
+
+            foreach ($request->employee_ids as $employeeId) {
+
+                $existingAttendance = Attendance::where('employee_id', $employeeId)
+                    ->whereDate('created_at', Carbon::today())
+                    ->exists();
+
+                if ($existingAttendance) {
+                    $skipped[] = [
+                        'employee_id' => $employeeId,
+                        'reason' => 'Attendance already recorded today.'
+                    ];
+                    continue;
+                }
+
+                $attendance = Attendance::create([
+                    'employee_id'    => $employeeId,
+                    'status'         => 'Absent',
+                    'hours_worked'   => 0,
+                    'is_late'        => 0,
+                    'late_minutes'   => 0,
+                    'late_deduction' => 0,
+                    'remarks'        => 'Marked absent by administrator',
+                    'method'         => 'Manual',
+                ]);
+
+                $marked[] = $attendance;
+            }
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Absent employees processed successfully.',
+                'marked'    => $marked,
+                'skipped'   => $skipped,
+            ]);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to mark employees absent.',
+                'error'     => $e->getMessage()
+            ], 500);
+        }
+    }
 
     /**
      * Dashboard Summary
@@ -1062,7 +1187,7 @@ class AttendanceController extends Controller
 
         $adjustment = AttendanceAdjustment::findOrFail($adjustmentId);
 
-        if ($adjustment->status !== 'Pending') {
+        if ($adjustment->status !== 'pending') {
             return response()->json([
                 'message' => 'This adjustment has already been processed.'
             ], 400);

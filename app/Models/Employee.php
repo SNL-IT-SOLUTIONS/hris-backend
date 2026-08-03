@@ -98,6 +98,9 @@ class Employee extends Authenticatable
         'night_hours',
         'night_rate',
         'hire_date',
+        'late_deduction',
+        'shift_start',
+        'shift_end',
 
         // Emergency Contact
         'emergency_contact_name',

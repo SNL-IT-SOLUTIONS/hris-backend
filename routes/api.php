@@ -94,6 +94,7 @@ Route::controller(CompanyInformationController::class)->group(function () {
 //EMPLOYEES
 Route::controller(EmployeeController::class)->middleware(['auth:sanctum'])->group(function () {
     Route::get('employees', 'getEmployees');
+    Route::get('employees/list', 'getEmployeeList');
     Route::get('employees/{id}', 'getEmployeeById');
     Route::post('create/employees', 'createEmployee');
     Route::post('update/employees/{id}', 'updateEmployee');
@@ -112,6 +113,8 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::middleware('auth:sanctum')->get('employees/{id}/attendance', [AttendanceController::class, 'getEmployeeAttendanceReport']);
     Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
     Route::post('request-leave', 'requestLeave');
+    Route::get('attendances', [AttendanceController::class, 'getAllAttendances']);
+    Route::post('markabsent', [AttendanceController::class, 'markAbsent']);
     //DTR ADJUSTMENTS
 
     Route::get('missed-adjustments', 'getMissedAdjustments');
@@ -123,7 +126,7 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::get('my-leaves-balance', 'getMyLeaveBalances');
     Route::post('confirm-leave/{leaveId}', 'confirmLeave');
 });
-Route::get('attendances', [AttendanceController::class, 'getAllAttendances']);
+
 Route::get('dtr-adjustments', [AttendanceController::class, 'getAdjustments']);
 Route::get('leaves', [AttendanceController::class, 'getAllLeaves']);
 Route::post('adjustment/approve/{adjustmentId}', [AttendanceController::class, 'approveAdjustment']);

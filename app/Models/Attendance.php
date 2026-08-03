@@ -28,6 +28,9 @@ class Attendance extends Model
         'clock_in_image',
         'clock_out_image',
         'method',
+        'is_late',
+        'late_minutes',
+        'late_deduction',
     ];
 
     // Relationships
