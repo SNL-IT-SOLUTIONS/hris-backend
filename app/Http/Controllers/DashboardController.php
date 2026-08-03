@@ -141,8 +141,14 @@ class DashboardController extends Controller
                 ->get(['id', 'clock_out', 'report_today']);
 
             // Recent Payslips (Last 3)
+            // Recent Payslips (Last 3 - Processed Payroll Periods Only)
             $recentPayslips = PayrollRecord::where('employee_id', $employee->id)
                 ->where('is_archived', 0)
+                ->whereHas('payrollPeriod', function ($query) {
+                    $query->where('status', 'processed')
+                        ->where('is_archived', 0);
+                })
+                ->with('payrollPeriod')
                 ->orderBy('created_at', 'desc')
                 ->take(3)
                 ->get();
