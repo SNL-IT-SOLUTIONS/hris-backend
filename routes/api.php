@@ -260,8 +260,8 @@ Route::controller(AnnouncementBoardController::class)->group(function () {
 
     Route::post('create/announcements', 'createAnnouncement')->middleware('auth:sanctum');
     Route::post('update/announcements/{id}', 'updateAnnouncement');
-    Route::get('announcements', 'getAnnouncements');
-    Route::get('announcements/{id}', 'getAnnouncementById');
+    Route::get('announcements', 'getAnnouncements')->middleware('auth:sanctum');;
+    Route::get('announcements/{id}', 'getAnnouncementById')->middleware('auth:sanctum');;
     Route::post('announcements/{id}/archive', 'archiveAnnouncement');
 });
 
