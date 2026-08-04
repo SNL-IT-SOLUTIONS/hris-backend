@@ -31,4 +31,8 @@ class AnnouncementBoard extends Model
     {
         return $this->belongsTo(User::class, 'posted_by');
     }
+    public function views()
+    {
+        return $this->hasMany(AnnouncementView::class, 'announcement_id');
+    }
 }

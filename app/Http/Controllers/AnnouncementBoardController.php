@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AnnouncementBoard;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use App\Models\AnnouncementView;
 
 class AnnouncementBoardController extends Controller
 {
@@ -14,6 +15,7 @@ class AnnouncementBoardController extends Controller
     public function getAnnouncements()
     {
         $now = Carbon::now();
+        $user = auth()->user();
 
         $announcements = AnnouncementBoard::with('user:id,first_name,last_name')
             ->where('is_active', 1)
@@ -26,6 +28,11 @@ class AnnouncementBoardController extends Controller
                 $query->whereNull('expire_at')
                     ->orWhere('expire_at', '>=', $now);
             })
+            ->withExists([
+                'views as is_seen' => function ($query) use ($user) {
+                    $query->where('employee_id', $user->id);
+                }
+            ])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -75,6 +82,8 @@ class AnnouncementBoardController extends Controller
      */
     public function getAnnouncementById($id)
     {
+        $user = auth()->user();
+
         $announcement = AnnouncementBoard::with('user:id,first_name,last_name')
             ->where('is_archived', 0)
             ->find($id);
@@ -85,6 +94,17 @@ class AnnouncementBoardController extends Controller
                 'message' => 'Announcement not found.'
             ], 404);
         }
+
+        // Mark as seen
+        AnnouncementView::updateOrCreate(
+            [
+                'announcement_id' => $announcement->id,
+                'employee_id' => $user->id,
+            ],
+            [
+                'seen_at' => now(),
+            ]
+        );
 
         return response()->json([
             'isSuccess' => true,
