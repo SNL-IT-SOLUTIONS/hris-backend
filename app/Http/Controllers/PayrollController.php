@@ -302,9 +302,7 @@ class PayrollController extends Controller
 
                 foreach ($employeeAllowances as $allowance) {
 
-                    $amount = ($allowance->allowance_amount ?? 0) / 2;
-
-                    // Perfect Attendance Incentive
+                    // Perfect Attendance (full amount)
                     if (strtolower(trim($allowance->allowance_name)) === 'perfect attendance') {
 
                         if ($absences == 0 && !$hasLate) {
@@ -312,17 +310,18 @@ class PayrollController extends Controller
                             PayrollAllowance::create([
                                 'payroll_record_id' => $record->id,
                                 'allowance_type_id' => $allowance->allowance_type_id,
-                                'allowance_amount'  => $amount,
+                                'allowance_amount'  => $allowance->allowance_amount, // FULL AMOUNT
                             ]);
                         }
 
                         continue;
                     }
 
+                    // Other allowances are semi-monthly
                     PayrollAllowance::create([
                         'payroll_record_id' => $record->id,
                         'allowance_type_id' => $allowance->allowance_type_id,
-                        'allowance_amount'  => $amount,
+                        'allowance_amount'  => ($allowance->allowance_amount ?? 0) / 2,
                     ]);
                 }
             }
