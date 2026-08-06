@@ -166,7 +166,7 @@ class PayrollController extends Controller
 
                         // Only give if no absences and no late
                         if ($absences == 0 && !$hasLate) {
-                            $total_allowances += ($allowance->allowance_amount ?? 0) / 2;
+                            $total_allowances += ($allowance->allowance_amount ?? 0);
                         }
 
                         continue;
