@@ -162,7 +162,7 @@ class PayrollController extends Controller
                 foreach ($employeeAllowances as $allowance) {
 
                     // Perfect Attendance Incentive
-                    if (strtolower(trim($allowance->allowance_name)) === 'perfect attendance incentive') {
+                    if (strtolower(trim($allowance->allowance_name)) === 'perfect attendance') {
 
                         // Only give if no absences and no late
                         if ($absences == 0 && !$hasLate) {
@@ -305,7 +305,7 @@ class PayrollController extends Controller
                     $amount = ($allowance->allowance_amount ?? 0) / 2;
 
                     // Perfect Attendance Incentive
-                    if (strtolower(trim($allowance->allowance_name)) === 'perfect attendance incentive') {
+                    if (strtolower(trim($allowance->allowance_name)) === 'perfect attendance') {
 
                         if ($absences == 0 && !$hasLate) {
 
