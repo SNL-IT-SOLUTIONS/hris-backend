@@ -137,7 +137,7 @@ class DashboardController extends Controller
             $recentReports = Attendance::where('employee_id', $employee->id)
                 ->whereNotNull('report_today')
                 ->orderBy('clock_out', 'desc')
-                ->take(5)
+                ->take(20)
                 ->get(['id', 'clock_out', 'report_today']);
 
             // Recent Payslips (Last 3)
