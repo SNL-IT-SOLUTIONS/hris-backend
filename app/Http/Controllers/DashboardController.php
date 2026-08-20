@@ -202,6 +202,9 @@ class DashboardController extends Controller
             $request->validate([
                 'date'        => 'nullable|date',
                 'employee_id' => 'nullable|integer',
+                'status'      => 'nullable|string',
+                'is_late'     => 'nullable|boolean',
+                'search'      => 'nullable|string|max:255',
                 'per_page'    => 'nullable|integer|min:1|max:100',
             ]);
 
@@ -211,16 +214,75 @@ class DashboardController extends Controller
 
             $perPage = $request->per_page ?? 20;
 
+            /*
+        |--------------------------------------------------------------------------
+        | EOD REPORTS QUERY
+        |--------------------------------------------------------------------------
+        */
+
             $query = Attendance::with([
                 'employee:id,first_name,middle_name,last_name,employee_id'
             ])
                 ->whereNotNull('report_today')
                 ->whereDate('clock_out', $date);
 
-            // Optional employee filter
+            /*
+        |--------------------------------------------------------------------------
+        | FILTER: EMPLOYEE
+        |--------------------------------------------------------------------------
+        */
+
             if ($request->filled('employee_id')) {
                 $query->where('employee_id', $request->employee_id);
             }
+
+            /*
+        |--------------------------------------------------------------------------
+        | FILTER: STATUS
+        |--------------------------------------------------------------------------
+        */
+
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | FILTER: LATE
+        |--------------------------------------------------------------------------
+        */
+
+            if ($request->filled('is_late')) {
+                $query->where('is_late', $request->boolean('is_late'));
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | FILTER: SEARCH EMPLOYEE
+        |--------------------------------------------------------------------------
+        */
+
+            if ($request->filled('search')) {
+
+                $search = $request->search;
+
+                $query->whereHas('employee', function ($employeeQuery) use ($search) {
+
+                    $employeeQuery->where(function ($q) use ($search) {
+
+                        $q->where('first_name', 'LIKE', "%{$search}%")
+                            ->orWhere('middle_name', 'LIKE', "%{$search}%")
+                            ->orWhere('last_name', 'LIKE', "%{$search}%")
+                            ->orWhere('employee_id', 'LIKE', "%{$search}%");
+                    });
+                });
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | GET REPORTS
+        |--------------------------------------------------------------------------
+        */
 
             $reports = $query
                 ->orderBy('clock_out', 'desc')
@@ -228,16 +290,61 @@ class DashboardController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | SUMMARY
+        | SUMMARY QUERY
         |--------------------------------------------------------------------------
         */
 
             $summaryQuery = Attendance::whereNotNull('report_today')
                 ->whereDate('clock_out', $date);
 
+            /*
+        |--------------------------------------------------------------------------
+        | APPLY SAME FILTERS TO SUMMARY
+        |--------------------------------------------------------------------------
+        */
+
             if ($request->filled('employee_id')) {
-                $summaryQuery->where('employee_id', $request->employee_id);
+                $summaryQuery->where(
+                    'employee_id',
+                    $request->employee_id
+                );
             }
+
+            if ($request->filled('status')) {
+                $summaryQuery->where(
+                    'status',
+                    $request->status
+                );
+            }
+
+            if ($request->filled('is_late')) {
+                $summaryQuery->where(
+                    'is_late',
+                    $request->boolean('is_late')
+                );
+            }
+
+            if ($request->filled('search')) {
+
+                $search = $request->search;
+
+                $summaryQuery->whereHas('employee', function ($employeeQuery) use ($search) {
+
+                    $employeeQuery->where(function ($q) use ($search) {
+
+                        $q->where('first_name', 'LIKE', "%{$search}%")
+                            ->orWhere('middle_name', 'LIKE', "%{$search}%")
+                            ->orWhere('last_name', 'LIKE', "%{$search}%")
+                            ->orWhere('employee_id', 'LIKE', "%{$search}%");
+                    });
+                });
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | SUMMARY
+        |--------------------------------------------------------------------------
+        */
 
             $summary = [
                 'total_reports' => (clone $summaryQuery)->count(),
@@ -248,6 +355,10 @@ class DashboardController extends Controller
 
                 'total_late' => (clone $summaryQuery)
                     ->where('is_late', 1)
+                    ->count(),
+
+                'total_on_time' => (clone $summaryQuery)
+                    ->where('is_late', 0)
                     ->count(),
 
                 'total_hours_worked' => round(
@@ -273,7 +384,13 @@ class DashboardController extends Controller
             return response()->json([
                 'isSuccess' => true,
 
-                'date' => $date,
+                'filters' => [
+                    'date'        => $date,
+                    'employee_id' => $request->employee_id,
+                    'status'      => $request->status,
+                    'is_late'     => $request->is_late,
+                    'search'      => $request->search,
+                ],
 
                 'summary' => $summary,
 
