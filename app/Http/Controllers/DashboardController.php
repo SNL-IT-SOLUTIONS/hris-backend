@@ -195,6 +195,107 @@ class DashboardController extends Controller
         }
     }
 
+
+    public function adminEODReports(Request $request)
+    {
+        try {
+            $request->validate([
+                'date'        => 'nullable|date',
+                'employee_id' => 'nullable|integer',
+                'per_page'    => 'nullable|integer|min:1|max:100',
+            ]);
+
+            $date = $request->date
+                ? Carbon::parse($request->date)->toDateString()
+                : Carbon::now()->toDateString();
+
+            $perPage = $request->per_page ?? 20;
+
+            $query = Attendance::with([
+                'employee:id,first_name,middle_name,last_name,employee_id'
+            ])
+                ->whereNotNull('report_today')
+                ->whereDate('clock_out', $date);
+
+            // Optional employee filter
+            if ($request->filled('employee_id')) {
+                $query->where('employee_id', $request->employee_id);
+            }
+
+            $reports = $query
+                ->orderBy('clock_out', 'desc')
+                ->paginate($perPage);
+
+            /*
+        |--------------------------------------------------------------------------
+        | SUMMARY
+        |--------------------------------------------------------------------------
+        */
+
+            $summaryQuery = Attendance::whereNotNull('report_today')
+                ->whereDate('clock_out', $date);
+
+            if ($request->filled('employee_id')) {
+                $summaryQuery->where('employee_id', $request->employee_id);
+            }
+
+            $summary = [
+                'total_reports' => (clone $summaryQuery)->count(),
+
+                'total_present' => (clone $summaryQuery)
+                    ->where('status', 'Present')
+                    ->count(),
+
+                'total_late' => (clone $summaryQuery)
+                    ->where('is_late', 1)
+                    ->count(),
+
+                'total_hours_worked' => round(
+                    (clone $summaryQuery)->sum('hours_worked'),
+                    2
+                ),
+
+                'total_late_minutes' => (clone $summaryQuery)
+                    ->sum('late_minutes'),
+
+                'total_late_deduction' => round(
+                    (clone $summaryQuery)->sum('late_deduction'),
+                    2
+                ),
+            ];
+
+            /*
+        |--------------------------------------------------------------------------
+        | RESPONSE
+        |--------------------------------------------------------------------------
+        */
+
+            return response()->json([
+                'isSuccess' => true,
+
+                'date' => $date,
+
+                'summary' => $summary,
+
+                'reports' => $reports->items(),
+
+                'pagination' => [
+                    'current_page' => $reports->currentPage(),
+                    'last_page'    => $reports->lastPage(),
+                    'per_page'     => $reports->perPage(),
+                    'total'        => $reports->total(),
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to load EOD reports.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function attendanceCalendarDashboard(Request $request)
     {
         try {

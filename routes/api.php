@@ -45,11 +45,16 @@ Route::get('my-profile', [AuthController::class, 'getMyProfile'])->middleware('a
 Route::post('update-profile', [AuthController::class, 'updateProfile'])->middleware('auth:sanctum');
 Route::post('update-profile-picture', [AuthController::class, 'updateProfilePicture'])->middleware('auth:sanctum');
 Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');
+
+
+
 //DASHBOARD
 Route::get('dashboard', [DashboardController::class, 'index']);
 Route::get('dashboard/employees', [DashboardController::class, 'employeesDashboard'])->middleware('auth:sanctum');
 Route::get('dashboard/calendar', [DashboardController::class, 'attendanceCalendarDashboard'])->middleware('auth:sanctum');
 Route::get('dashboard/attendance/overview', [DashboardController::class, 'monthlyAttendanceDashboard'])->middleware('auth:sanctum');
+Route::get('dashboard/eod-reports', [DashboardController::class, 'adminEODReports'])->middleware('auth:sanctum');
+
 
 //RECRUITMENT - JOB POSTINGS
 Route::controller(JobPostingController::class)->group(function () {
