@@ -362,7 +362,7 @@ class AttendanceController extends Controller
             if ($validator->fails()) {
                 return response()->json([
                     'message' => 'Invalid image.',
-                    'errors' => $validator->errors()
+                    'errors'  => $validator->errors()
                 ], 422);
             }
 
@@ -370,9 +370,43 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
+        | Get Employee Shift
+        |--------------------------------------------------------------------------
+        */
+
+            $shiftStartTime = $employee->shift_start ?? '08:00:00';
+            $shiftEndTime   = $employee->shift_end ?? '17:00:00';
+
+            $clockInTime = now();
+
+            $shiftStart = Carbon::today()->setTimeFromTimeString(
+                $shiftStartTime
+            );
+
+            $shiftEnd = Carbon::today()->setTimeFromTimeString(
+                $shiftEndTime
+            );
+
+            /*
+        |--------------------------------------------------------------------------
+        | Handle Overnight Shift
+        |--------------------------------------------------------------------------
+        |
+        | Example:
+        | 10:00 PM - 06:00 AM
+        |
+        */
+
+            if ($shiftEnd->lessThanOrEqualTo($shiftStart)) {
+                $shiftEnd->addDay();
+            }
+
+            /*
+        |--------------------------------------------------------------------------
         | Block if there is still an OPEN attendance
         |--------------------------------------------------------------------------
         */
+
             $openAttendance = Attendance::where('employee_id', $employee->id)
                 ->whereNull('clock_out')
                 ->latest('clock_in')
@@ -386,17 +420,19 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Prevent accidental re-clock-in (cooldown protection)
+        | Prevent Accidental Re-Clock-In
         |--------------------------------------------------------------------------
         */
+
             $lastAttendance = Attendance::where('employee_id', $employee->id)
                 ->latest('clock_in')
                 ->first();
 
             if ($lastAttendance && $lastAttendance->clock_out) {
 
-                $hoursSinceClockOut = Carbon::parse($lastAttendance->clock_out)
-                    ->diffInHours(now());
+                $hoursSinceClockOut = Carbon::parse(
+                    $lastAttendance->clock_out
+                )->diffInHours(now());
 
                 $cooldownHours = 1;
 
@@ -409,12 +445,14 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Save image (if any)
+        | Save Clock-In Image
         |--------------------------------------------------------------------------
         */
+
             $imagePath = null;
 
             if ($request->hasFile('face_image')) {
+
                 $uploadedFile = $request->file('face_image');
 
                 $imagePath = $this->saveFileToPublic(
@@ -425,25 +463,16 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Shift Logic
-        |--------------------------------------------------------------------------
-        */
-
-            // Current clock-in time
-            $clockInTime = now();
-
-            // Employee shift start
-            $shiftStart = Carbon::today()->setTimeFromTimeString(
-                $employee->shift_start ?? '08:00:00'
-            );
-
-            // 5-minute grace period
-            $gracePeriodEnd = $shiftStart->copy()->addMinutes(5);
-
-            /*
-        |--------------------------------------------------------------------------
         | Attendance Status + Late Deduction
         |--------------------------------------------------------------------------
+        |
+        | NO GRACE PERIOD
+        |
+        | 08:00 shift
+        | 08:00 clock-in = Present
+        | 08:01 clock-in = 1 minute Late
+        | 08:15 clock-in = 15 minutes Late
+        |
         */
 
             $status = 'Present';
@@ -451,72 +480,100 @@ class AttendanceController extends Controller
             $lateMinutes = 0;
             $lateDeduction = 0;
 
-            if ($clockInTime->gt($gracePeriodEnd)) {
+            if ($clockInTime->greaterThan($shiftStart)) {
 
                 $status = 'Late';
                 $isLate = 1;
 
-                // Minutes late after grace period
-                $lateMinutes = $gracePeriodEnd->diffInMinutes($clockInTime);
+                /*
+            |--------------------------------------------------------------------------
+            | Calculate Exact Late Minutes
+            |--------------------------------------------------------------------------
+            */
 
-                // Convert minutes to hours
-                $lateHours = $lateMinutes / 60;
+                $lateMinutes = $shiftStart->diffInMinutes($clockInTime);
 
-                // Daily rate (currently stored in late_deduction field)
-                $dailyRate = $employee->late_deduction ?? 0;
+                /*
+            |--------------------------------------------------------------------------
+            | Calculate Late Deduction
+            |--------------------------------------------------------------------------
+            |
+            | Daily Rate / 8 hours = Hourly Rate
+            | Hourly Rate / 60 = Per Minute Rate
+            |
+            */
 
-                // Convert daily rate to hourly rate (8-hour workday)
+                $dailyRate = (float) ($employee->daily_rate ?? 0);
+
                 $hourlyRate = $dailyRate / 8;
 
-                // Calculate deduction
-                $lateDeduction = round($lateHours * $hourlyRate, 2);
+                $minuteRate = $hourlyRate / 60;
+
+                $lateDeduction = round(
+                    $lateMinutes * $minuteRate,
+                    2
+                );
             }
 
             /*
         |--------------------------------------------------------------------------
-        | Create attendance
+        | Create Attendance
         |--------------------------------------------------------------------------
         */
+
             $attendance = Attendance::create([
-                'employee_id'      => $employee->id,
-                'clock_in'         => $clockInTime,
-                'status'           => $status,
-                'is_late'          => $isLate,
-                'late_minutes'     => $lateMinutes,
-                'late_deduction'   => $lateDeduction,
-                'method'           => $request->hasFile('face_image')
+                'employee_id'    => $employee->id,
+                'clock_in'       => $clockInTime,
+                'status'         => $status,
+                'is_late'        => $isLate,
+                'late_minutes'   => $lateMinutes,
+                'late_deduction' => $lateDeduction,
+                'method'         => $request->hasFile('face_image')
                     ? 'Facial Recognition'
                     : 'Manual',
-                'clock_in_image'   => $imagePath,
+                'clock_in_image' => $imagePath,
             ]);
 
             /*
         |--------------------------------------------------------------------------
-        | Send email
+        | Send Clock-In Email
         |--------------------------------------------------------------------------
         */
+
             $dateNow = now()->format('Y-m-d H:i:s');
 
             Mail::to('gimme473@gmail.com')->send(
                 new ClockInNotification($employee, $dateNow)
             );
 
+            /*
+        |--------------------------------------------------------------------------
+        | Response
+        |--------------------------------------------------------------------------
+        */
+
             return response()->json([
-                'message'    => 'Clocked in successfully!',
-                'employee'   => $employee->first_name . ' ' . $employee->last_name,
+                'message'  => 'Clocked in successfully!',
+
+                'employee' => $employee->first_name . ' ' . $employee->last_name,
+
                 'attendance' => [
-                    'id'               => $attendance->id,
-                    'clock_in'         => $attendance->clock_in,
-                    'status'           => $attendance->status,
-                    'shift_start'      => $employee->shift_start,
-                    'grace_until'      => $gracePeriodEnd->format('H:i:s'),
-                    'late_minutes'     => $attendance->late_minutes,
-                    'late_deduction'   => $attendance->late_deduction,
-                    'method'           => $attendance->method,
-                    'clock_in_image'   => $attendance->clock_in_image,
+                    'id'              => $attendance->id,
+                    'clock_in'        => $attendance->clock_in,
+                    'status'          => $attendance->status,
+
+                    'shift_start'     => $employee->shift_start,
+                    'shift_end'       => $employee->shift_end,
+
+                    'late_minutes'    => $attendance->late_minutes,
+                    'late_deduction'  => $attendance->late_deduction,
+
+                    'method'          => $attendance->method,
+                    'clock_in_image'  => $attendance->clock_in_image,
                 ],
+
             ], 200);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
 
             return response()->json([
                 'message' => 'Failed to clock in.',
