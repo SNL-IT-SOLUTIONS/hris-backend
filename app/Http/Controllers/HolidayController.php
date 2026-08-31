@@ -5,10 +5,14 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Holiday;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
+use App\Models\AnnouncementBoard;
+
 
 class HolidayController extends Controller
 {
-    // CREATE
+
+
     public function createHoliday(Request $request)
     {
         $validated = $request->validate([
@@ -17,17 +21,54 @@ class HolidayController extends Controller
             'holiday_type' => ['required', Rule::in(['Regular', 'Special'])],
         ]);
 
-        $holiday = Holiday::create([
-            'holiday_date' => $validated['holiday_date'],
-            'holiday_name' => $validated['holiday_name'],
-            'holiday_type' => $validated['holiday_type'],
-        ]);
+        DB::beginTransaction();
 
-        return response()->json([
-            'isSuccess' => true,
-            'message' => 'Holiday added successfully.',
-            'data' => $holiday,
-        ], 201);
+        try {
+
+            // Create Holiday
+            $holiday = Holiday::create([
+                'holiday_date' => $validated['holiday_date'],
+                'holiday_name' => $validated['holiday_name'],
+                'holiday_type' => $validated['holiday_type'],
+                'is_archived' => 0,
+            ]);
+
+            // Create Announcement
+            $announcement = AnnouncementBoard::create([
+                'title' => $validated['holiday_name'],
+                'content' => 'Please be informed that ' .
+                    $validated['holiday_name'] .
+                    ' will be observed on ' .
+                    date('F d, Y', strtotime($validated['holiday_date'])) .
+                    '.',
+
+                'posted_by' => auth()->id(),
+                'is_archived' => 0,
+                'is_active' => 1,
+                'publish_at' => now(),
+                'expire_at' => $validated['holiday_date'] . ' 23:59:59',
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Holiday and announcement created successfully.',
+                'data' => [
+                    'holiday' => $holiday,
+                    'announcement' => $announcement,
+                ],
+            ], 201);
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to create holiday and announcement.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     // READ - Get all holidays
