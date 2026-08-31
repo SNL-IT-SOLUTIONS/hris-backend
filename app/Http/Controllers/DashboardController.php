@@ -17,6 +17,9 @@ use App\Models\EmployeeLeaveRequest;
 use App\Models\PayrollRecord;
 use App\Models\Announcement;
 use App\Models\AnnouncementBoard;
+use App\Models\AnnouncementView;
+use App\Models\TrainingModule;
+use App\Models\Holiday;
 
 class DashboardController extends Controller
 {
@@ -433,6 +436,17 @@ class DashboardController extends Controller
             $start = Carbon::create($request->year, $request->month, 1);
             $end   = $start->copy()->endOfMonth();
 
+            // Get holidays for the selected month
+            $holidays = Holiday::where('is_archived', 0)
+                ->whereBetween('holiday_date', [
+                    $start->toDateString(),
+                    $end->toDateString()
+                ])
+                ->get()
+                ->keyBy(function ($holiday) {
+                    return Carbon::parse($holiday->holiday_date)->toDateString();
+                });
+
             $calendar = [];
 
             $presentCount = 0;
@@ -442,10 +456,14 @@ class DashboardController extends Controller
 
             for ($date = $start->copy(); $date <= $end; $date->addDay()) {
 
+                $dateString = $date->toDateString();
+
+                // Attendance
                 $attendance = Attendance::where('employee_id', $employee->id)
                     ->whereDate('clock_in', $date)
                     ->first();
 
+                // Approved Leave
                 $leave = Leave::where('employee_id', $employee->id)
                     ->where('status', 'Approved')
                     ->whereDate('start_date', '<=', $date)
@@ -453,8 +471,22 @@ class DashboardController extends Controller
                     ->first();
 
                 $status = 'absent';
+                $holiday = null;
+
+                /*
+            |--------------------------------------------------------------------------
+            | Status Priority
+            |--------------------------------------------------------------------------
+            | 1. Attendance
+            | 2. Leave
+            | 3. Holiday
+            | 4. Weekend
+            | 5. Absent
+            |--------------------------------------------------------------------------
+            */
 
                 if ($attendance) {
+
                     $status = strtolower($attendance->status);
 
                     if ($status === 'present') {
@@ -465,18 +497,34 @@ class DashboardController extends Controller
                         $missedCount++;
                     }
                 } elseif ($leave) {
+
                     $status = 'leave';
+                } elseif (isset($holidays[$dateString])) {
+
+                    $holiday = $holidays[$dateString];
+
+                    $status = 'holiday';
                 } elseif ($date->isWeekend()) {
+
                     $status = 'weekend';
                 } else {
+
                     $absentCount++;
                 }
 
                 $calendar[] = [
-                    'date' => $date->toDateString(),
+                    'date' => $dateString,
                     'status' => $status,
+
                     'clock_in' => $attendance->clock_in ?? null,
                     'clock_out' => $attendance->clock_out ?? null,
+
+                    'holiday' => $holiday ? [
+                        'id' => $holiday->id,
+                        'name' => $holiday->holiday_name,
+                        'type' => $holiday->holiday_type,
+                        'date' => Carbon::parse($holiday->holiday_date)->toDateString(),
+                    ] : null,
                 ];
             }
 
@@ -499,7 +547,6 @@ class DashboardController extends Controller
                 ],
 
                 'calendar' => $calendar
-
             ], 200);
         } catch (\Exception $e) {
 
@@ -510,6 +557,8 @@ class DashboardController extends Controller
             ], 500);
         }
     }
+
+
 
     public function monthlyAttendanceDashboard()
     {
