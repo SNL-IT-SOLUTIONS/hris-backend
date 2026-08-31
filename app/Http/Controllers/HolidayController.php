@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Holiday;
+use Illuminate\Validation\Rule;
 
 class HolidayController extends Controller
 {
@@ -12,10 +13,14 @@ class HolidayController extends Controller
     {
         $validated = $request->validate([
             'holiday_date' => 'required|date|unique:holidays,holiday_date',
+            'holiday_name' => 'required|string|max:255',
+            'holiday_type' => ['required', Rule::in(['Regular', 'Special'])],
         ]);
 
         $holiday = Holiday::create([
             'holiday_date' => $validated['holiday_date'],
+            'holiday_name' => $validated['holiday_name'],
+            'holiday_type' => $validated['holiday_type'],
         ]);
 
         return response()->json([
@@ -69,11 +74,19 @@ class HolidayController extends Controller
         }
 
         $validated = $request->validate([
-            'holiday_date' => 'required|date|unique:holidays,holiday_date,' . $id,
+            'holiday_date' => [
+                'required',
+                'date',
+                Rule::unique('holidays', 'holiday_date')->ignore($id),
+            ],
+            'holiday_name' => 'required|string|max:255',
+            'holiday_type' => ['required', Rule::in(['Regular', 'Special'])],
         ]);
 
         $holiday->update([
             'holiday_date' => $validated['holiday_date'],
+            'holiday_name' => $validated['holiday_name'],
+            'holiday_type' => $validated['holiday_type'],
         ]);
 
         return response()->json([
@@ -83,7 +96,7 @@ class HolidayController extends Controller
         ], 200);
     }
 
-    // DELETE
+    // ARCHIVE
     public function deleteHoliday($id)
     {
         $holiday = Holiday::find($id);
@@ -95,11 +108,12 @@ class HolidayController extends Controller
             ], 404);
         }
 
-        $holiday->delete();
+        $holiday->is_archived = 1;
+        $holiday->save();
 
         return response()->json([
             'isSuccess' => true,
-            'message' => 'Holiday deleted successfully.',
+            'message' => 'Holiday archived successfully.',
         ], 200);
     }
 }

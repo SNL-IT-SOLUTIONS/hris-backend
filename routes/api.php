@@ -27,7 +27,9 @@ use App\Http\Controllers\AnnouncementBoardController;
 use App\Http\Controllers\TrainingModuleController;
 use App\Http\Controllers\TrainingTestController;
 use App\Http\Controllers\TrainingAdminController;
+use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\TrainingLessonController;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -286,6 +288,26 @@ Route::post('/training/lesson/create', [TrainingLessonController::class, 'create
 Route::get('/training/lessons', [TrainingLessonController::class, 'getLessons'])->middleware('auth:sanctum');
 Route::get('/training/lessons/{id}', [TrainingLessonController::class, 'getLessonById']);
 Route::get('/training/lessons/{id}/structure', [TrainingLessonController::class, 'getLessonStructure']);
+
+
+
+Route::controller(HolidayController::class)->group(function () {
+
+    // Create
+    Route::post('createholidays', 'createHoliday');
+
+    // Get all
+    Route::get('getholidays', 'getHolidays');
+
+    // Get one
+    Route::get('getholidays/{id}', 'getHoliday');
+
+    // Update
+    Route::post('holidays/{id}', 'updateHoliday');
+
+    // Delete
+    Route::post('archiveHolidays/{id}', 'deleteHoliday');
+});
 
 
 //DROPDOWNS
