@@ -46,7 +46,7 @@ class HolidayController extends Controller
                 'is_archived' => 0,
                 'is_active' => 1,
                 'publish_at' => now(),
-                'expire_at' => $validated['holiday_date'] . ' 23:59:59',
+                'expire_at' => null,
             ]);
 
             DB::commit();
