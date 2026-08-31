@@ -294,7 +294,7 @@ Route::get('/training/lessons/{id}/structure', [TrainingLessonController::class,
 Route::controller(HolidayController::class)->group(function () {
 
     // Create
-    Route::post('createholidays', 'createHoliday');
+    Route::post('createholidays', 'createHoliday')->middleware('auth:sanctum');
 
     // Get all
     Route::get('getholidays', 'getHolidays');
