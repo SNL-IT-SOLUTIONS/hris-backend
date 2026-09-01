@@ -1292,7 +1292,6 @@ class PayrollController extends Controller
                 ->where('employee_id', $employee->id)
                 ->where('id', $recordId)
                 ->where('is_archived', false)
-
                 ->first();
 
             if (!$record) {
@@ -1302,59 +1301,261 @@ class PayrollController extends Controller
                 ], 404);
             }
 
-            // Map allowances
-            $allowances = $record->allowances->map(fn($a) => [
-                'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
-                'allowance_amount' => number_format($a->allowance_amount, 2),
-            ]);
+            /*
+            |--------------------------------------------------------------------------
+            | Get Payroll Period
+            |--------------------------------------------------------------------------
+            */
 
-            // Map deductions
+            $payrollPeriod = $record->payrollPeriod;
+
+            /*
+            |--------------------------------------------------------------------------
+            | Get Holidays Within Payroll Period
+            |--------------------------------------------------------------------------
+            */
+
+            $holidays = collect();
+
+            if ($payrollPeriod) {
+                $holidays = Holiday::whereBetween('holiday_date', [
+                    $payrollPeriod->cutoff_start_date,
+                    $payrollPeriod->cutoff_end_date,
+                ])
+                    ->orderBy('holiday_date', 'asc')
+                    ->get();
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Map Allowances
+            |--------------------------------------------------------------------------
+            */
+
+            $allowances = $record->allowances->map(function ($a) {
+                return [
+                    'allowance_type'   => $a->allowanceType->type_name ?? 'Other Allowance',
+                    'allowance_amount' => number_format(
+                        $a->allowance_amount,
+                        2
+                    ),
+                ];
+            });
+
+            /*
+            |--------------------------------------------------------------------------
+            | Map Deductions
+            |--------------------------------------------------------------------------
+            */
+
             $deductions = $record->deductions->map(function ($ded) {
+
+                // Loan deduction
                 if ($ded->loan_id) {
                     return [
                         'deduction_type'   => 'Loan Payment',
                         'loan_name'        => $ded->loan->loanType->type_name ?? 'Loan',
-                        'deduction_amount' => number_format($ded->deduction_amount, 2),
-                    ];
-                } elseif ($ded->benefit_type_id) {
-                    return [
-                        'deduction_type'   => $ded->benefitType->benefit_name ?? 'Other Deduction',
-                        'deduction_amount' => number_format($ded->deduction_amount, 2),
+                        'deduction_amount' => number_format(
+                            $ded->deduction_amount,
+                            2
+                        ),
                     ];
                 }
+
+                // Benefit deduction
+                elseif ($ded->benefit_type_id) {
+                    return [
+                        'deduction_type'   => $ded->benefitType->benefit_name ?? 'Other Deduction',
+                        'deduction_amount' => number_format(
+                            $ded->deduction_amount,
+                            2
+                        ),
+                    ];
+                }
+
+                // Other deduction
                 return [
                     'deduction_type'   => $ded->deduction_name ?? 'Other Deduction',
-                    'deduction_amount' => number_format($ded->deduction_amount, 2),
+                    'deduction_amount' => number_format(
+                        $ded->deduction_amount,
+                        2
+                    ),
                 ];
             });
 
+            /*
+            |--------------------------------------------------------------------------
+            | Map Holidays
+            |--------------------------------------------------------------------------
+            */
+
+            $holidayData = $holidays->map(function ($holiday) {
+
+                return [
+                    'holiday_date' => Carbon::parse(
+                        $holiday->holiday_date
+                    )->format('F d, Y'),
+
+                    'holiday_name' => $holiday->holiday_name ?? 'Holiday',
+
+                    'holiday_type' => $holiday->holiday_type ?? 'Holiday',
+                ];
+            })->values();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Return Payslip
+            |--------------------------------------------------------------------------
+            */
+
             return response()->json([
                 'isSuccess' => true,
+
                 'payslip' => [
-                    'employee_name'        => "{$employee->first_name} {$employee->last_name}",
-                    'period'               => $record->payrollPeriod->period_name ?? 'N/A',
-                    'daily_rate'           => number_format($record->daily_rate, 2),
-                    'days_worked'          => number_format($record->days_worked, 2),
-                    'gross_base'           => number_format($record->gross_base, 2),
-                    'gross_pay'            => number_format($record->gross_pay, 2),
 
-                    'allowances'           => $allowances,
-                    'total_allowances'     => number_format($record->allowances->sum('allowance_amount'), 2),
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Employee Information
+                    |--------------------------------------------------------------------------
+                    */
 
-                    'deductions'           => $deductions,
+                    'employee_name' => "{$employee->first_name} {$employee->last_name}",
 
-                    'total_late_deductions' => number_format($record->total_late_deductions ?? 0, 2),
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Payroll Period
+                    |--------------------------------------------------------------------------
+                    */
 
-                    'total_deductions'     => number_format($record->total_deductions, 2),
-                    'net_pay'              => number_format($record->net_pay, 2),
+                    'period' => $payrollPeriod->period_name ?? 'N/A',
 
-                    'remarks'              => $record->remarks,
-                    'generated_at'         => $record->created_at->format('F d, Y h:i A'),
-                    'base_salary'          => number_format($employee->base_salary ?? 0, 2),
+                    'cutoff_start_date' => $payrollPeriod
+                        ? Carbon::parse($payrollPeriod->cutoff_start_date)->format('F d, Y')
+                        : null,
+
+                    'cutoff_end_date' => $payrollPeriod
+                        ? Carbon::parse($payrollPeriod->cutoff_end_date)->format('F d, Y')
+                        : null,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Salary
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'base_salary' => number_format(
+                        $employee->base_salary ?? 0,
+                        2
+                    ),
+
+                    'daily_rate' => number_format(
+                        $record->daily_rate,
+                        2
+                    ),
+
+                    'days_worked' => number_format(
+                        $record->days_worked,
+                        2
+                    ),
+
+                    'gross_base' => number_format(
+                        $record->gross_base,
+                        2
+                    ),
+
+                    'gross_pay' => number_format(
+                        $record->gross_pay,
+                        2
+                    ),
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Holidays
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'holidays' => $holidayData,
+
+                    'total_holidays' => $holidayData->count(),
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Allowances
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'allowances' => $allowances,
+
+                    'total_allowances' => number_format(
+                        $record->allowances->sum('allowance_amount'),
+                        2
+                    ),
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Deductions
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'deductions' => $deductions,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Late Deductions
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'total_late_deductions' => number_format(
+                        $record->total_late_deductions ?? 0,
+                        2
+                    ),
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Total Deductions
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'total_deductions' => number_format(
+                        $record->total_deductions,
+                        2
+                    ),
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Net Pay
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'net_pay' => number_format(
+                        $record->net_pay,
+                        2
+                    ),
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Remarks
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'remarks' => $record->remarks,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Generated Date
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'generated_at' => $record->created_at
+                        ? $record->created_at->format('F d, Y h:i A')
+                        : null,
                 ],
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching employee payslip: ' . $e->getMessage());
+
+            Log::error(
+                'Error fetching employee payslip: ' . $e->getMessage()
+            );
 
             return response()->json([
                 'isSuccess' => false,
