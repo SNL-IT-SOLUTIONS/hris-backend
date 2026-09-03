@@ -29,6 +29,7 @@ use App\Http\Controllers\TrainingTestController;
 use App\Http\Controllers\TrainingAdminController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\TrainingLessonController;
+use App\Http\Controllers\HolidayTypeController;
 
 /*
 |--------------------------------------------------------------------------
@@ -307,6 +308,28 @@ Route::controller(HolidayController::class)->group(function () {
 
     // Delete
     Route::post('archiveHolidays/{id}', 'deleteHoliday');
+});
+
+
+
+
+Route::controller(HolidayTypeController::class)->group(function () {
+
+    // Create
+    Route::post('createholidaytypes', 'createHolidayType')
+        ->middleware('auth:sanctum');
+
+    // Get all
+    Route::get('getholidaytypes', 'getHolidayTypes');
+
+    // Get one
+    Route::get('getholidaytypes/{id}', 'getHolidayType');
+
+    // Update
+    Route::post('holidaytypes/{id}', 'updateHolidayType');
+
+    // Archive
+    Route::post('archiveHolidayTypes/{id}', 'archiveHolidayType');
 });
 
 
