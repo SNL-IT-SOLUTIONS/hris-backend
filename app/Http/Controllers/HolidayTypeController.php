@@ -17,7 +17,8 @@ class HolidayTypeController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-                'holidayTypes' => $holidayTypes
+                'message' => 'Holiday types retrieved successfully.',
+                'data' => $holidayTypes
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -27,6 +28,7 @@ class HolidayTypeController extends Controller
             ], 500);
         }
     }
+
 
     // GET SINGLE HOLIDAY TYPE
     public function getHolidayType($id)
@@ -45,7 +47,8 @@ class HolidayTypeController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-                'holidayType' => $holidayType
+                'message' => 'Holiday type retrieved successfully.',
+                'data' => $holidayType
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -56,25 +59,28 @@ class HolidayTypeController extends Controller
         }
     }
 
+
     // CREATE HOLIDAY TYPE
     public function createHolidayType(Request $request)
     {
         $validated = $request->validate([
             'type_name' => 'required|string|max:255|unique:holiday_types,type_name',
-            'description' => 'nullable|string'
+            'description' => 'nullable|string',
+            'rate' => 'required|numeric|min:0|max:10'
         ]);
 
         try {
             $holidayType = HolidayType::create([
                 'type_name' => $validated['type_name'],
                 'description' => $validated['description'] ?? null,
+                'rate' => $validated['rate'],
                 'is_archived' => 0
             ]);
 
             return response()->json([
                 'isSuccess' => true,
                 'message' => 'Holiday type created successfully.',
-                'holidayType' => $holidayType
+                'data' => $holidayType
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -85,12 +91,14 @@ class HolidayTypeController extends Controller
         }
     }
 
+
     // UPDATE HOLIDAY TYPE
     public function updateHolidayType(Request $request, $id)
     {
         $validated = $request->validate([
             'type_name' => 'required|string|max:255|unique:holiday_types,type_name,' . $id,
-            'description' => 'nullable|string'
+            'description' => 'nullable|string',
+            'rate' => 'required|numeric|min:0|max:10'
         ]);
 
         try {
@@ -107,13 +115,14 @@ class HolidayTypeController extends Controller
 
             $holidayType->update([
                 'type_name' => $validated['type_name'],
-                'description' => $validated['description'] ?? null
+                'description' => $validated['description'] ?? null,
+                'rate' => $validated['rate']
             ]);
 
             return response()->json([
                 'isSuccess' => true,
                 'message' => 'Holiday type updated successfully.',
-                'holidayType' => $holidayType
+                'data' => $holidayType
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -123,6 +132,7 @@ class HolidayTypeController extends Controller
             ], 500);
         }
     }
+
 
     // ARCHIVE HOLIDAY TYPE
     public function archiveHolidayType($id)

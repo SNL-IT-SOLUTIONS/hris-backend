@@ -233,7 +233,9 @@ class PayrollController extends Controller
             |
             | Regular Holiday = 200%
             | Special Holiday = 130%
+            | Special Non-working Holiday = 100%
             | US Holidays = 0%
+              local
             | Example:
             |
             | Daily rate = 600
