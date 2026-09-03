@@ -4,32 +4,35 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Holiday;
+use App\Models\HolidayType;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use App\Models\AnnouncementBoard;
 
-
 class HolidayController extends Controller
 {
-
-
+    // CREATE
     public function createHoliday(Request $request)
     {
         $validated = $request->validate([
             'holiday_date' => 'required|date|unique:holidays,holiday_date',
             'holiday_name' => 'required|string|max:255',
-            'holiday_type' => ['required', Rule::in(['Regular', 'Special'])],
+            'holiday_type_id' => [
+                'required',
+                'integer',
+                Rule::exists('holiday_types', 'id')
+                    ->where('is_archived', 0),
+            ],
         ]);
 
         DB::beginTransaction();
 
         try {
-
             // Create Holiday
             $holiday = Holiday::create([
                 'holiday_date' => $validated['holiday_date'],
                 'holiday_name' => $validated['holiday_name'],
-                'holiday_type' => $validated['holiday_type'],
+                'holiday_type_id' => $validated['holiday_type_id'],
                 'is_archived' => 0,
             ]);
 
@@ -41,7 +44,6 @@ class HolidayController extends Controller
                     ' will be observed on ' .
                     date('F d, Y', strtotime($validated['holiday_date'])) .
                     '.',
-
                 'posted_by' => auth()->id(),
                 'is_archived' => 0,
                 'is_active' => 1,
@@ -50,6 +52,9 @@ class HolidayController extends Controller
             ]);
 
             DB::commit();
+
+            // Load holiday type for response
+            $holiday->load('holidayType');
 
             return response()->json([
                 'isSuccess' => true,
@@ -60,7 +65,6 @@ class HolidayController extends Controller
                 ],
             ], 201);
         } catch (\Exception $e) {
-
             DB::rollBack();
 
             return response()->json([
@@ -71,10 +75,14 @@ class HolidayController extends Controller
         }
     }
 
+
     // READ - Get all holidays
     public function getHolidays()
     {
-        $holidays = Holiday::orderBy('holiday_date', 'asc')->get();
+        $holidays = Holiday::with('holidayType')
+            ->where('is_archived', 0)
+            ->orderBy('holiday_date', 'asc')
+            ->get();
 
         return response()->json([
             'isSuccess' => true,
@@ -83,10 +91,14 @@ class HolidayController extends Controller
         ], 200);
     }
 
+
     // READ - Get single holiday
     public function getHoliday($id)
     {
-        $holiday = Holiday::find($id);
+        $holiday = Holiday::with('holidayType')
+            ->where('id', $id)
+            ->where('is_archived', 0)
+            ->first();
 
         if (!$holiday) {
             return response()->json([
@@ -102,10 +114,13 @@ class HolidayController extends Controller
         ], 200);
     }
 
+
     // UPDATE
     public function updateHoliday(Request $request, $id)
     {
-        $holiday = Holiday::find($id);
+        $holiday = Holiday::where('id', $id)
+            ->where('is_archived', 0)
+            ->first();
 
         if (!$holiday) {
             return response()->json([
@@ -120,15 +135,25 @@ class HolidayController extends Controller
                 'date',
                 Rule::unique('holidays', 'holiday_date')->ignore($id),
             ],
+
             'holiday_name' => 'required|string|max:255',
-            'holiday_type' => ['required', Rule::in(['Regular', 'Special'])],
+
+            'holiday_type_id' => [
+                'required',
+                'integer',
+                Rule::exists('holiday_types', 'id')
+                    ->where('is_archived', 0),
+            ],
         ]);
 
         $holiday->update([
             'holiday_date' => $validated['holiday_date'],
             'holiday_name' => $validated['holiday_name'],
-            'holiday_type' => $validated['holiday_type'],
+            'holiday_type_id' => $validated['holiday_type_id'],
         ]);
+
+        // Reload relationship
+        $holiday->load('holidayType');
 
         return response()->json([
             'isSuccess' => true,
@@ -137,10 +162,13 @@ class HolidayController extends Controller
         ], 200);
     }
 
+
     // ARCHIVE
     public function deleteHoliday($id)
     {
-        $holiday = Holiday::find($id);
+        $holiday = Holiday::where('id', $id)
+            ->where('is_archived', 0)
+            ->first();
 
         if (!$holiday) {
             return response()->json([
