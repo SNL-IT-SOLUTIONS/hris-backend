@@ -13,6 +13,7 @@ class HolidayType extends Model
         'type_name',
         'description',
         'is_archived',
+        'rate',
     ];
 
     protected $casts = [

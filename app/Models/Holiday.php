@@ -9,11 +9,21 @@ class Holiday extends Model
 {
     use HasFactory;
 
-    protected $table = 'holidays';
-
     protected $fillable = [
         'holiday_date',
         'holiday_name',
-        'holiday_type',
+        'holiday_type_id',
+        'country',
+        'is_archived',
     ];
+
+    protected $casts = [
+        'holiday_date' => 'date',
+        'is_archived' => 'boolean',
+    ];
+
+    public function holidayType()
+    {
+        return $this->belongsTo(HolidayType::class, 'holiday_type_id');
+    }
 }
