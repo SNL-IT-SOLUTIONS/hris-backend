@@ -19,6 +19,8 @@ use App\Mail\ClockInNotification;
 use App\Mail\EndOfDayReportMail;
 use App\Mail\AdjustmentRequestMail;
 use App\Models\AttendanceAdjustment;
+use App\Models\EndOfDayReport;
+use App\Models\EmployeeLeaveType;
 
 
 class AttendanceController extends Controller
@@ -1031,29 +1033,45 @@ class AttendanceController extends Controller
     public function getMyLeaves(Request $request)
     {
         try {
-            //  Get authenticated user
+
+            // Get authenticated user
             $user = auth()->user();
 
-            // Check if this user is linked to an employee record
+            // Employee ID
             $employeeId = $user->id;
 
-            // Fetch leave records for this employee
-            $leaves = Leave::where('employee_id', $employeeId)
+            // Fetch leave requests for this employee
+            $leaves = Leave::with([
+                'leaveType',
+            ])
+                ->where('employee_id', $employeeId)
                 ->orderBy('created_at', 'desc')
+                ->get();
+
+            // Fetch assigned leave types and balances
+            $leaveBalances = EmployeeLeaveType::with([
+                'leaveType',
+            ])
+                ->where('employee_id', $employeeId)
+                ->where('is_active', 1)
+                ->where('is_archived', 0)
                 ->get();
 
             return response()->json([
                 'isSuccess' => true,
+
                 'leaves' => $leaves,
+
+                'leave_balances' => $leaveBalances,
             ]);
         } catch (\Exception $e) {
+
             return response()->json([
                 'isSuccess' => false,
                 'message' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     //DTR ADJUSTMENTS
     public function requestAdjustment(Request $request, $attendanceId)
