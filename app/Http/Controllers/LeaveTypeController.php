@@ -110,21 +110,39 @@ class LeaveTypeController extends Controller
                 foreach ($validated['employees'] as $employeeData) {
 
                     // Check employee
-                    $employee = Employee::where(
-                        'id',
-                        $employeeData['employee_id']
-                    )
+                    $employee = Employee::where('id', $employeeData['employee_id'])
                         ->where('is_archived', 0)
                         ->where('is_active', 1)
                         ->first();
 
                     if (!$employee) {
+
                         DB::rollBack();
 
                         return response()->json([
                             'isSuccess' => false,
                             'message' => 'One or more employees are inactive, archived, or do not exist.',
                         ], 404);
+                    }
+
+                    // Check if employee is already assigned
+                    $existingAssignment = EmployeeLeaveType::where(
+                        'employee_id',
+                        $employee->id
+                    )
+                        ->where('leave_type_id', $leaveType->id)
+                        ->where('is_archived', 0)
+                        ->exists();
+
+                    if ($existingAssignment) {
+
+                        DB::rollBack();
+
+                        return response()->json([
+                            'isSuccess' => false,
+                            'message' => 'Employee is already assigned to this leave type.',
+                            'employee_id' => $employee->id,
+                        ], 409);
                     }
 
                     // Create assignment
@@ -138,6 +156,7 @@ class LeaveTypeController extends Controller
                         'is_archived' => 0,
                     ]);
 
+                    // Load relationships
                     $employeeLeaveType->load([
                         'employee',
                         'leaveType',
@@ -155,6 +174,13 @@ class LeaveTypeController extends Controller
                 'leave_type' => $leaveType,
                 'assigned_employees' => $assignedEmployees,
             ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
 
             DB::rollBack();
@@ -166,6 +192,8 @@ class LeaveTypeController extends Controller
             ], 500);
         }
     }
+
+
 
     // ================================
     // Update Leave Type
