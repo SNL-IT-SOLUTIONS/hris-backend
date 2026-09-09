@@ -86,9 +86,9 @@ class LeaveTypeController extends Controller
 
             DB::beginTransaction();
 
-            // ================================
-            // Create Leave Type
-            // ================================
+            // ========================================
+            // CREATE LEAVE TYPE
+            // ========================================
 
             $leaveType = LeaveType::create([
                 'leave_name' => $validated['leave_name'],
@@ -101,15 +101,18 @@ class LeaveTypeController extends Controller
 
             $assignedEmployees = [];
 
-            // ================================
-            // Assign Leave Type to Employees
-            // ================================
+            // ========================================
+            // ASSIGN LEAVE TYPE TO EMPLOYEES
+            // ========================================
 
-            if (!empty($validated['employees'])) {
+            if (isset($validated['employees']) && count($validated['employees']) > 0) {
 
                 foreach ($validated['employees'] as $employeeData) {
 
+                    // ----------------------------------------
                     // Check employee
+                    // ----------------------------------------
+
                     $employee = Employee::where('id', $employeeData['employee_id'])
                         ->where('is_archived', 0)
                         ->where('is_active', 1)
@@ -121,18 +124,22 @@ class LeaveTypeController extends Controller
 
                         return response()->json([
                             'isSuccess' => false,
-                            'message' => 'One or more employees are inactive, archived, or do not exist.',
+                            'message' => 'Employee is inactive, archived, or does not exist.',
+                            'employee_id' => $employeeData['employee_id'],
                         ], 404);
                     }
 
-                    // Check if employee is already assigned
+                    // ----------------------------------------
+                    // Check duplicate assignment
+                    // ----------------------------------------
+
                     $existingAssignment = EmployeeLeaveType::where(
                         'employee_id',
                         $employee->id
                     )
                         ->where('leave_type_id', $leaveType->id)
                         ->where('is_archived', 0)
-                        ->exists();
+                        ->first();
 
                     if ($existingAssignment) {
 
@@ -142,10 +149,14 @@ class LeaveTypeController extends Controller
                             'isSuccess' => false,
                             'message' => 'Employee is already assigned to this leave type.',
                             'employee_id' => $employee->id,
+                            'leave_type_id' => $leaveType->id,
                         ], 409);
                     }
 
-                    // Create assignment
+                    // ----------------------------------------
+                    // Create employee leave assignment
+                    // ----------------------------------------
+
                     $employeeLeaveType = EmployeeLeaveType::create([
                         'employee_id' => $employee->id,
                         'leave_type_id' => $leaveType->id,
@@ -156,7 +167,10 @@ class LeaveTypeController extends Controller
                         'is_archived' => 0,
                     ]);
 
+                    // ----------------------------------------
                     // Load relationships
+                    // ----------------------------------------
+
                     $employeeLeaveType->load([
                         'employee',
                         'leaveType',
@@ -166,6 +180,10 @@ class LeaveTypeController extends Controller
                 }
             }
 
+            // ========================================
+            // COMMIT TRANSACTION
+            // ========================================
+
             DB::commit();
 
             return response()->json([
@@ -173,6 +191,7 @@ class LeaveTypeController extends Controller
                 'message' => 'Leave type created successfully.',
                 'leave_type' => $leaveType,
                 'assigned_employees' => $assignedEmployees,
+                'assignment_count' => count($assignedEmployees),
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
@@ -192,7 +211,6 @@ class LeaveTypeController extends Controller
             ], 500);
         }
     }
-
 
 
     // ================================
