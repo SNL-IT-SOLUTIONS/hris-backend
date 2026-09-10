@@ -19,6 +19,15 @@ class LeaveTypeController extends Controller
         $perPage = $request->input('per_page', 10);
 
         $leaveTypes = LeaveType::where('is_archived', 0)
+            ->with([
+                'employeeLeaveTypes' => function ($query) {
+                    $query->where('is_archived', 0)
+                        ->where('is_active', 1)
+                        ->with([
+                            'employee'
+                        ]);
+                }
+            ])
             ->paginate($perPage);
 
         if ($leaveTypes->isEmpty()) {
@@ -39,7 +48,6 @@ class LeaveTypeController extends Controller
             ],
         ]);
     }
-
     // ================================
     // Get Single Leave Type by ID
     // ================================

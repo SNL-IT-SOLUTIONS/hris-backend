@@ -46,4 +46,9 @@ class EmployeeLeaveType extends Model
     {
         return $this->belongsTo(LeaveType::class, 'leave_type_id');
     }
+
+    public function employeeLeaveTypes()
+    {
+        return $this->hasMany(EmployeeLeaveType::class, 'leave_type_id');
+    }
 }
