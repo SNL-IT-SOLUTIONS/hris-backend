@@ -1034,28 +1034,51 @@ class AttendanceController extends Controller
     {
         try {
 
-            // Get authenticated user
+            // ========================================
+            // GET AUTHENTICATED EMPLOYEE
+            // ========================================
+
             $user = auth()->user();
 
-            // Employee ID
+            if (!$user) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'Unauthenticated.',
+                ], 401);
+            }
+
             $employeeId = $user->id;
 
-            // Fetch leave requests for this employee
+
+            // ========================================
+            // FETCH MY LEAVE REQUESTS
+            // ========================================
+
             $leaves = Leave::with([
-                'leaveType',
+                'leaveType'
             ])
                 ->where('employee_id', $employeeId)
+                ->where('is_archived', 0)
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            // Fetch assigned leave types and balances
+
+            // ========================================
+            // FETCH MY ASSIGNED LEAVE TYPES / BALANCES
+            // ========================================
+
             $leaveBalances = EmployeeLeaveType::with([
-                'leaveType',
+                'leaveType'
             ])
                 ->where('employee_id', $employeeId)
                 ->where('is_active', 1)
                 ->where('is_archived', 0)
                 ->get();
+
+
+            // ========================================
+            // RESPONSE
+            // ========================================
 
             return response()->json([
                 'isSuccess' => true,
@@ -1063,12 +1086,25 @@ class AttendanceController extends Controller
                 'leaves' => $leaves,
 
                 'leave_balances' => $leaveBalances,
-            ]);
+
+                'summary' => [
+                    'total_leave_types' => $leaveBalances->count(),
+
+                    'total_allocated_days' => $leaveBalances->sum('allocated_days'),
+
+                    'total_used_days' => $leaveBalances->sum('used_days'),
+
+                    'total_remaining_days' => $leaveBalances->sum('remaining_days'),
+
+                    'total_leave_requests' => $leaves->count(),
+                ],
+            ], 200);
         } catch (\Exception $e) {
 
             return response()->json([
                 'isSuccess' => false,
-                'message' => $e->getMessage(),
+                'message'   => 'Failed to retrieve your leaves.',
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }
