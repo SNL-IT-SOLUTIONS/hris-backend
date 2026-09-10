@@ -25,4 +25,9 @@ class LeaveType extends Model
         'is_active'   => 'boolean',
         'is_archived' => 'boolean',
     ];
+
+    public function employeeLeaveTypes()
+    {
+        return $this->hasMany(EmployeeLeaveType::class, 'leave_type_id');
+    }
 }
