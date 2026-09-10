@@ -217,6 +217,9 @@ class LeaveTypeController extends Controller
     // Update Leave Type
     // ================================
 
+    // ================================
+    // Update Leave Type
+    // ================================
     public function updateLeaveType(Request $request, $id)
     {
         $leaveType = LeaveType::where('id', $id)
@@ -231,23 +234,212 @@ class LeaveTypeController extends Controller
         }
 
         try {
-
             $validated = $request->validate([
-                'leave_name' => 'sometimes|string|max:150|unique:leave_types,leave_name,' . $id,
+                // Leave Type
+                'leave_name' => [
+                    'sometimes',
+                    'string',
+                    'max:150',
+                    'unique:leave_types,leave_name,' . $id,
+                ],
                 'description' => 'nullable|string',
-                'max_days' => 'sometimes|integer|min:1',
-                'is_paid' => 'sometimes|boolean',
-                'is_active' => 'sometimes|boolean',
+                'max_days'    => 'sometimes|integer|min:1',
+                'is_paid'     => 'sometimes|boolean',
+                'is_active'   => 'sometimes|boolean',
+
+                // Employee Assignments
+                'employees' => 'sometimes|array',
+                'employees.*.employee_id' => [
+                    'required',
+                    'integer',
+                    'exists:employees,id',
+                ],
+                'employees.*.allocated_days' => [
+                    'required',
+                    'numeric',
+                    'min:0',
+                ],
             ]);
 
-            $leaveType->update($validated);
+            DB::beginTransaction();
+
+            // ========================================
+            // UPDATE LEAVE TYPE
+            // ========================================
+
+            $leaveTypeData = [];
+
+            if (array_key_exists('leave_name', $validated)) {
+                $leaveTypeData['leave_name'] = $validated['leave_name'];
+            }
+
+            if (array_key_exists('description', $validated)) {
+                $leaveTypeData['description'] = $validated['description'];
+            }
+
+            if (array_key_exists('max_days', $validated)) {
+                $leaveTypeData['max_days'] = $validated['max_days'];
+            }
+
+            if (array_key_exists('is_paid', $validated)) {
+                $leaveTypeData['is_paid'] = $validated['is_paid'];
+            }
+
+            if (array_key_exists('is_active', $validated)) {
+                $leaveTypeData['is_active'] = $validated['is_active'];
+            }
+
+            if (!empty($leaveTypeData)) {
+                $leaveType->update($leaveTypeData);
+            }
+
+            // ========================================
+            // UPDATE EMPLOYEE ASSIGNMENTS
+            // ========================================
+
+            $assignedEmployees = [];
+
+            if (array_key_exists('employees', $validated)) {
+
+                foreach ($validated['employees'] as $employeeData) {
+
+                    // ----------------------------------------
+                    // Check Employee
+                    // ----------------------------------------
+
+                    $employee = Employee::where(
+                        'id',
+                        $employeeData['employee_id']
+                    )
+                        ->where('is_archived', 0)
+                        ->where('is_active', 1)
+                        ->first();
+
+                    if (!$employee) {
+                        DB::rollBack();
+
+                        return response()->json([
+                            'isSuccess' => false,
+                            'message'   => 'Employee is inactive, archived, or does not exist.',
+                            'employee_id' => $employeeData['employee_id'],
+                        ], 404);
+                    }
+
+                    // ----------------------------------------
+                    // Find Existing Assignment
+                    // ----------------------------------------
+
+                    $employeeLeaveType = EmployeeLeaveType::where(
+                        'employee_id',
+                        $employee->id
+                    )
+                        ->where('leave_type_id', $leaveType->id)
+                        ->first();
+
+                    // ========================================
+                    // EXISTING ASSIGNMENT
+                    // ========================================
+
+                    if ($employeeLeaveType) {
+
+                        // If previously archived, restore it
+                        if ($employeeLeaveType->is_archived == 1) {
+
+                            $employeeLeaveType->update([
+                                'allocated_days' => $employeeData['allocated_days'],
+                                'used_days' => 0,
+                                'remaining_days' => $employeeData['allocated_days'],
+                                'is_active' => 1,
+                                'is_archived' => 0,
+                            ]);
+                        } else {
+
+                            // ----------------------------------------
+                            // Preserve Used Days
+                            // ----------------------------------------
+
+                            $usedDays = $employeeLeaveType->used_days ?? 0;
+
+                            $allocatedDays = $employeeData['allocated_days'];
+
+                            // ----------------------------------------
+                            // Calculate Remaining Days
+                            // ----------------------------------------
+
+                            $remainingDays = max(
+                                0,
+                                $allocatedDays - $usedDays
+                            );
+
+                            // ----------------------------------------
+                            // Update Assignment
+                            // ----------------------------------------
+
+                            $employeeLeaveType->update([
+                                'allocated_days' => $allocatedDays,
+                                'remaining_days' => $remainingDays,
+                                'is_active' => 1,
+                                'is_archived' => 0,
+                            ]);
+                        }
+                    }
+
+                    // ========================================
+                    // NEW ASSIGNMENT
+                    // ========================================
+
+                    else {
+
+                        $employeeLeaveType = EmployeeLeaveType::create([
+                            'employee_id' => $employee->id,
+                            'leave_type_id' => $leaveType->id,
+                            'allocated_days' => $employeeData['allocated_days'],
+                            'used_days' => 0,
+                            'remaining_days' => $employeeData['allocated_days'],
+                            'is_active' => 1,
+                            'is_archived' => 0,
+                        ]);
+                    }
+
+                    // ----------------------------------------
+                    // Load Relationships
+                    // ----------------------------------------
+
+                    $employeeLeaveType->load([
+                        'employee',
+                        'leaveType',
+                    ]);
+
+                    $assignedEmployees[] = $employeeLeaveType;
+                }
+            }
+
+            // ========================================
+            // COMMIT
+            // ========================================
+
+            DB::commit();
+
+            // Refresh leave type
+            $leaveType->refresh();
 
             return response()->json([
-                'isSuccess'  => true,
-                'message'    => 'Leave type updated successfully.',
+                'isSuccess' => true,
+                'message'   => 'Leave type updated successfully.',
                 'leave_type' => $leaveType,
-            ]);
+                'assigned_employees' => $assignedEmployees,
+                'assignment_count' => count($assignedEmployees),
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Validation failed.',
+                'errors'    => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
+
+            DB::rollBack();
 
             return response()->json([
                 'isSuccess' => false,
@@ -255,31 +447,6 @@ class LeaveTypeController extends Controller
                 'error'     => $e->getMessage(),
             ], 500);
         }
-    }
-
-    // ================================
-    // Archive Leave Type (Soft Delete)
-    // ================================
-
-    public function archiveLeaveType($id)
-    {
-        $leaveType = LeaveType::find($id);
-
-        if (!$leaveType || $leaveType->is_archived) {
-            return response()->json([
-                'isSuccess' => false,
-                'message'   => 'Leave type not found or already archived.',
-            ], 404);
-        }
-
-        $leaveType->update([
-            'is_archived' => 1
-        ]);
-
-        return response()->json([
-            'isSuccess' => true,
-            'message'   => 'Leave type archived successfully.',
-        ]);
     }
 
     // ================================
