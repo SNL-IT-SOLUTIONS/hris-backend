@@ -235,6 +235,7 @@ class AttendanceController extends Controller
         ]);
     }
 
+
     public function getMyLeaveBalances()
     {
         try {
@@ -264,16 +265,12 @@ class AttendanceController extends Controller
             ])
                 ->where('employee_id', $employeeId)
 
-                // Assignment must be active
-                ->where('is_active', 1)
-
                 // Assignment must not be archived
                 ->where('is_archived', 0)
 
-                // Leave type must also be active and not archived
+                // Leave type must not be archived
                 ->whereHas('leaveType', function ($query) {
-                    $query->where('is_active', 1)
-                        ->where('is_archived', 0);
+                    $query->where('is_archived', 0);
                 })
 
                 ->get()
@@ -285,21 +282,47 @@ class AttendanceController extends Controller
                         'leave_type_id' => $leaveType->id,
                         'leave_name' => $leaveType->leave_name,
 
-                        // Employee-specific allocation
+                        // ========================================
+                        // ASSIGNMENT STATUS
+                        // ========================================
+
+                        'assignment_is_active' => (bool) $assignment->is_active,
+
+                        // ========================================
+                        // LEAVE TYPE STATUS
+                        // ========================================
+
+                        'leave_type_is_active' => (bool) $leaveType->is_active,
+
+                        // ========================================
+                        // OVERALL STATUS
+                        // ========================================
+
+                        'is_active' => (
+                            $assignment->is_active == 1 &&
+                            $leaveType->is_active == 1
+                        ),
+
+                        // ========================================
+                        // LEAVE BALANCE
+                        // ========================================
+
                         'allocated_days' => $assignment->allocated_days,
 
-                        // Employee-specific usage
                         'used_days' => $assignment->used_days,
 
-                        // Employee-specific remaining balance
                         'remaining_days' => max(
                             $assignment->remaining_days,
                             0
                         ),
 
-                        // Leave type information
+                        // ========================================
+                        // LEAVE TYPE INFORMATION
+                        // ========================================
+
                         'max_days' => $leaveType->max_days,
-                        'is_paid' => $leaveType->is_paid,
+
+                        'is_paid' => (bool) $leaveType->is_paid,
                     ];
                 })
                 ->values();
@@ -322,6 +345,8 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
+
 
 
     public function getAllLeaves()
