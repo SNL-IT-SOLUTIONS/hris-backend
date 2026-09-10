@@ -238,40 +238,87 @@ class AttendanceController extends Controller
     public function getMyLeaveBalances()
     {
         try {
+
+            // ========================================
+            // GET AUTHENTICATED EMPLOYEE
+            // ========================================
+
             $user = auth()->user();
 
-            // Get all leave types
-            $leaveTypes = LeaveType::where('is_active', 1)
+            if (!$user) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'Unauthenticated.',
+                ], 401);
+            }
+
+            $employeeId = $user->id;
+
+
+            // ========================================
+            // GET MY ASSIGNED LEAVE BALANCES
+            // ========================================
+
+            $balances = EmployeeLeaveType::with([
+                'leaveType'
+            ])
+                ->where('employee_id', $employeeId)
+
+                // Assignment must be active
+                ->where('is_active', 1)
+
+                // Assignment must not be archived
                 ->where('is_archived', 0)
-                ->get();
 
-            $balances = $leaveTypes->map(function ($type) use ($user) {
+                // Leave type must also be active and not archived
+                ->whereHas('leaveType', function ($query) {
+                    $query->where('is_active', 1)
+                        ->where('is_archived', 0);
+                })
 
-                // Total used (ONLY approved leaves)
-                $usedDays = Leave::where('employee_id', $user->id)
-                    ->where('leave_type_id', $type->id)
-                    ->where('status', 'Approved')
-                    ->sum('total_days');
+                ->get()
+                ->map(function ($assignment) {
 
-                $remaining = $type->max_days - $usedDays;
+                    $leaveType = $assignment->leaveType;
 
-                return [
-                    'leave_type_id' => $type->id,
-                    'leave_name'    => $type->leave_name,
-                    'max_days'      => $type->max_days,
-                    'used_days'     => $usedDays,
-                    'remaining_days' => max($remaining, 0), // avoid negative
-                ];
-            });
+                    return [
+                        'leave_type_id' => $leaveType->id,
+                        'leave_name' => $leaveType->leave_name,
+
+                        // Employee-specific allocation
+                        'allocated_days' => $assignment->allocated_days,
+
+                        // Employee-specific usage
+                        'used_days' => $assignment->used_days,
+
+                        // Employee-specific remaining balance
+                        'remaining_days' => max(
+                            $assignment->remaining_days,
+                            0
+                        ),
+
+                        // Leave type information
+                        'max_days' => $leaveType->max_days,
+                        'is_paid' => $leaveType->is_paid,
+                    ];
+                })
+                ->values();
+
+
+            // ========================================
+            // RESPONSE
+            // ========================================
 
             return response()->json([
                 'isSuccess' => true,
-                'data' => $balances
-            ]);
+                'data' => $balances,
+            ], 200);
         } catch (\Exception $e) {
+
             return response()->json([
                 'isSuccess' => false,
-                'message' => $e->getMessage()
+                'message'   => 'Failed to retrieve leave balances.',
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }
