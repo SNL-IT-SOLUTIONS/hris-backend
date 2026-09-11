@@ -29,6 +29,7 @@ class EmployeeLeaveType extends Model
         'is_archived' => 'boolean',
     ];
 
+
     // ================================
     // Employee Relationship
     // ================================

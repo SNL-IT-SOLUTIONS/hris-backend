@@ -1512,6 +1512,7 @@ class AttendanceController extends Controller
 
     //Request Leave
 
+
     public function requestLeave(Request $request)
     {
         try {
@@ -1519,6 +1520,7 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Get authenticated employee
             // ---------------------------------------------------------
+
             $employee = $request->user();
 
             if (!$employee) {
@@ -1531,6 +1533,7 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Make sure authenticated employee is active
             // ---------------------------------------------------------
+
             if ($employee->is_archived) {
                 return response()->json([
                     'isSuccess' => false,
@@ -1541,6 +1544,7 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Validate input
             // ---------------------------------------------------------
+
             $validated = $request->validate([
                 'leave_type_id' => 'required|exists:leave_types,id',
                 'start_date'    => 'required|date|after_or_equal:today',
@@ -1551,6 +1555,7 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Fetch active leave type
             // ---------------------------------------------------------
+
             $leaveType = LeaveType::where('id', $validated['leave_type_id'])
                 ->where('is_active', 1)
                 ->where('is_archived', 0)
@@ -1564,17 +1569,49 @@ class AttendanceController extends Controller
             }
 
             // ---------------------------------------------------------
-            // Calculate total calendar days
+            // Calculate working days only
             // ---------------------------------------------------------
-            $startDate = new \DateTime($validated['start_date']);
-            $endDate   = new \DateTime($validated['end_date']);
 
-            $days = $startDate->diff($endDate)->days + 1;
+            $startDate = \Carbon\Carbon::parse($validated['start_date']);
+            $endDate   = \Carbon\Carbon::parse($validated['end_date']);
+
+            $days = 0;
+
+            $currentDate = $startDate->copy();
+
+            while ($currentDate->lte($endDate)) {
+
+                // Monday = 1 ... Sunday = 7
+                if ($currentDate->isWeekday()) {
+                    $days++;
+                }
+
+                $currentDate->addDay();
+            }
 
             // ---------------------------------------------------------
-            // Fetch employee leave balance
+            // Make sure the request contains at least one working day
             // ---------------------------------------------------------
-            $employeeLeave = EmployeeLeaveBalance::where(
+
+            if ($days <= 0) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'The selected leave dates contain no working days.',
+                ], 422);
+            }
+
+            // ---------------------------------------------------------
+            // Fetch employee leave assignment
+            // ---------------------------------------------------------
+            //
+            // IMPORTANT:
+            // This uses employee_leave_types directly through
+            // EmployeeLeaveType.
+            //
+            // The authenticated employee ID is used automatically.
+            //
+
+            $employeeLeave = EmployeeLeaveType::where(
                 'employee_id',
                 $employee->id
             )
@@ -1583,43 +1620,34 @@ class AttendanceController extends Controller
                 ->first();
 
             // ---------------------------------------------------------
-            // Initialize leave balance if none exists
+            // Employee does not have this leave type assigned
             // ---------------------------------------------------------
-            if (!$employeeLeave) {
 
-                $employeeLeave = EmployeeLeaveBalance::create([
-                    'employee_id'    => $employee->id,
-                    'leave_type_id'  => $validated['leave_type_id'],
-                    'allocated_days' => $leaveType->max_days,
-                    'used_days'      => 0,
-                    'remaining_days' => $leaveType->max_days,
-                    'is_active'      => 1,
-                    'is_archived'    => 0,
-                ]);
+            if (!$employeeLeave) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'This leave type has not been assigned to your account.',
+                    'employee_id' => $employee->id,
+                    'leave_type_id' => $validated['leave_type_id'],
+                ], 422);
             }
 
             // ---------------------------------------------------------
-            // Check employee leave balance status
+            // Check leave assignment status
             // ---------------------------------------------------------
-            if (!$employeeLeave->is_active) {
+
+            if ((int) $employeeLeave->is_active !== 1) {
                 return response()->json([
                     'isSuccess' => false,
                     'message'   => 'This leave type is currently inactive for your account.',
-                    'debug' => [
-                        'authenticated_employee_id' => $employee->id,
-                        'leave_type_id' => $validated['leave_type_id'],
-                        'employee_leave_id' => $employeeLeave->id,
-                        'employee_leave_employee_id' => $employeeLeave->employee_id,
-                        'is_active' => $employeeLeave->is_active,
-                        'is_archived' => $employeeLeave->is_archived,
-                    ],
                 ], 422);
             }
+
             // ---------------------------------------------------------
             // Check remaining balance
             // ---------------------------------------------------------
-            if ($employeeLeave->remaining_days <= 0) {
 
+            if ((float) $employeeLeave->remaining_days <= 0) {
                 return response()->json([
                     'isSuccess' => false,
                     'message'   => 'You have no remaining leave balance for this leave type.',
@@ -1630,8 +1658,8 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Check requested days against remaining balance
             // ---------------------------------------------------------
-            if ($days > $employeeLeave->remaining_days) {
 
+            if ($days > (float) $employeeLeave->remaining_days) {
                 return response()->json([
                     'isSuccess' => false,
                     'message'   => "You only have {$employeeLeave->remaining_days} day(s) remaining.",
@@ -1643,42 +1671,25 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Prevent overlapping Pending / Approved leave
             // ---------------------------------------------------------
+            //
+            // This condition covers all overlap scenarios:
+            //
+            // Existing start <= requested end
+            // AND
+            // Existing end >= requested start
+            //
+
             $overlappingLeave = Leave::where(
                 'employee_id',
                 $employee->id
             )
                 ->where('is_archived', 0)
                 ->whereIn('status', ['Pending', 'Approved'])
-                ->where(function ($query) use ($validated) {
-
-                    $query->whereBetween('start_date', [
-                        $validated['start_date'],
-                        $validated['end_date']
-                    ])
-
-                        ->orWhereBetween('end_date', [
-                            $validated['start_date'],
-                            $validated['end_date']
-                        ])
-
-                        ->orWhere(function ($query) use ($validated) {
-
-                            $query->where(
-                                'start_date',
-                                '<=',
-                                $validated['start_date']
-                            )
-                                ->where(
-                                    'end_date',
-                                    '>=',
-                                    $validated['end_date']
-                                );
-                        });
-                })
+                ->where('start_date', '<=', $validated['end_date'])
+                ->where('end_date', '>=', $validated['start_date'])
                 ->first();
 
             if ($overlappingLeave) {
-
                 return response()->json([
                     'isSuccess' => false,
                     'message'   => 'You already have a pending or approved leave that overlaps with these dates.',
@@ -1689,10 +1700,13 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Prepare leave data
             // ---------------------------------------------------------
-            // All leave is considered paid.
             //
-            // Balance is NOT deducted here because the request is
-            // still Pending.
+            // All leave is paid.
+            //
+            // Balance is NOT deducted here.
+            // It will only be deducted after approval.
+            //
+
             $leaveData = [
                 'employee_id'   => $employee->id,
                 'leave_type_id' => $validated['leave_type_id'],
@@ -1708,19 +1722,22 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Create leave request
             // ---------------------------------------------------------
+
             $leave = Leave::create($leaveData);
 
             // ---------------------------------------------------------
             // Log request
             // ---------------------------------------------------------
+
             Log::info(
                 "Leave request created for employee ID {$employee->id} " .
-                    "({$days} days, {$leaveType->leave_name})"
+                    "({$days} working day(s), {$leaveType->leave_name})"
             );
 
             // ---------------------------------------------------------
             // Return response
             // ---------------------------------------------------------
+
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Leave request submitted successfully.',
@@ -1733,9 +1750,6 @@ class AttendanceController extends Controller
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
 
-            // ---------------------------------------------------------
-            // Return validation errors
-            // ---------------------------------------------------------
             return response()->json([
                 'isSuccess' => false,
                 'message'   => 'The given data was invalid.',
@@ -1743,9 +1757,6 @@ class AttendanceController extends Controller
             ], 422);
         } catch (\Exception $e) {
 
-            // ---------------------------------------------------------
-            // Log unexpected error
-            // ---------------------------------------------------------
             Log::error(
                 'Error submitting leave request: ' . $e->getMessage()
             );
@@ -1757,6 +1768,8 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
+
 
 
 
