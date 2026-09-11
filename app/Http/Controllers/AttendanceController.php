@@ -21,6 +21,7 @@ use App\Mail\AdjustmentRequestMail;
 use App\Models\AttendanceAdjustment;
 use App\Models\EndOfDayReport;
 use App\Models\EmployeeLeaveType;
+use Illuminate\Support\Facades\DB;
 
 
 class AttendanceController extends Controller
@@ -375,42 +376,225 @@ class AttendanceController extends Controller
     }
 
 
-    public function confirmleave(Request $request, $id)
+
+    public function confirmLeave(Request $request, $id)
     {
-        $leave = Leave::find($id);
+        try {
 
-        if (!$leave) {
-            return response()->json([
-                'isSuccess' => false,
-                'message' => 'Leave request not found.'
-            ], 404);
-        }
+            // ---------------------------------------------------------
+            // Validate status
+            // ---------------------------------------------------------
 
-        $validated = $request->validate([
-            'status' => 'required|in:Approved,Rejected',
-        ]);
+            $validated = $request->validate([
+                'status' => 'required|in:Approved,Rejected',
+            ]);
 
-        $leave->status = $validated['status'];
-        $leave->save();
+            // ---------------------------------------------------------
+            // Find active leave request
+            // ---------------------------------------------------------
 
-        // Deduct ONLY if approved
-        if ($validated['status'] === 'Approved') {
-
-            $employeeLeave = EmployeeLeaveBalance::where('employee_id', $leave->employee_id)
-                ->where('leave_type_id', $leave->leave_type_id)
+            $leave = Leave::where('id', $id)
+                ->where('is_archived', 0)
                 ->first();
 
-            if ($employeeLeave) {
-                $employeeLeave->decrement('remaining_days', $leave->total_days);
+            if (!$leave) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'Leave request not found.',
+                ], 404);
             }
-        }
 
-        return response()->json([
-            'isSuccess' => true,
-            'message'   => 'Leave request ' . strtolower($validated['status']) . ' successfully.',
-            'leave'     => $leave,
-        ]);
+            // ---------------------------------------------------------
+            // Only Pending leave requests can be confirmed
+            // ---------------------------------------------------------
+
+            if ($leave->status !== 'Pending') {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => "This leave request has already been {$leave->status}.",
+                ], 422);
+            }
+
+            // ---------------------------------------------------------
+            // REJECT LEAVE
+            // ---------------------------------------------------------
+            //
+            // Rejected leave does not affect the employee's balance.
+            // It also does not become payable in payroll.
+            //
+
+            if ($validated['status'] === 'Rejected') {
+
+                $leave->status = 'Rejected';
+
+                // Rejected leave is not paid
+                $leave->is_paid = 0;
+
+                $leave->save();
+
+                return response()->json([
+                    'isSuccess' => true,
+                    'message'   => 'Leave request rejected successfully.',
+                    'leave'     => $leave,
+                ], 200);
+            }
+
+            // ---------------------------------------------------------
+            // APPROVE LEAVE
+            // ---------------------------------------------------------
+            //
+            // Find the employee's assigned leave type.
+            //
+            // IMPORTANT:
+            // This uses employee_leave_types through EmployeeLeaveType.
+            //
+
+            $employeeLeave = EmployeeLeaveType::where(
+                'employee_id',
+                $leave->employee_id
+            )
+                ->where('leave_type_id', $leave->leave_type_id)
+                ->where('is_archived', 0)
+                ->first();
+
+            if (!$employeeLeave) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'This leave type has not been assigned to the employee.',
+                ], 422);
+            }
+
+            // ---------------------------------------------------------
+            // Make sure the leave assignment is active
+            // ---------------------------------------------------------
+
+            if ((int) $employeeLeave->is_active !== 1) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'This leave type is currently inactive for the employee.',
+                ], 422);
+            }
+
+            // ---------------------------------------------------------
+            // Check remaining balance
+            // ---------------------------------------------------------
+
+            $requestedDays = (float) $leave->total_days;
+            $remainingDays = (float) $employeeLeave->remaining_days;
+
+            if ($requestedDays <= 0) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'This leave request has an invalid number of leave days.',
+                ], 422);
+            }
+
+            if ($remainingDays < $requestedDays) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message'   => 'The employee does not have enough remaining leave balance.',
+                    'balance'   => [
+                        'allocated_days' => $employeeLeave->allocated_days,
+                        'used_days'      => $employeeLeave->used_days,
+                        'remaining_days' => $employeeLeave->remaining_days,
+                        'requested_days' => $leave->total_days,
+                    ],
+                ], 422);
+            }
+
+            // ---------------------------------------------------------
+            // Approve leave + deduct balance together
+            // ---------------------------------------------------------
+            //
+            // Everything happens inside one transaction.
+            //
+            // If something fails, neither the leave status nor the
+            // employee balance will be partially updated.
+            //
+
+            DB::transaction(function () use (
+                $leave,
+                $employeeLeave,
+                $requestedDays
+            ) {
+
+                // ---------------------------------------------
+                // Deduct leave balance
+                // ---------------------------------------------
+
+                $employeeLeave->used_days =
+                    (float) $employeeLeave->used_days + $requestedDays;
+
+                $employeeLeave->remaining_days =
+                    (float) $employeeLeave->remaining_days - $requestedDays;
+
+                // Prevent negative balance
+                if ($employeeLeave->remaining_days < 0) {
+                    $employeeLeave->remaining_days = 0;
+                }
+
+                $employeeLeave->save();
+
+                // ---------------------------------------------
+                // Approve leave
+                // ---------------------------------------------
+
+                $leave->status = 'Approved';
+
+                // All approved leave is paid
+                $leave->is_paid = 1;
+
+                $leave->save();
+            });
+
+            // ---------------------------------------------------------
+            // Log approval
+            // ---------------------------------------------------------
+
+            Log::info(
+                "Leave request ID {$leave->id} approved for employee ID " .
+                    "{$leave->employee_id}. {$leave->total_days} working day(s) deducted."
+            );
+
+            // ---------------------------------------------------------
+            // Return response
+            // ---------------------------------------------------------
+
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'Leave request approved successfully.',
+                'leave'     => $leave,
+                'balance'   => [
+                    'allocated_days' => $employeeLeave->allocated_days,
+                    'used_days'      => $employeeLeave->used_days,
+                    'remaining_days' => $employeeLeave->remaining_days,
+                ],
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'The given data was invalid.',
+                'errors'    => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+
+            Log::error(
+                'Error confirming leave request: ' . $e->getMessage(),
+                [
+                    'leave_id' => $id,
+                ]
+            );
+
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Failed to confirm leave request.',
+                'error'     => $e->getMessage(),
+            ], 500);
+        }
     }
+
+
 
 
 
