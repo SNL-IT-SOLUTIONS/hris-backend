@@ -1602,13 +1602,19 @@ class AttendanceController extends Controller
             // Check employee leave balance status
             // ---------------------------------------------------------
             if (!$employeeLeave->is_active) {
-
                 return response()->json([
                     'isSuccess' => false,
                     'message'   => 'This leave type is currently inactive for your account.',
+                    'debug' => [
+                        'authenticated_employee_id' => $employee->id,
+                        'leave_type_id' => $validated['leave_type_id'],
+                        'employee_leave_id' => $employeeLeave->id,
+                        'employee_leave_employee_id' => $employeeLeave->employee_id,
+                        'is_active' => $employeeLeave->is_active,
+                        'is_archived' => $employeeLeave->is_archived,
+                    ],
                 ], 422);
             }
-
             // ---------------------------------------------------------
             // Check remaining balance
             // ---------------------------------------------------------
