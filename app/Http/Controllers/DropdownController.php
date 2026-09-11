@@ -196,20 +196,36 @@ class DropdownController extends Controller
     public function getLeaveTypesDropdown()
     {
         try {
-            $leaveTypes = LeaveType::select('id', 'leave_name', 'max_days')
-                ->where('is_active', 1)
-                ->orderBy('leave_name', 'asc')
+            $employee = auth()->user();
+
+            $leaveTypes = LeaveType::select(
+                'leave_types.id',
+                'leave_types.leave_name',
+                'leave_types.max_days'
+            )
+                ->join(
+                    'employee_leave_types',
+                    'leave_types.id',
+                    '=',
+                    'employee_leave_types.leave_type_id'
+                )
+                ->where('employee_leave_types.employee_id', $employee->id)
+                ->where('employee_leave_types.is_archived', 0)
+                ->where('leave_types.is_active', 1)
+                ->where('leave_types.is_archived', 0)
+                ->orderBy('leave_types.leave_name', 'asc')
                 ->get();
 
             return response()->json([
                 'isSuccess' => true,
-                'message' => 'Leave types dropdown retrieved successfully.',
+                'message' => 'Assigned leave types retrieved successfully.',
                 'data' => $leaveTypes
             ], 200);
         } catch (\Exception $e) {
+
             return response()->json([
                 'isSuccess' => false,
-                'message' => 'Failed to load leave types dropdown.',
+                'message' => 'Failed to load assigned leave types.',
                 'error' => $e->getMessage()
             ], 500);
         }
