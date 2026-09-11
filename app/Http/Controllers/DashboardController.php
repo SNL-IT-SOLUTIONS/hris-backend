@@ -422,67 +422,115 @@ class DashboardController extends Controller
 
             $request->validate([
                 'month' => 'required|integer|min:1|max:12',
-                'year'  => 'required|integer'
+                'year'  => 'required|integer',
             ]);
 
             $employee = auth()->user();
 
             if (!$employee) {
                 return response()->json([
-                    'message' => 'Unauthorized.'
+                    'success' => false,
+                    'message' => 'Unauthorized.',
                 ], 401);
             }
 
-            $start = Carbon::create($request->year, $request->month, 1);
-            $end   = $start->copy()->endOfMonth();
+            $start = Carbon::create(
+                $request->year,
+                $request->month,
+                1
+            );
 
-            // Get holidays for the selected month
+            $end = $start->copy()->endOfMonth();
+
+            // ---------------------------------------------------------
+            // Get holidays for selected month
+            // ---------------------------------------------------------
+
             $holidays = Holiday::where('is_archived', 0)
                 ->whereBetween('holiday_date', [
                     $start->toDateString(),
-                    $end->toDateString()
+                    $end->toDateString(),
                 ])
                 ->get()
                 ->keyBy(function ($holiday) {
-                    return Carbon::parse($holiday->holiday_date)->toDateString();
+                    return Carbon::parse(
+                        $holiday->holiday_date
+                    )->toDateString();
                 });
+
+            // ---------------------------------------------------------
+            // Get approved leaves for employee
+            // ---------------------------------------------------------
+
+            $leaves = Leave::with([
+                'leaveType:id,leave_name'
+            ])
+                ->where('employee_id', $employee->id)
+                ->where('status', 'Approved')
+                ->where('is_archived', 0)
+                ->whereDate('start_date', '<=', $end->toDateString())
+                ->whereDate('end_date', '>=', $start->toDateString())
+                ->get();
 
             $calendar = [];
 
             $presentCount = 0;
             $lateCount = 0;
             $missedCount = 0;
+            $leaveCount = 0;
             $absentCount = 0;
 
-            for ($date = $start->copy(); $date <= $end; $date->addDay()) {
+            // ---------------------------------------------------------
+            // Build calendar
+            // ---------------------------------------------------------
+
+            for (
+                $date = $start->copy();
+                $date->lte($end);
+                $date->addDay()
+            ) {
 
                 $dateString = $date->toDateString();
 
+                // -----------------------------------------------------
                 // Attendance
-                $attendance = Attendance::where('employee_id', $employee->id)
-                    ->whereDate('clock_in', $date)
+                // -----------------------------------------------------
+
+                $attendance = Attendance::where(
+                    'employee_id',
+                    $employee->id
+                )
+                    ->whereDate('clock_in', $dateString)
                     ->first();
 
-                // Approved Leave
-                $leave = Leave::where('employee_id', $employee->id)
-                    ->where('status', 'Approved')
-                    ->whereDate('start_date', '<=', $date)
-                    ->whereDate('end_date', '>=', $date)
-                    ->first();
+                // -----------------------------------------------------
+                // Find approved leave covering this date
+                // -----------------------------------------------------
+
+                $leave = $leaves->first(function ($leave) use ($dateString) {
+
+                    return Carbon::parse($leave->start_date)
+                        ->lte(Carbon::parse($dateString))
+                        &&
+                        Carbon::parse($leave->end_date)
+                        ->gte(Carbon::parse($dateString));
+                });
 
                 $status = 'absent';
                 $holiday = null;
+                $leaveData = null;
 
                 /*
             |--------------------------------------------------------------------------
             | Status Priority
             |--------------------------------------------------------------------------
+            |
             | 1. Attendance
-            | 2. Leave
+            | 2. Approved Leave
             | 3. Holiday
             | 4. Weekend
             | 5. Absent
-            |--------------------------------------------------------------------------
+            |
             */
 
                 if ($attendance) {
@@ -499,6 +547,26 @@ class DashboardController extends Controller
                 } elseif ($leave) {
 
                     $status = 'leave';
+
+                    $leaveCount++;
+
+                    $leaveData = [
+                        'id' => $leave->id,
+                        'leave_type_id' => $leave->leave_type_id,
+                        'leave_type' => $leave->leaveType
+                            ? $leave->leaveType->leave_name
+                            : null,
+                        'reason' => $leave->reason,
+                        'start_date' => Carbon::parse(
+                            $leave->start_date
+                        )->toDateString(),
+                        'end_date' => Carbon::parse(
+                            $leave->end_date
+                        )->toDateString(),
+                        'total_days' => $leave->total_days,
+                        'is_paid' => (bool) $leave->is_paid,
+                        'status' => $leave->status,
+                    ];
                 } elseif (isset($holidays[$dateString])) {
 
                     $holiday = $holidays[$dateString];
@@ -512,48 +580,81 @@ class DashboardController extends Controller
                     $absentCount++;
                 }
 
+                // -----------------------------------------------------
+                // Calendar entry
+                // -----------------------------------------------------
+
                 $calendar[] = [
+
                     'date' => $dateString,
+
                     'status' => $status,
 
-                    'clock_in' => $attendance->clock_in ?? null,
-                    'clock_out' => $attendance->clock_out ?? null,
+                    'clock_in' => $attendance
+                        ? $attendance->clock_in
+                        : null,
 
-                    'holiday' => $holiday ? [
-                        'id' => $holiday->id,
-                        'name' => $holiday->holiday_name,
-                        'type' => $holiday->holiday_type,
-                        'date' => Carbon::parse($holiday->holiday_date)->toDateString(),
-                    ] : null,
+                    'clock_out' => $attendance
+                        ? $attendance->clock_out
+                        : null,
+
+                    'leave' => $leaveData,
+
+                    'holiday' => $holiday
+                        ? [
+                            'id' => $holiday->id,
+                            'name' => $holiday->holiday_name,
+                            'type' => $holiday->holiday_type,
+                            'date' => Carbon::parse(
+                                $holiday->holiday_date
+                            )->toDateString(),
+                        ]
+                        : null,
                 ];
             }
+
+            // ---------------------------------------------------------
+            // Response
+            // ---------------------------------------------------------
 
             return response()->json([
                 'success' => true,
 
                 'employee' => [
                     'id' => $employee->id,
-                    'name' => $employee->first_name . ' ' . $employee->last_name
+                    'name' => $employee->first_name .
+                        ' ' .
+                        $employee->last_name,
                 ],
 
                 'month' => $start->format('F'),
-                'year'  => $start->year,
+
+                'year' => $start->year,
 
                 'summary' => [
                     'present' => $presentCount,
                     'late' => $lateCount,
                     'missed' => $missedCount,
-                    'absent' => $absentCount
+                    'leave' => $leaveCount,
+                    'absent' => $absentCount,
                 ],
 
-                'calendar' => $calendar
+                'calendar' => $calendar,
+
             ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'The given data was invalid.',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
 
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to load attendance dashboard.',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
