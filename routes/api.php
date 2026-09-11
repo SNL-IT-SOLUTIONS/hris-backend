@@ -120,7 +120,7 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::get('/my-attendance/export', [AttendanceController::class, 'exportMyAttendanceCSV']);
     Route::middleware('auth:sanctum')->get('employees/{id}/attendance', [AttendanceController::class, 'getEmployeeAttendanceReport']);
     Route::get('attendance/summary/{employeeId}', 'getAttendanceSummary');
-    Route::post('request-leave', 'requestLeave');
+    Route::post('request-leave', 'requestLeave')->middleware('auth:sanctum');
     Route::get('attendances', [AttendanceController::class, 'getAllAttendances']);
     Route::post('markabsent', [AttendanceController::class, 'markAbsent']);
     //DTR ADJUSTMENTS
