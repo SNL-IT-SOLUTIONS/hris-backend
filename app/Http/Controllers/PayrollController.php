@@ -1756,42 +1756,48 @@ class PayrollController extends Controller
 
                         'position' => $employee->position,
 
-                        /*
-                    | Total paid/present days
-                    */
+                        'base_salary' => $employee->base_salary,
 
+                        /*
+    |--------------------------------------------------------------------------
+    | Total paid/present days
+    |--------------------------------------------------------------------------
+    */
                         'days_worked' => $displayDaysWorked,
 
                         /*
-                    | Actual physical attendance
-                    */
-
+    |--------------------------------------------------------------------------
+    | Actual physical attendance
+    |--------------------------------------------------------------------------
+    */
                         'actual_worked_days' => $actualWorkedDays,
 
                         /*
-                    | Approved paid leave
-                    */
-
+    |--------------------------------------------------------------------------
+    | Approved paid leave
+    |--------------------------------------------------------------------------
+    */
                         'paid_leave_days' => $paidLeaveDays,
 
                         /*
-                    | PH holiday actually worked
-                    */
-
-                        'ph_holiday_worked_days' =>
-                        $phHolidayWorkedDays,
-
-                        /*
-                    | US holiday attendance
-                    */
-
-                        'us_holiday_present_days' =>
-                        $usHolidayPresentDays,
+    |--------------------------------------------------------------------------
+    | PH holiday actually worked
+    |--------------------------------------------------------------------------
+    */
+                        'ph_holiday_worked_days' => $phHolidayWorkedDays,
 
                         /*
-                    | Final absence count
-                    */
+    |--------------------------------------------------------------------------
+    | US holiday attendance
+    |--------------------------------------------------------------------------
+    */
+                        'us_holiday_present_days' => $usHolidayPresentDays,
 
+                        /*
+    |--------------------------------------------------------------------------
+    | Final absence count
+    |--------------------------------------------------------------------------
+    */
                         'absences' => $absences,
                     ];
                 }
