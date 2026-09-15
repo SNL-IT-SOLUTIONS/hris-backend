@@ -637,10 +637,22 @@ class PayrollController extends Controller
 
 
                 /*
-            |--------------------------------------------------------------------------
-            | GET EMPLOYEE ALLOWANCES
-            |--------------------------------------------------------------------------
-            */
+           /*
+|--------------------------------------------------------------------------
+| GET EMPLOYEE ALLOWANCES
+|--------------------------------------------------------------------------
+|
+| employee_allowance stores:
+| - employee_id
+| - allowance_type_id
+| - amount
+|
+| allowance_types stores:
+| - type_name
+| - description
+| - is_archived
+|
+*/
 
                 $allowances = DB::table('employee_allowance')
                     ->join(
@@ -654,22 +666,13 @@ class PayrollController extends Controller
                         $employee->id
                     )
                     ->where(
-                        'employee_allowance.is_active',
-                        1
-                    )
-                    ->where(
-                        'employee_allowance.is_archived',
-                        0
-                    )
-                    ->where(
                         'allowance_types.is_archived',
                         0
                     )
                     ->select(
                         'allowance_types.id as allowance_type_id',
-                        'allowance_types.allowance_name',
-                        'allowance_types.amount',
-                        'allowance_types.is_perfect_attendance'
+                        'allowance_types.type_name',
+                        'employee_allowance.amount'
                     )
                     ->get();
 
@@ -715,22 +718,23 @@ class PayrollController extends Controller
 
                 $allowanceRecords = [];
 
-
                 foreach ($allowances as $allowance) {
 
                     /*
-                |--------------------------------------------------------------------------
-                | PERFECT ATTENDANCE
-                |--------------------------------------------------------------------------
-                |
-                | Paid leave does NOT count as absence.
-                |
-                | Therefore approved paid leave does not automatically
-                | disqualify the employee based on absence count.
-                |
-                */
+    |--------------------------------------------------------------------------
+    | PERFECT ATTENDANCE ALLOWANCE
+    |--------------------------------------------------------------------------
+    |
+    | Based on your allowance_types data, the Perfect Attendance
+    | allowance is allowance_type_id = 12.
+    |
+    | It is only paid when:
+    | - No absences
+    | - No late attendance
+    |
+    */
 
-                    if ($allowance->is_perfect_attendance) {
+                    if ($allowance->allowance_type_id == 12) {
 
                         if (
                             $absences == 0 &&
@@ -746,18 +750,25 @@ class PayrollController extends Controller
                     } else {
 
                         /*
-                    |--------------------------------------------------------------------------
-                    | NORMAL ALLOWANCE
-                    |--------------------------------------------------------------------------
-                    |
-                    | Semi-monthly = monthly amount / 2
-                    |
-                    */
+        |--------------------------------------------------------------------------
+        | NORMAL ALLOWANCE
+        |--------------------------------------------------------------------------
+        |
+        | Semi-monthly payroll:
+        | monthly allowance / 2
+        |
+        */
 
                         $allowanceAmount =
                             $allowance->amount / 2;
                     }
 
+
+                    /*
+    |--------------------------------------------------------------------------
+    | SAVE ALLOWANCE
+    |--------------------------------------------------------------------------
+    */
 
                     if ($allowanceAmount > 0) {
 
@@ -773,7 +784,6 @@ class PayrollController extends Controller
                         ];
                     }
                 }
-
 
                 /*
             |--------------------------------------------------------------------------
