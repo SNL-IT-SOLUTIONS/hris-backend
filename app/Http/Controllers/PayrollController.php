@@ -1813,7 +1813,7 @@ class PayrollController extends Controller
             return response()->json([
                 'isSuccess' => true,
                 'message' => 'Employees retrieved successfully.',
-                'data' => $employeeData,
+                'employees' => $employeeData,
                 'summary' => [
                     'total_working_days' => $totalWorkingDays,
                 ],
