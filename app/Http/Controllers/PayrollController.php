@@ -28,6 +28,7 @@ class PayrollController extends Controller
      */
 
 
+
     public function createPayrollPeriod(Request $request)
     {
         $validated = $request->validate([
@@ -88,33 +89,26 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         | CALCULATE EXPECTED WORKING DAYS
         |--------------------------------------------------------------------------
-        |
-        | Weekdays excluding holidays.
-        |
         */
 
             $cutoffDays = 0;
 
             $cutoffPeriod = CarbonPeriod::create(
-                Carbon::parse($request->cutoff_start_date)->startOfDay(),
-                Carbon::parse($request->cutoff_end_date)->startOfDay()
+                Carbon::parse(
+                    $request->cutoff_start_date
+                )->startOfDay(),
+                Carbon::parse(
+                    $request->cutoff_end_date
+                )->startOfDay()
             );
 
             foreach ($cutoffPeriod as $date) {
-
-                /*
-            | Ignore Saturday and Sunday
-            */
 
                 if ($date->isWeekend()) {
                     continue;
                 }
 
                 $dateString = $date->toDateString();
-
-                /*
-            | Ignore PH and US holidays
-            */
 
                 if ($holidays->has($dateString)) {
                     continue;
@@ -138,12 +132,16 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                $employee = Employee::where('id', $employeeInput['employee_id'])
+                $employee = Employee::where(
+                    'id',
+                    $employeeInput['employee_id']
+                )
                     ->where('is_active', 1)
                     ->where('is_archived', 0)
                     ->first();
 
                 if (!$employee) {
+
                     throw new \Exception(
                         'Employee with ID ' .
                             $employeeInput['employee_id'] .
@@ -158,11 +156,14 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                $manualDays = $employeeInput['days_worked'] ?? null;
+                $manualDays =
+                    $employeeInput['days_worked'] ?? null;
 
-                $manualAbs = $employeeInput['absences'] ?? null;
+                $manualAbs =
+                    $employeeInput['absences'] ?? null;
 
-                $overtime = $employeeInput['overtime_hours'] ?? 0;
+                $overtime =
+                    $employeeInput['overtime_hours'] ?? 0;
 
 
                 /*
@@ -171,9 +172,11 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                $daily = $employee->base_salary;
+                $daily =
+                    $employee->base_salary;
 
-                $hourlyRate = $daily / 8;
+                $hourlyRate =
+                    $daily / 8;
 
 
                 /*
@@ -215,9 +218,6 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             | GET ACTUAL ATTENDANCE DATES
             |--------------------------------------------------------------------------
-            |
-            | Used to prevent attendance + leave from being counted twice.
-            |
             */
 
                 $attendanceDates = collect();
@@ -229,7 +229,9 @@ class PayrollController extends Controller
                             ?? $attendance->clock_out
                     )->toDateString();
 
-                    $attendanceDates->push($attendanceDate);
+                    $attendanceDates->push(
+                        $attendanceDate
+                    );
                 }
 
                 $attendanceDates = $attendanceDates
@@ -244,38 +246,56 @@ class PayrollController extends Controller
             |
             | ALL APPROVED LEAVES ARE PAID.
             |
-            | We intentionally do not check leaves.is_paid because your
-            | business rule is that every approved leave is guaranteed paid.
-            |
             */
 
                 $approvedLeaves = DB::table('leaves')
-                    ->where('employee_id', $employee->id)
-                    ->where('status', 'Approved')
-                    ->where('is_archived', 0)
+                    ->where(
+                        'employee_id',
+                        $employee->id
+                    )
+                    ->where(
+                        'status',
+                        'Approved'
+                    )
+                    ->where(
+                        'is_archived',
+                        0
+                    )
                     ->where(function ($query) use ($request) {
 
                         /*
-                    | Leave starts inside cutoff
+                    |--------------------------------------------------------------------------
+                    | LEAVE STARTS INSIDE CUTOFF
+                    |--------------------------------------------------------------------------
                     */
 
-                        $query->whereBetween('start_date', [
-                            $request->cutoff_start_date,
-                            $request->cutoff_end_date
-                        ])
-
-                            /*
-                    | Leave ends inside cutoff
-                    */
-
-                            ->orWhereBetween('end_date', [
+                        $query->whereBetween(
+                            'start_date',
+                            [
                                 $request->cutoff_start_date,
                                 $request->cutoff_end_date
-                            ])
+                            ]
+                        )
 
                             /*
-                    | Leave completely covers cutoff
-                    */
+                        |--------------------------------------------------------------------------
+                        | LEAVE ENDS INSIDE CUTOFF
+                        |--------------------------------------------------------------------------
+                        */
+
+                            ->orWhereBetween(
+                                'end_date',
+                                [
+                                    $request->cutoff_start_date,
+                                    $request->cutoff_end_date
+                                ]
+                            )
+
+                            /*
+                        |--------------------------------------------------------------------------
+                        | LEAVE COMPLETELY COVERS CUTOFF
+                        |--------------------------------------------------------------------------
+                        */
 
                             ->orWhere(function ($q) use ($request) {
 
@@ -323,16 +343,18 @@ class PayrollController extends Controller
 
                     /*
                 |--------------------------------------------------------------------------
-                | LIMIT LEAVE TO PAYROLL CUTOFF
+                | LIMIT LEAVE TO CUTOFF
                 |--------------------------------------------------------------------------
                 */
 
                     if ($leaveStart->lt($cutoffStart)) {
-                        $leaveStart = $cutoffStart->copy();
+                        $leaveStart =
+                            $cutoffStart->copy();
                     }
 
                     if ($leaveEnd->gt($cutoffEnd)) {
-                        $leaveEnd = $cutoffEnd->copy();
+                        $leaveEnd =
+                            $cutoffEnd->copy();
                     }
 
                     if ($leaveStart->gt($leaveEnd)) {
@@ -354,23 +376,23 @@ class PayrollController extends Controller
                     foreach ($leavePeriod as $leaveDate) {
 
                         /*
-                    | Leave on weekend is not a working day.
+                    |--------------------------------------------------------------------------
+                    | WEEKENDS
+                    |--------------------------------------------------------------------------
                     */
 
                         if ($leaveDate->isWeekend()) {
                             continue;
                         }
 
-                        $dateString = $leaveDate->toDateString();
+                        $dateString =
+                            $leaveDate->toDateString();
 
 
                         /*
                     |--------------------------------------------------------------------------
                     | HOLIDAYS ARE HANDLED SEPARATELY
                     |--------------------------------------------------------------------------
-                    |
-                    | Don't pay a holiday as both holiday + leave.
-                    |
                     */
 
                         if ($holidays->has($dateString)) {
@@ -382,13 +404,13 @@ class PayrollController extends Controller
                     |--------------------------------------------------------------------------
                     | DON'T DOUBLE COUNT ATTENDANCE + LEAVE
                     |--------------------------------------------------------------------------
-                    |
-                    | If employee actually worked on a leave date,
-                    | attendance already pays that day.
-                    |
                     */
 
-                        if ($attendanceDates->contains($dateString)) {
+                        if (
+                            $attendanceDates->contains(
+                                $dateString
+                            )
+                        ) {
                             continue;
                         }
 
@@ -399,7 +421,9 @@ class PayrollController extends Controller
                     |--------------------------------------------------------------------------
                     */
 
-                        $paidLeaveDates->push($dateString);
+                        $paidLeaveDates->push(
+                            $dateString
+                        );
                     }
                 }
 
@@ -421,7 +445,8 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                $paidLeaveDays = $paidLeaveDates->count();
+                $paidLeaveDays =
+                    $paidLeaveDates->count();
 
 
                 /*
@@ -452,22 +477,30 @@ class PayrollController extends Controller
                             ?? $attendance->clock_out
                     );
 
-                    $dateString = $attendanceDate->toDateString();
+                    $dateString =
+                        $attendanceDate->toDateString();
 
 
                     /*
                 |--------------------------------------------------------------------------
-                | US HOLIDAY
+                | HOLIDAY
                 |--------------------------------------------------------------------------
-                |
-                | Employee can have attendance on US holiday,
-                | but receives ₱0 holiday pay.
-                |
                 */
 
                     if ($holidays->has($dateString)) {
 
-                        $holiday = $holidays->get($dateString);
+                        $holiday =
+                            $holidays->get($dateString);
+
+
+                        /*
+                    |--------------------------------------------------------------------------
+                    | US HOLIDAY
+                    |--------------------------------------------------------------------------
+                    |
+                    | Attendance on US holiday receives ₱0.
+                    |
+                    */
 
                         if (
                             $holiday->holidayType &&
@@ -513,31 +546,19 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             | PAID LEAVE PAY
             |--------------------------------------------------------------------------
-            |
-            | Every approved leave day receives the employee's daily rate.
-            |
             */
 
                 $paidLeavePay =
                     $daily * $paidLeaveDays;
 
-
-                /*
-            |--------------------------------------------------------------------------
-            | ADD PAID LEAVE TO NORMAL PAY
-            |--------------------------------------------------------------------------
-            */
-
-                $normalPay += $paidLeavePay;
+                $normalPay +=
+                    $paidLeavePay;
 
 
                 /*
             |--------------------------------------------------------------------------
-            | TOTAL PAID / PRESENT DAYS
+            | TOTAL PAID DAYS
             |--------------------------------------------------------------------------
-            |
-            | Paid leave behaves as present for payroll.
-            |
             */
 
                 $paidDays =
@@ -554,23 +575,9 @@ class PayrollController extends Controller
 
                 if ($manualAbs !== null) {
 
-                    /*
-                |--------------------------------------------------------------------------
-                | MANUAL ABSENCE OVERRIDE
-                |--------------------------------------------------------------------------
-                */
-
-                    $absences = $manualAbs;
+                    $absences =
+                        $manualAbs;
                 } else {
-
-                    /*
-                |--------------------------------------------------------------------------
-                | AUTOMATIC ABSENCE CALCULATION
-                |--------------------------------------------------------------------------
-                |
-                | Paid leave is NOT an absence.
-                |
-                */
 
                     $absences = max(
                         $cutoffDays
@@ -586,10 +593,6 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             | NIGHT DIFFERENTIAL
             |--------------------------------------------------------------------------
-            |
-            | Paid leave does NOT receive night differential.
-            | Only actual worked days receive it.
-            |
             */
 
                 $nightHours =
@@ -612,11 +615,6 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             | OVERTIME
             |--------------------------------------------------------------------------
-            |
-            | Overtime = hourly rate × 1.25
-            |
-            | Paid leave does not generate overtime.
-            |
             */
 
                 $overtimePay =
@@ -637,24 +635,67 @@ class PayrollController extends Controller
 
 
                 /*
-           /*
-|--------------------------------------------------------------------------
-| GET EMPLOYEE ALLOWANCES
-|--------------------------------------------------------------------------
-|
-| employee_allowance stores:
-| - employee_id
-| - allowance_type_id
-| - amount
-|
-| allowance_types stores:
-| - type_name
-| - description
-| - is_archived
-|
-*/
+            |--------------------------------------------------------------------------
+            | CHECK LATE ATTENDANCE
+            |--------------------------------------------------------------------------
+            */
 
-                $allowances = DB::table('employee_allowance')
+                $hasLate = Attendance::where(
+                    'employee_id',
+                    $employee->id
+                )
+                    ->where(
+                        'status',
+                        'Late'
+                    )
+                    ->where(function ($query) use ($request) {
+
+                        $query->whereBetween(
+                            DB::raw('DATE(clock_in)'),
+                            [
+                                $request->cutoff_start_date,
+                                $request->cutoff_end_date
+                            ]
+                        )
+                            ->orWhereBetween(
+                                DB::raw('DATE(clock_out)'),
+                                [
+                                    $request->cutoff_start_date,
+                                    $request->cutoff_end_date
+                                ]
+                            );
+                    })
+                    ->exists();
+
+
+                /*
+            |--------------------------------------------------------------------------
+            | GET EMPLOYEE ALLOWANCES
+            |--------------------------------------------------------------------------
+            |
+            | ACTUAL employee_allowance:
+            |
+            | id
+            | employee_id
+            | allowance_type_id
+            | amount
+            | created_at
+            | updated_at
+            |
+            | ACTUAL allowance_types:
+            |
+            | id
+            | type_name
+            | description
+            | is_archived
+            | created_at
+            | updated_at
+            |
+            */
+
+                $allowances = DB::table(
+                    'employee_allowance'
+                )
                     ->join(
                         'allowance_types',
                         'employee_allowance.allowance_type_id',
@@ -679,39 +720,19 @@ class PayrollController extends Controller
 
                 /*
             |--------------------------------------------------------------------------
-            | CHECK LATE ATTENDANCE
-            |--------------------------------------------------------------------------
-            */
-
-                $hasLate = Attendance::where(
-                    'employee_id',
-                    $employee->id
-                )
-                    ->where('status', 'Late')
-                    ->where(function ($query) use ($request) {
-
-                        $query->whereBetween(
-                            DB::raw('DATE(clock_in)'),
-                            [
-                                $request->cutoff_start_date,
-                                $request->cutoff_end_date
-                            ]
-                        )
-                            ->orWhereBetween(
-                                DB::raw('DATE(clock_out)'),
-                                [
-                                    $request->cutoff_start_date,
-                                    $request->cutoff_end_date
-                                ]
-                            );
-                    })
-                    ->exists();
-
-
-                /*
-            |--------------------------------------------------------------------------
             | CALCULATE ALLOWANCES
             |--------------------------------------------------------------------------
+            |
+            | Allowance Type ID 12 = Perfect Attendance.
+            |
+            | Normal allowance:
+            | amount / 2
+            |
+            | Perfect Attendance:
+            | full amount when:
+            | - zero absences
+            | - no late attendance
+            |
             */
 
                 $totalAllowances = 0;
@@ -721,20 +742,14 @@ class PayrollController extends Controller
                 foreach ($allowances as $allowance) {
 
                     /*
-    |--------------------------------------------------------------------------
-    | PERFECT ATTENDANCE ALLOWANCE
-    |--------------------------------------------------------------------------
-    |
-    | Based on your allowance_types data, the Perfect Attendance
-    | allowance is allowance_type_id = 12.
-    |
-    | It is only paid when:
-    | - No absences
-    | - No late attendance
-    |
-    */
+                |--------------------------------------------------------------------------
+                | PERFECT ATTENDANCE
+                |--------------------------------------------------------------------------
+                */
 
-                    if ($allowance->allowance_type_id == 12) {
+                    if (
+                        $allowance->allowance_type_id == 12
+                    ) {
 
                         if (
                             $absences == 0 &&
@@ -750,14 +765,14 @@ class PayrollController extends Controller
                     } else {
 
                         /*
-        |--------------------------------------------------------------------------
-        | NORMAL ALLOWANCE
-        |--------------------------------------------------------------------------
-        |
-        | Semi-monthly payroll:
-        | monthly allowance / 2
-        |
-        */
+                    |--------------------------------------------------------------------------
+                    | NORMAL ALLOWANCE
+                    |--------------------------------------------------------------------------
+                    |
+                    | Semi-monthly payroll:
+                    | monthly amount / 2
+                    |
+                    */
 
                         $allowanceAmount =
                             $allowance->amount / 2;
@@ -765,10 +780,10 @@ class PayrollController extends Controller
 
 
                     /*
-    |--------------------------------------------------------------------------
-    | SAVE ALLOWANCE
-    |--------------------------------------------------------------------------
-    */
+                |--------------------------------------------------------------------------
+                | SAVE ALLOWANCE
+                |--------------------------------------------------------------------------
+                */
 
                     if ($allowanceAmount > 0) {
 
@@ -784,6 +799,7 @@ class PayrollController extends Controller
                         ];
                     }
                 }
+
 
                 /*
             |--------------------------------------------------------------------------
@@ -801,9 +817,32 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             | GET EMPLOYEE BENEFITS
             |--------------------------------------------------------------------------
+            |
+            | ACTUAL employee_benefit:
+            |
+            | id
+            | employee_id
+            | benefit_type_id
+            | amount
+            | created_at
+            | updated_at
+            |
+            | ACTUAL benefit_types:
+            |
+            | id
+            | benefit_name
+            | category
+            | description
+            | is_active
+            | is_archived
+            | created_at
+            | updated_at
+            |
             */
 
-                $benefits = DB::table('employee_benefit')
+                $benefits = DB::table(
+                    'employee_benefit'
+                )
                     ->join(
                         'benefit_types',
                         'employee_benefit.benefit_type_id',
@@ -815,12 +854,8 @@ class PayrollController extends Controller
                         $employee->id
                     )
                     ->where(
-                        'employee_benefit.is_active',
+                        'benefit_types.is_active',
                         1
-                    )
-                    ->where(
-                        'employee_benefit.is_archived',
-                        0
                     )
                     ->where(
                         'benefit_types.is_archived',
@@ -829,7 +864,7 @@ class PayrollController extends Controller
                     ->select(
                         'benefit_types.id as benefit_type_id',
                         'benefit_types.benefit_name',
-                        'benefit_types.amount'
+                        'employee_benefit.amount'
                     )
                     ->get();
 
@@ -839,7 +874,8 @@ class PayrollController extends Controller
             | BENEFIT DEDUCTIONS
             |--------------------------------------------------------------------------
             |
-            | Semi-monthly = monthly amount / 2
+            | Semi-monthly:
+            | monthly amount / 2
             |
             */
 
@@ -871,10 +907,11 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                $totalLateDeductions = Attendance::where(
-                    'employee_id',
-                    $employee->id
-                )
+                $totalLateDeductions =
+                    Attendance::where(
+                        'employee_id',
+                        $employee->id
+                    )
                     ->whereIn('status', [
                         'Present',
                         'Late'
@@ -909,7 +946,10 @@ class PayrollController extends Controller
                     'employee_id',
                     $employee->id
                 )
-                    ->where('is_archived', 0)
+                    ->where(
+                        'is_archived',
+                        0
+                    )
                     ->whereIn('status', [
                         'active',
                         'Active'
@@ -922,8 +962,9 @@ class PayrollController extends Controller
             | LOAN DEDUCTIONS
             |--------------------------------------------------------------------------
             |
-            | Semi-monthly = monthly amortization / 2
-            |--------------------------------------------------------------------------
+            | Semi-monthly:
+            | monthly amortization / 2
+            |
             */
 
                 $totalLoanDeductions = 0;
@@ -935,9 +976,10 @@ class PayrollController extends Controller
                     $loanDeduction =
                         $loan->monthly_amortization / 2;
 
+
                     /*
                 |--------------------------------------------------------------------------
-                | Don't deduct more than remaining balance
+                | DON'T DEDUCT MORE THAN REMAINING BALANCE
                 |--------------------------------------------------------------------------
                 */
 
@@ -946,18 +988,22 @@ class PayrollController extends Controller
                         $loan->remaining_balance !== null
                     ) {
 
-                        $loanDeduction = min(
-                            $loanDeduction,
-                            $loan->remaining_balance
-                        );
+                        $loanDeduction =
+                            min(
+                                $loanDeduction,
+                                $loan->remaining_balance
+                            );
                     }
 
                     $totalLoanDeductions +=
                         $loanDeduction;
 
                     $loanRecords[] = [
-                        'loan' => $loan,
-                        'amount' => $loanDeduction,
+                        'loan' =>
+                        $loan,
+
+                        'amount' =>
+                        $loanDeduction,
                     ];
                 }
 
@@ -991,63 +1037,57 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                $payrollRecord = PayrollRecord::create([
-                    'payroll_period_id' =>
-                    $payrollPeriod->id,
+                $payrollRecord =
+                    PayrollRecord::create([
 
-                    'employee_id' =>
-                    $employee->id,
+                        'payroll_period_id' =>
+                        $payrollPeriod->id,
 
-                    'daily_rate' =>
-                    $daily,
+                        'employee_id' =>
+                        $employee->id,
 
-                    /*
-                | Paid leave is counted as a paid/present day.
-                */
+                        'daily_rate' =>
+                        $daily,
 
-                    'days_worked' =>
-                    $paidDays,
+                        'days_worked' =>
+                        $paidDays,
 
-                    'overtime_hours' =>
-                    $overtime,
+                        'overtime_hours' =>
+                        $overtime,
 
-                    /*
-                | Paid leave is NOT an absence.
-                */
+                        'absences' =>
+                        $absences,
 
-                    'absences' =>
-                    $absences,
+                        'holiday_pay' =>
+                        $holidayPay,
 
-                    'holiday_pay' =>
-                    $holidayPay,
+                        'night_diff_pay' =>
+                        $totalNightDiff,
 
-                    'night_diff_pay' =>
-                    $totalNightDiff,
+                        'gross_base' =>
+                        $grossBase,
 
-                    'gross_base' =>
-                    $grossBase,
+                        'gross_pay' =>
+                        $grossWithAllowances,
 
-                    'gross_pay' =>
-                    $grossWithAllowances,
+                        'total_allowances' =>
+                        $totalAllowances,
 
-                    'total_allowances' =>
-                    $totalAllowances,
+                        'total_loan_deductions' =>
+                        $totalLoanDeductions,
 
-                    'total_loan_deductions' =>
-                    $totalLoanDeductions,
+                        'total_late_deductions' =>
+                        $totalLateDeductions,
 
-                    'total_late_deductions' =>
-                    $totalLateDeductions,
+                        'total_deductions' =>
+                        $totalDeductions,
 
-                    'total_deductions' =>
-                    $totalDeductions,
+                        'net_pay' =>
+                        $netPay,
 
-                    'net_pay' =>
-                    $netPay,
-
-                    'remarks' =>
-                    $employeeInput['remarks'] ?? null,
-                ]);
+                        'remarks' =>
+                        $employeeInput['remarks'] ?? null,
+                    ]);
 
 
                 /*
@@ -1056,9 +1096,13 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                foreach ($benefitRecords as $benefitRecord) {
+                foreach (
+                    $benefitRecords
+                    as $benefitRecord
+                ) {
 
                     PayrollDeduction::create([
+
                         'payroll_record_id' =>
                         $payrollRecord->id,
 
@@ -1077,9 +1121,13 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                foreach ($loanRecords as $loanRecord) {
+                foreach (
+                    $loanRecords
+                    as $loanRecord
+                ) {
 
-                    $loan = $loanRecord['loan'];
+                    $loan =
+                        $loanRecord['loan'];
 
                     $deductionAmount =
                         $loanRecord['amount'];
@@ -1092,6 +1140,7 @@ class PayrollController extends Controller
                 */
 
                     PayrollDeduction::create([
+
                         'payroll_record_id' =>
                         $payrollRecord->id,
 
@@ -1110,7 +1159,9 @@ class PayrollController extends Controller
                 */
 
                     if (
-                        isset($loan->remaining_balance) &&
+                        isset(
+                            $loan->remaining_balance
+                        ) &&
                         $loan->remaining_balance !== null
                     ) {
 
@@ -1118,11 +1169,15 @@ class PayrollController extends Controller
                             $loan->remaining_balance
                             - $deductionAmount;
 
-                        if ($newBalance <= 0) {
+                        if (
+                            $newBalance <= 0
+                        ) {
 
-                            $loan->remaining_balance = 0;
+                            $loan->remaining_balance =
+                                0;
 
-                            $loan->status = 'paid';
+                            $loan->status =
+                                'paid';
                         } else {
 
                             $loan->remaining_balance =
@@ -1140,9 +1195,13 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                foreach ($allowanceRecords as $allowanceRecord) {
+                foreach (
+                    $allowanceRecords
+                    as $allowanceRecord
+                ) {
 
                     PayrollAllowance::create([
+
                         'payroll_record_id' =>
                         $payrollRecord->id,
 
@@ -1173,8 +1232,13 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-                'message' => 'Payroll period created and processed successfully.',
-                'data' => $payrollPeriod,
+
+                'message' =>
+                'Payroll period created and processed successfully.',
+
+                'data' =>
+                $payrollPeriod,
+
             ], 201);
         } catch (\Exception $e) {
 
@@ -1187,12 +1251,20 @@ class PayrollController extends Controller
             DB::rollBack();
 
             return response()->json([
+
                 'isSuccess' => false,
-                'message' => 'Failed to create payroll period.',
-                'error' => $e->getMessage(),
+
+                'message' =>
+                'Failed to create payroll period.',
+
+                'error' =>
+                $e->getMessage(),
+
             ], 500);
         }
     }
+
+
 
 
 
