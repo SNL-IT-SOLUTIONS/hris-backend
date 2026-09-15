@@ -61,7 +61,7 @@ class PayrollController extends Controller
                 'pay_date' => $request->pay_date,
                 'cutoff_start_date' => $request->cutoff_start_date,
                 'cutoff_end_date' => $request->cutoff_end_date,
-                'status' => 'processed',
+                'status' => 'draft',
             ]);
 
 
