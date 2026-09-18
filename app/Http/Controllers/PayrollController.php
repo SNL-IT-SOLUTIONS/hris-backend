@@ -2771,6 +2771,7 @@ class PayrollController extends Controller
                 ->where('is_archived', false)
                 ->findOrFail($recordId);
 
+
             /*
         |--------------------------------------------------------------------------
         | Payroll Period
@@ -2778,6 +2779,7 @@ class PayrollController extends Controller
         */
 
             $payrollPeriod = $record->payrollPeriod;
+
 
             /*
         |--------------------------------------------------------------------------
@@ -2799,6 +2801,7 @@ class PayrollController extends Controller
                     ->get();
             }
 
+
             /*
         |--------------------------------------------------------------------------
         | Map Holidays
@@ -2812,20 +2815,25 @@ class PayrollController extends Controller
                         $holiday->holiday_date
                     )->format('F d, Y'),
 
-                    'holiday_name' => $holiday->holiday_name
+                    'holiday_name' =>
+                    $holiday->holiday_name
                         ?? 'Holiday',
 
-                    'holiday_type' => $holiday->holidayType->type_name
+                    'holiday_type' =>
+                    $holiday->holidayType->type_name
                         ?? $holiday->holiday_type
                         ?? 'Holiday',
 
-                    'country' => $holiday->holidayType->country
+                    'country' =>
+                    $holiday->holidayType->country
                         ?? null,
 
-                    'rate' => $holiday->holidayType->rate
+                    'rate' =>
+                    $holiday->holidayType->rate
                         ?? null,
                 ];
             })->values();
+
 
             /*
         |--------------------------------------------------------------------------
@@ -2840,12 +2848,20 @@ class PayrollController extends Controller
                     $allowance->allowanceType->type_name
                         ?? 'Other Allowance',
 
+                    /*
+                |--------------------------------------------------------------------------
+                | FIX:
+                | payroll_allowances uses allowance_amount
+                |--------------------------------------------------------------------------
+                */
+
                     'allowance_amount' => number_format(
-                        $allowance->amount ?? 0,
+                        $allowance->allowance_amount ?? 0,
                         2
                     ),
                 ];
             })->values();
+
 
             /*
         |--------------------------------------------------------------------------
@@ -2870,12 +2886,20 @@ class PayrollController extends Controller
                         $deduction->loan->loanType->type_name
                             ?? 'Loan',
 
+                        /*
+                    |--------------------------------------------------------------------------
+                    | FIX:
+                    | payroll_deductions uses deduction_amount
+                    |--------------------------------------------------------------------------
+                    */
+
                         'deduction_amount' => number_format(
-                            $deduction->amount ?? 0,
+                            $deduction->deduction_amount ?? 0,
                             2
                         ),
                     ];
                 }
+
 
                 /*
             |--------------------------------------------------------------------------
@@ -2890,12 +2914,20 @@ class PayrollController extends Controller
                         $deduction->benefitType->benefit_name
                             ?? 'Other Deduction',
 
+                        /*
+                    |--------------------------------------------------------------------------
+                    | FIX:
+                    | payroll_deductions uses deduction_amount
+                    |--------------------------------------------------------------------------
+                    */
+
                         'deduction_amount' => number_format(
-                            $deduction->amount ?? 0,
+                            $deduction->deduction_amount ?? 0,
                             2
                         ),
                     ];
                 }
+
 
                 /*
             |--------------------------------------------------------------------------
@@ -2908,12 +2940,20 @@ class PayrollController extends Controller
                     $deduction->deduction_name
                         ?? 'Other Deduction',
 
+                    /*
+                |--------------------------------------------------------------------------
+                | FIX:
+                | payroll_deductions uses deduction_amount
+                |--------------------------------------------------------------------------
+                */
+
                     'deduction_amount' => number_format(
-                        $deduction->amount ?? 0,
+                        $deduction->deduction_amount ?? 0,
                         2
                     ),
                 ];
             })->values();
+
 
             /*
         |--------------------------------------------------------------------------
@@ -2933,6 +2973,7 @@ class PayrollController extends Controller
                 (float) $record->daily_rate
                 * (float) $record->days_worked;
 
+
             /*
         |--------------------------------------------------------------------------
         | Employee Name
@@ -2946,6 +2987,7 @@ class PayrollController extends Controller
                         ($record->employee->last_name ?? '')
                 )
                 : 'N/A';
+
 
             /*
         |--------------------------------------------------------------------------
@@ -2967,6 +3009,7 @@ class PayrollController extends Controller
                     )->format('F d, Y');
             }
 
+
             /*
         |--------------------------------------------------------------------------
         | Return Payslip
@@ -2977,7 +3020,8 @@ class PayrollController extends Controller
 
                 'isSuccess' => true,
 
-                'message' => 'Payslip generated successfully.',
+                'message' =>
+                'Payslip generated successfully.',
 
                 'payslip' => [
 
@@ -2987,7 +3031,9 @@ class PayrollController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                    'employee_name' => $employeeName,
+                    'employee_name' =>
+                    $employeeName,
+
 
                     /*
                 |--------------------------------------------------------------------------
@@ -2999,7 +3045,9 @@ class PayrollController extends Controller
                     $payrollPeriod->period_name
                         ?? 'N/A',
 
-                    'period_range' => $periodRange,
+                    'period_range' =>
+                    $periodRange,
+
 
                     /*
                 |--------------------------------------------------------------------------
@@ -3028,6 +3076,7 @@ class PayrollController extends Controller
                     'absences' =>
                     $record->absences ?? 0,
 
+
                     /*
                 |--------------------------------------------------------------------------
                 | Base Pay
@@ -3049,6 +3098,7 @@ class PayrollController extends Controller
                         2
                     ),
 
+
                     /*
                 |--------------------------------------------------------------------------
                 | Night Differential
@@ -3059,6 +3109,7 @@ class PayrollController extends Controller
                         $record->night_diff_pay ?? 0,
                         2
                     ),
+
 
                     /*
                 |--------------------------------------------------------------------------
@@ -3071,6 +3122,7 @@ class PayrollController extends Controller
 
                     'total_holidays' =>
                     $holidayData->count(),
+
 
                     /*
                 |--------------------------------------------------------------------------
@@ -3085,6 +3137,7 @@ class PayrollController extends Controller
                         $record->total_allowances ?? 0,
                         2
                     ),
+
 
                     /*
                 |--------------------------------------------------------------------------
@@ -3110,6 +3163,7 @@ class PayrollController extends Controller
                         2
                     ),
 
+
                     /*
                 |--------------------------------------------------------------------------
                 | Net Pay
@@ -3121,18 +3175,21 @@ class PayrollController extends Controller
                         2
                     ),
 
+
                     /*
                 |--------------------------------------------------------------------------
                 | Generated At
                 |--------------------------------------------------------------------------
                 */
 
-                    'generated_at' => $record->created_at
+                    'generated_at' =>
+                    $record->created_at
                         ? $record->created_at->format(
                             'F d, Y h:i A'
                         )
                         : null,
                 ],
+
             ], 200);
         } catch (\Exception $e) {
 
@@ -3146,6 +3203,7 @@ class PayrollController extends Controller
             );
 
             return response()->json([
+
                 'isSuccess' => false,
 
                 'message' =>
@@ -3153,10 +3211,10 @@ class PayrollController extends Controller
 
                 'error' =>
                 $e->getMessage(),
+
             ], 500);
         }
     }
-
 
 
 
