@@ -3659,7 +3659,7 @@ class PayrollController extends Controller
                 ],
 
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
 
             Log::error(
                 'Get Payslip Error: ' . $e->getMessage(),
