@@ -2839,12 +2839,18 @@ class PayrollController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | SEPARATE HOLIDAY RESPONSE
+        | BUILD SEPARATE HOLIDAY RESPONSE
         |--------------------------------------------------------------------------
         */
 
             $holidayRecords = $holidays
                 ->map(function ($holiday) {
+
+                    /*
+                |--------------------------------------------------------------------------
+                | HOLIDAY TITLE
+                |--------------------------------------------------------------------------
+                */
 
                     $holidayTitle =
                         $holiday->holiday_name
@@ -2855,15 +2861,71 @@ class PayrollController extends Controller
                             ?? null
                         );
 
+
+                    /*
+                |--------------------------------------------------------------------------
+                | HOLIDAY TYPE
+                |--------------------------------------------------------------------------
+                */
+
+                    $holidayTypeName = strtolower(
+                        $holiday->holidayType->type_name ?? ''
+                    );
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | DETERMINE IF HOLIDAY IS PAID
+                |--------------------------------------------------------------------------
+                |
+                | Existing payroll rule:
+                |
+                | PH Holiday = Paid
+                | US Holiday = Unpaid
+                |
+                */
+
+                    $isPaid = true;
+
+                    if (
+                        str_contains(
+                            $holidayTypeName,
+                            'us'
+                        )
+                        ||
+                        str_contains(
+                            $holidayTypeName,
+                            'united states'
+                        )
+                    ) {
+                        $isPaid = false;
+                    }
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | HOLIDAY RESPONSE
+                |--------------------------------------------------------------------------
+                */
+
                     return [
-                        'holiday_id' => $holiday->id,
-                        'date' => Carbon::parse(
+                        'holiday_id' =>
+                        $holiday->id,
+
+                        'date' =>
+                        Carbon::parse(
                             $holiday->holiday_date
                         )->toDateString(),
-                        'title' => $holidayTitle,
+
+                        'title' =>
+                        $holidayTitle,
+
                         'holiday_type' =>
                         $holiday->holidayType->type_name
                             ?? null,
+
+                        'is_paid' =>
+                        $isPaid,
                     ];
                 })
                 ->values();
@@ -3049,6 +3111,7 @@ class PayrollController extends Controller
             $paidLeaveRecords = [];
 
             $totalPaidLeaveDays = 0;
+
             $totalPaidLeaveAmount = 0;
 
             foreach ($paidLeaves as $leave) {
@@ -3108,9 +3171,9 @@ class PayrollController extends Controller
             |
             | Holidays are NOT excluded.
             |
-            | Therefore, if an employee takes paid leave
-            | on a holiday, that day still receives the
-            | normal daily rate.
+            | Therefore, if an employee takes approved paid
+            | leave on a holiday, that day is still paid
+            | using the employee's daily rate.
             |
             */
 
@@ -3166,16 +3229,18 @@ class PayrollController extends Controller
                     * $leaveDays;
 
                 $totalPaidLeaveDays += $leaveDays;
+
                 $totalPaidLeaveAmount += $leaveAmount;
 
 
                 /*
             |--------------------------------------------------------------------------
-            | ADD LEAVE TO PAYSLIP
+            | ADD LEAVE TO RESPONSE
             |--------------------------------------------------------------------------
             */
 
                 $paidLeaveRecords[] = [
+
                     'leave_id' =>
                     $leave->id,
 
@@ -3223,6 +3288,7 @@ class PayrollController extends Controller
                 ->map(function ($allowance) {
 
                     return [
+
                         'allowance_type' =>
                         $allowance->allowanceType->type_name
                             ?? 'Other Allowance',
@@ -3255,6 +3321,7 @@ class PayrollController extends Controller
                     if ($deduction->loan_id) {
 
                         return [
+
                             'deduction_type' =>
                             'Loan Payment',
 
@@ -3280,6 +3347,7 @@ class PayrollController extends Controller
                     if ($deduction->benefit_type_id) {
 
                         return [
+
                             'deduction_type' =>
                             $deduction->benefitType->benefit_name
                                 ?? 'Other Deduction',
@@ -3300,6 +3368,7 @@ class PayrollController extends Controller
                 */
 
                     return [
+
                         'deduction_type' =>
                         $deduction->deduction_name
                             ?? 'Other Deduction',
