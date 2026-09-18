@@ -2838,12 +2838,18 @@ class PayrollController extends Controller
         | GET PAID APPROVED LEAVES
         |--------------------------------------------------------------------------
         |
-        | Only:
-        | - Approved
-        | - Paid
-        | - Not archived
-        | - Leave type not archived
+        | Employee 36 should find:
         |
+        | leave_id       = 14
+        | employee_id    = 36
+        | leave_type_id  = 19
+        | start_date     = 2026-09-07
+        | end_date       = 2026-09-07
+        | status         = Approved
+        | is_paid        = 1
+        | is_archived    = 0
+        |
+        |--------------------------------------------------------------------------
         */
 
             $paidLeaves = DB::table('leaves')
@@ -2857,9 +2863,9 @@ class PayrollController extends Controller
                     'leaves.employee_id',
                     $record->employee_id
                 )
-                ->where(
-                    'leaves.status',
-                    'Approved'
+                ->whereRaw(
+                    'LOWER(leaves.status) = ?',
+                    ['approved']
                 )
                 ->where(
                     'leaves.is_paid',
@@ -2873,60 +2879,38 @@ class PayrollController extends Controller
                     'leave_types.is_archived',
                     0
                 )
-                ->where(function ($query) use ($record) {
 
-                    /*
-                |--------------------------------------------------------------------------
-                | LEAVE STARTS INSIDE CUTOFF
-                |--------------------------------------------------------------------------
-                */
+                /*
+            |--------------------------------------------------------------------------
+            | LEAVE DATE OVERLAPS PAYROLL CUTOFF
+            |--------------------------------------------------------------------------
+            |
+            | This handles:
+            |
+            | 1. Leave completely inside cutoff
+            | 2. Leave starts before cutoff and ends inside
+            | 3. Leave starts inside cutoff and ends after
+            | 4. Leave completely covers cutoff
+            |
+            */
 
-                    $query->whereBetween(
-                        'leaves.start_date',
-                        [
-                            $record->payrollPeriod->cutoff_start_date,
-                            $record->payrollPeriod->cutoff_end_date,
-                        ]
-                    )
+                ->whereDate(
+                    'leaves.start_date',
+                    '<=',
+                    $cutoffEnd->toDateString()
+                )
+                ->whereDate(
+                    'leaves.end_date',
+                    '>=',
+                    $cutoffStart->toDateString()
+                )
 
-                        /*
-                    |--------------------------------------------------------------------------
-                    | LEAVE ENDS INSIDE CUTOFF
-                    |--------------------------------------------------------------------------
-                    */
-
-                        ->orWhereBetween(
-                            'leaves.end_date',
-                            [
-                                $record->payrollPeriod->cutoff_start_date,
-                                $record->payrollPeriod->cutoff_end_date,
-                            ]
-                        )
-
-                        /*
-                    |--------------------------------------------------------------------------
-                    | LEAVE COMPLETELY COVERS CUTOFF
-                    |--------------------------------------------------------------------------
-                    */
-
-                        ->orWhere(function ($q) use ($record) {
-
-                            $q->where(
-                                'leaves.start_date',
-                                '<=',
-                                $record->payrollPeriod->cutoff_start_date
-                            )
-                                ->where(
-                                    'leaves.end_date',
-                                    '>=',
-                                    $record->payrollPeriod->cutoff_end_date
-                                );
-                        });
-                })
                 ->select(
                     'leaves.id',
+                    'leaves.employee_id',
                     'leaves.leave_type_id',
                     'leave_types.leave_name',
+                    'leave_types.is_paid as leave_type_is_paid',
                     'leaves.start_date',
                     'leaves.end_date',
                     'leaves.total_days',
@@ -2940,10 +2924,6 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         | GET ATTENDANCE RECORDS
         |--------------------------------------------------------------------------
-        |
-        | This is still used for the payslip's leave-day calculation
-        | only for the existing payroll rules.
-        |
         */
 
             $attendanceRecords = Attendance::where(
@@ -2958,7 +2938,6 @@ class PayrollController extends Controller
                     $cutoffStart,
                     $cutoffEnd
                 ) {
-
                     $query->whereBetween(
                         DB::raw('DATE(clock_in)'),
                         [
@@ -3000,12 +2979,6 @@ class PayrollController extends Controller
                     $attendanceDateValue
                 )->startOfDay();
 
-                /*
-            |--------------------------------------------------------------------------
-            | CUTOFF SAFETY
-            |--------------------------------------------------------------------------
-            */
-
                 if (
                     $attendanceDate->lt(
                         $cutoffStart->copy()->startOfDay()
@@ -3021,12 +2994,6 @@ class PayrollController extends Controller
                 ) {
                     continue;
                 }
-
-                /*
-            |--------------------------------------------------------------------------
-            | IGNORE WEEKENDS
-            |--------------------------------------------------------------------------
-            */
 
                 if ($attendanceDate->isWeekend()) {
                     continue;
@@ -3048,16 +3015,8 @@ class PayrollController extends Controller
         |
         | IMPORTANT:
         |
-        | The leave is displayed on the payslip even if there is
-        | attendance on the same date.
-        |
-        | This section ONLY builds the payslip display.
-        |
-        | It does NOT modify:
-        | - gross_pay
-        | - gross_base
-        | - net_pay
-        | - days_worked
+        | Attendance does NOT remove a paid approved leave from
+        | the payslip display.
         |
         */
 
@@ -3109,14 +3068,18 @@ class PayrollController extends Controller
 
                 /*
             |--------------------------------------------------------------------------
-            | COUNT PAID LEAVE DAYS
+            | COUNT LEAVE DAYS
             |--------------------------------------------------------------------------
             |
-            | Payslip display rules:
+            | Count:
+            | - Monday to Friday
             |
-            | - Weekends are not counted
-            | - Holidays are not counted
-            | - Attendance does NOT remove the leave from the payslip
+            | Exclude:
+            | - Saturday
+            | - Sunday
+            | - Holidays
+            |
+            | DO NOT CHECK ATTENDANCE HERE.
             |
             */
 
@@ -3131,7 +3094,7 @@ class PayrollController extends Controller
 
                     /*
                 |--------------------------------------------------------------------------
-                | IGNORE WEEKENDS
+                | EXCLUDE WEEKENDS
                 |--------------------------------------------------------------------------
                 */
 
@@ -3143,7 +3106,7 @@ class PayrollController extends Controller
 
                     /*
                 |--------------------------------------------------------------------------
-                | HOLIDAYS ARE NOT LEAVE DAYS
+                | EXCLUDE HOLIDAYS
                 |--------------------------------------------------------------------------
                 */
 
@@ -3160,14 +3123,8 @@ class PayrollController extends Controller
 
                 /*
             |--------------------------------------------------------------------------
-            | LEAVE PAY
+            | CALCULATE DISPLAY LEAVE AMOUNT
             |--------------------------------------------------------------------------
-            |
-            | This is for payslip display only.
-            |
-            | The actual payroll amount has already been calculated
-            | when the payroll record was created.
-            |
             */
 
                 $leaveAmount =
@@ -3180,11 +3137,12 @@ class PayrollController extends Controller
 
                 /*
             |--------------------------------------------------------------------------
-            | SAVE LEAVE FOR PAYSLIP
+            | ADD TO PAYSLIP
             |--------------------------------------------------------------------------
             */
 
                 $paidLeaveRecords[] = [
+
                     'leave_id' =>
                     $leave->id,
 
@@ -3320,7 +3278,7 @@ class PayrollController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | EMPLOYEE NAME
+        | EMPLOYEE
         |--------------------------------------------------------------------------
         */
 
@@ -3351,11 +3309,6 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         | BASE PAY
         |--------------------------------------------------------------------------
-        |
-        | Keep existing payroll logic:
-        |
-        | daily_rate x days_worked
-        |
         */
 
             $basePay =
@@ -3369,6 +3322,7 @@ class PayrollController extends Controller
         */
 
             return response()->json([
+
                 'isSuccess' => true,
 
                 'message' =>
@@ -3578,12 +3532,6 @@ class PayrollController extends Controller
             ], 200);
         } catch (\Exception $e) {
 
-            /*
-        |--------------------------------------------------------------------------
-        | ERROR
-        |--------------------------------------------------------------------------
-        */
-
             Log::error(
                 'Get Payslip Error: ' . $e->getMessage(),
                 [
@@ -3596,6 +3544,7 @@ class PayrollController extends Controller
             );
 
             return response()->json([
+
                 'isSuccess' => false,
 
                 'message' =>
