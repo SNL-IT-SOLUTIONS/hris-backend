@@ -1678,15 +1678,31 @@ class AttendanceController extends Controller
             // Get authenticated employee
             // ---------------------------------------------------------
 
-            $employee = $request->user();
+            // $employee = $request->user();
+
+            // if (!$employee) {
+            //     return response()->json([
+            //         'isSuccess' => false,
+            //         'message'   => 'Unauthenticated.',
+            //     ], 401);
+            // }
+
+            $validated = $request->validate([
+                'employee_id'   => 'required|exists:employees,id',
+                'leave_type_id' => 'required|exists:leave_types,id',
+                'start_date'    => 'required|date|after_or_equal:today',
+                'end_date'      => 'required|date|after_or_equal:start_date',
+                'reason'        => 'nullable|string|max:500',
+            ]);
+
+            $employee = Employee::find($validated['employee_id']);
 
             if (!$employee) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'Unauthenticated.',
-                ], 401);
+                    'message'   => 'Employee not found.',
+                ], 404);
             }
-
             // ---------------------------------------------------------
             // Make sure authenticated employee is active
             // ---------------------------------------------------------

@@ -196,4 +196,9 @@ class Employee extends Authenticatable
     {
         return $this->belongsTo(Employee::class, 'employee_id');
     }
+
+    public function leaves()
+    {
+        return $this->hasMany(Leave::class, 'employee_id');
+    }
 }

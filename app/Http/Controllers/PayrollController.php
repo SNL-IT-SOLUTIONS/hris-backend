@@ -2005,64 +2005,501 @@ class PayrollController extends Controller
     /**
      *  Get payroll details by period
      */
+
     public function getPayrollDetails(Request $request, $id)
     {
         try {
-            $perPage = $request->input('per_page', 5);
-            $search  = $request->input('search');
 
+            /*
+        |--------------------------------------------------------------------------
+        | Get Payroll Period
+        |--------------------------------------------------------------------------
+        */
+            $payrollPeriod = PayrollPeriod::where('id', $id)
+                ->where('is_archived', false)
+                ->first();
+
+            if (!$payrollPeriod) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Payroll period not found.',
+                ], 404);
+            }
+
+            $perPage = $request->input('per_page', 5);
+            $search = $request->input('search');
+
+            /*
+        |--------------------------------------------------------------------------
+        | Payroll Records
+        |--------------------------------------------------------------------------
+        */
             $query = PayrollRecord::with([
                 'employee:id,employee_id,first_name,last_name,email,department_id,position_id,base_salary',
+
                 'employee.department:id,department_name',
+
                 'employee.position:id,position_name',
+
+                'employee.leaves' => function ($q) use ($payrollPeriod) {
+
+                    $q->where('status', 'Approved')
+                        ->where('is_archived', false)
+
+                        /*
+                    |--------------------------------------------------------------------------
+                    | Get leaves that overlap this payroll period
+                    |--------------------------------------------------------------------------
+                    */
+                        ->where('start_date', '<=', $payrollPeriod->cutoff_end_date)
+                        ->where('end_date', '>=', $payrollPeriod->cutoff_start_date);
+                },
+
+                'employee.leaves.leaveType:id,leave_name',
+
                 'deductions.benefitType:id,benefit_name',
+
                 'deductions.loan.loanType:id,type_name',
+
                 'allowances.allowanceType:id,type_name',
             ])
                 ->where('payroll_period_id', $id)
                 ->where('is_archived', false);
 
-            if ($search) {
+            /*
+        |--------------------------------------------------------------------------
+        | Search Employee
+        |--------------------------------------------------------------------------
+        */
+            if (!empty($search)) {
+
                 $query->whereHas('employee', function ($q) use ($search) {
-                    $q->where('first_name', 'like', "%{$search}%")
-                        ->orWhere('last_name', 'like', "%{$search}%")
-                        ->orWhere('employee_id', 'like', "%{$search}%");
+
+                    $q->where(function ($employeeQuery) use ($search) {
+
+                        $employeeQuery
+                            ->where('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('employee_id', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    });
                 });
             }
 
-            //  Clone query for totals
+            /*
+        |--------------------------------------------------------------------------
+        | Summary
+        |--------------------------------------------------------------------------
+        */
             $totalsQuery = clone $query;
 
-            //  Compute totals for all records (not just current page)
             $summary = [
-                'total_gross'      => number_format($totalsQuery->sum('gross_pay'), 2),
-                'total_deductions' => number_format($totalsQuery->sum('total_deductions'), 2),
-                'total_net'        => number_format($totalsQuery->sum('net_pay'), 2),
+                'total_gross_base' => number_format(
+                    $totalsQuery->sum('gross_base'),
+                    2
+                ),
+
+                'total_allowances' => number_format(
+                    $totalsQuery->sum('total_allowances'),
+                    2
+                ),
+
+                'total_overtime_hours' => number_format(
+                    $totalsQuery->sum('overtime_hours'),
+                    2
+                ),
+
+                'total_night_diff_pay' => number_format(
+                    $totalsQuery->sum('night_diff_pay'),
+                    2
+                ),
+
+                'total_holiday_pay' => number_format(
+                    $totalsQuery->sum('holiday_pay'),
+                    2
+                ),
+
+                'total_loan_deductions' => number_format(
+                    $totalsQuery->sum('total_loan_deductions'),
+                    2
+                ),
+
+                'total_late_deductions' => number_format(
+                    $totalsQuery->sum('total_late_deductions'),
+                    2
+                ),
+
+                'total_deductions' => number_format(
+                    $totalsQuery->sum('total_deductions'),
+                    2
+                ),
+
+                'total_gross' => number_format(
+                    $totalsQuery->sum('gross_pay'),
+                    2
+                ),
+
+                'total_net' => number_format(
+                    $totalsQuery->sum('net_pay'),
+                    2
+                ),
             ];
 
-            // Now paginate for display
-            $payrollDetails = $query->paginate($perPage);
+            /*
+        |--------------------------------------------------------------------------
+        | Pagination
+        |--------------------------------------------------------------------------
+        */
+            $payrollDetails = $query
+                ->orderBy('id', 'desc')
+                ->paginate($perPage);
 
+            /*
+        |--------------------------------------------------------------------------
+        | Format Payroll Details
+        |--------------------------------------------------------------------------
+        */
+            $data = collect($payrollDetails->items())->map(function ($record) use ($payrollPeriod) {
+
+                $leaves = $record->employee?->leaves ?? collect();
+
+                /*
+            |--------------------------------------------------------------------------
+            | Calculate leave days that actually fall inside
+            | the payroll cutoff.
+            |--------------------------------------------------------------------------
+            */
+                $leaveItems = $leaves->map(function ($leave) use ($payrollPeriod) {
+
+                    $leaveStart = \Carbon\Carbon::parse($leave->start_date);
+                    $leaveEnd = \Carbon\Carbon::parse($leave->end_date);
+
+                    $cutoffStart = \Carbon\Carbon::parse(
+                        $payrollPeriod->cutoff_start_date
+                    );
+
+                    $cutoffEnd = \Carbon\Carbon::parse(
+                        $payrollPeriod->cutoff_end_date
+                    );
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Get the overlapping date range
+                |--------------------------------------------------------------------------
+                */
+                    $effectiveStart = $leaveStart->greaterThan($cutoffStart)
+                        ? $leaveStart
+                        : $cutoffStart;
+
+                    $effectiveEnd = $leaveEnd->lessThan($cutoffEnd)
+                        ? $leaveEnd
+                        : $cutoffEnd;
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Calculate days within payroll period
+                |--------------------------------------------------------------------------
+                */
+                    $daysInPayroll = 0;
+
+                    if ($effectiveStart->lessThanOrEqualTo($effectiveEnd)) {
+                        $daysInPayroll =
+                            $effectiveStart->diffInDays($effectiveEnd) + 1;
+                    }
+
+                    return [
+                        'id' => $leave->id,
+
+                        'leave_type_id' =>
+                        $leave->leave_type_id,
+
+                        'leave_type' =>
+                        $leave->leaveType?->leave_name,
+
+                        'start_date' =>
+                        $leave->start_date,
+
+                        'end_date' =>
+                        $leave->end_date,
+
+                        'total_days' =>
+                        $leave->total_days,
+
+                        'days_in_payroll_period' =>
+                        $daysInPayroll,
+
+                        'reason' =>
+                        $leave->reason,
+
+                        'status' =>
+                        $leave->status,
+
+                        'is_paid' =>
+                        (bool) $leave->is_paid,
+                    ];
+                });
+
+                /*
+            |--------------------------------------------------------------------------
+            | Paid / Unpaid Leave Totals
+            |--------------------------------------------------------------------------
+            */
+                $paidLeaveDays = $leaveItems
+                    ->where('is_paid', true)
+                    ->sum('days_in_payroll_period');
+
+                $unpaidLeaveDays = $leaveItems
+                    ->where('is_paid', false)
+                    ->sum('days_in_payroll_period');
+
+                $totalLeaveDays = $leaveItems
+                    ->sum('days_in_payroll_period');
+
+                return [
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Payroll Record
+                |--------------------------------------------------------------------------
+                */
+                    'id' => $record->id,
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Employee
+                |--------------------------------------------------------------------------
+                */
+                    'employee' => [
+                        'id' =>
+                        $record->employee?->id,
+
+                        'employee_id' =>
+                        $record->employee?->employee_id,
+
+                        'first_name' =>
+                        $record->employee?->first_name,
+
+                        'last_name' =>
+                        $record->employee?->last_name,
+
+                        'email' =>
+                        $record->employee?->email,
+
+                        'department' =>
+                        $record->employee?->department?->department_name,
+
+                        'position' =>
+                        $record->employee?->position?->position_name,
+
+                        'base_salary' =>
+                        $record->employee?->base_salary,
+                    ],
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Attendance
+                |--------------------------------------------------------------------------
+                */
+                    'attendance' => [
+                        'daily_rate' =>
+                        $record->daily_rate,
+
+                        'days_worked' =>
+                        $record->days_worked,
+
+                        'absences' =>
+                        $record->absences,
+
+                        'total_late_minutes' =>
+                        $record->total_late_minutes,
+
+                        'overtime_hours' =>
+                        $record->overtime_hours,
+                    ],
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Leave
+                |--------------------------------------------------------------------------
+                */
+                    'leave' => [
+                        'total_days' =>
+                        $totalLeaveDays,
+
+                        'paid_days' =>
+                        $paidLeaveDays,
+
+                        'unpaid_days' =>
+                        $unpaidLeaveDays,
+
+                        'items' =>
+                        $leaveItems->values(),
+                    ],
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Earnings
+                |--------------------------------------------------------------------------
+                */
+                    'earnings' => [
+                        'gross_base' =>
+                        $record->gross_base,
+
+                        'total_allowances' =>
+                        $record->total_allowances,
+
+                        'overtime_hours' =>
+                        $record->overtime_hours,
+
+                        'night_diff_pay' =>
+                        $record->night_diff_pay,
+
+                        'holiday_pay' =>
+                        $record->holiday_pay,
+
+                        'gross_pay' =>
+                        $record->gross_pay,
+                    ],
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Deductions
+                |--------------------------------------------------------------------------
+                */
+                    'deductions' => [
+                        'total_loan_deductions' =>
+                        $record->total_loan_deductions,
+
+                        'total_late_deductions' =>
+                        $record->total_late_deductions,
+
+                        'total_deductions' =>
+                        $record->total_deductions,
+
+                        'benefits' =>
+                        $record->deductions
+                            ->whereNotNull('benefit_type_id')
+                            ->values(),
+
+                        'loans' =>
+                        $record->deductions
+                            ->whereNotNull('loan_id')
+                            ->values(),
+                    ],
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Allowances
+                |--------------------------------------------------------------------------
+                */
+                    'allowances' => [
+                        'total' =>
+                        $record->total_allowances,
+
+                        'items' =>
+                        $record->allowances,
+                    ],
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Final Payroll
+                |--------------------------------------------------------------------------
+                */
+                    'payroll' => [
+                        'gross_pay' =>
+                        $record->gross_pay,
+
+                        'total_deductions' =>
+                        $record->total_deductions,
+
+                        'net_pay' =>
+                        $record->net_pay,
+                    ],
+
+                    /*
+                |--------------------------------------------------------------------------
+                | Remarks
+                |--------------------------------------------------------------------------
+                */
+                    'remarks' =>
+                    $record->remarks,
+                ];
+            });
+
+            /*
+        |--------------------------------------------------------------------------
+        | Response
+        |--------------------------------------------------------------------------
+        */
             return response()->json([
                 'isSuccess' => true,
-                'payrolldetails' => $payrollDetails->items(),
-                'pagination' => [
-                    'current_page' => $payrollDetails->currentPage(),
-                    'per_page'     => $payrollDetails->perPage(),
-                    'total'        => $payrollDetails->total(),
-                    'last_page'    => $payrollDetails->lastPage(),
+
+                'message' =>
+                'Payroll details retrieved successfully.',
+
+                'payroll_period' => [
+                    'id' =>
+                    $payrollPeriod->id,
+
+                    'period_name' =>
+                    $payrollPeriod->period_name,
+
+                    'pay_date' =>
+                    $payrollPeriod->pay_date,
+
+                    'cutoff_start_date' =>
+                    $payrollPeriod->cutoff_start_date,
+
+                    'cutoff_end_date' =>
+                    $payrollPeriod->cutoff_end_date,
+
+                    'status' =>
+                    $payrollPeriod->status,
                 ],
-                'summary' => $summary,
+
+                'payrolldetails' =>
+                $data,
+
+                'pagination' => [
+                    'current_page' =>
+                    $payrollDetails->currentPage(),
+
+                    'per_page' =>
+                    $payrollDetails->perPage(),
+
+                    'total' =>
+                    $payrollDetails->total(),
+
+                    'last_page' =>
+                    $payrollDetails->lastPage(),
+                ],
+
+                'summary' =>
+                $summary,
             ]);
         } catch (\Exception $e) {
-            Log::error('Error fetching payroll details: ' . $e->getMessage());
+
+            Log::error(
+                'Error fetching payroll details: ' . $e->getMessage(),
+                [
+                    'payroll_period_id' => $id,
+                    'trace' => $e->getTraceAsString(),
+                ]
+            );
 
             return response()->json([
                 'isSuccess' => false,
-                'message'   => $e->getMessage(),
+
+                'message' =>
+                'Failed to retrieve payroll details.',
+
+                'error' =>
+                $e->getMessage(),
             ], 500);
         }
     }
+
+
 
 
     public function getMyPayrollDetails(Request $request, $id)
