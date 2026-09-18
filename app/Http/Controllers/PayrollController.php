@@ -2841,17 +2841,6 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         | GET PAID APPROVED LEAVES
         |--------------------------------------------------------------------------
-        |
-        | Employee 36:
-        |
-        | leave_id     = 14
-        | leave_type   = Sick Leave
-        | start_date   = 2026-09-07
-        | end_date     = 2026-09-07
-        | status       = Approved
-        | is_paid      = 1
-        | is_archived  = 0
-        |
         */
 
             $paidLeaves = DB::table('leaves')
@@ -2923,7 +2912,6 @@ class PayrollController extends Controller
                     'leaves.status',
                     'leaves.is_paid',
                 ])
-
                 ->orderBy('leaves.start_date')
                 ->get();
 
@@ -3085,21 +3073,18 @@ class PayrollController extends Controller
             | COUNT PAID LEAVE DAYS
             |--------------------------------------------------------------------------
             |
-            | IMPORTANT:
+            | Weekends are excluded.
             |
-            | We skip WEEKENDS only.
+            | Holidays are NOT excluded.
             |
-            | We DO NOT skip holidays.
-            |
-            | Therefore:
-            |
-            | Normal weekday paid leave = paid
-            | Holiday paid leave        = paid
-            | Weekend paid leave        = not paid
+            | Therefore a paid approved leave on a holiday
+            | still receives the daily rate.
             |
             */
 
                 $leaveDays = 0;
+
+                $holidayDates = [];
 
                 $leavePeriod = CarbonPeriod::create(
                     $leaveStart,
@@ -3110,7 +3095,7 @@ class PayrollController extends Controller
 
                     /*
                 |--------------------------------------------------------------------------
-                | WEEKENDS ARE NOT PAID
+                | WEEKENDS ARE NOT PAID LEAVE DAYS
                 |--------------------------------------------------------------------------
                 */
 
@@ -3118,20 +3103,49 @@ class PayrollController extends Controller
                         continue;
                     }
 
+                    $dateString = $leaveDate->toDateString();
+
 
                     /*
                 |--------------------------------------------------------------------------
-                | HOLIDAYS ARE STILL PAID LEAVE
+                | CHECK IF THIS LEAVE DATE IS A HOLIDAY
                 |--------------------------------------------------------------------------
-                |
-                | DO NOT add:
-                |
-                | if ($holidays->has($dateString)) {
-                |     continue;
-                | }
-                |
-                | An approved paid leave filed on a holiday
-                | should still receive the employee's daily rate.
+                */
+
+                    if ($holidays->has($dateString)) {
+
+                        $holiday = $holidays->get($dateString);
+
+                        /*
+                    |--------------------------------------------------------------------------
+                    | GET HOLIDAY TITLE
+                    |--------------------------------------------------------------------------
+                    |
+                    | Uses holiday_name first.
+                    | Falls back to title/name if your Holiday model
+                    | uses a different naming column.
+                    |--------------------------------------------------------------------------
+                    */
+
+                        $holidayTitle =
+                            $holiday->holiday_name
+                            ?? $holiday->title
+                            ?? $holiday->name
+                            ?? (
+                                $holiday->holidayType->type_name
+                                ?? null
+                            );
+
+                        $holidayDates[] = [
+                            'date' => $dateString,
+                            'title' => $holidayTitle,
+                        ];
+                    }
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | COUNT THE DAY
                 |--------------------------------------------------------------------------
                 */
 
@@ -3154,16 +3168,6 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             | LEAVE AMOUNT
             |--------------------------------------------------------------------------
-            |
-            | Daily rate is based on the payroll record.
-            |
-            | Example:
-            |
-            | Daily rate = 600
-            | Sick Leave = 1 day
-            |
-            | Leave amount = 600
-            |--------------------------------------------------------------------------
             */
 
                 $leaveAmount =
@@ -3178,11 +3182,27 @@ class PayrollController extends Controller
 
                 /*
             |--------------------------------------------------------------------------
+            | HOLIDAY INFORMATION
+            |--------------------------------------------------------------------------
+            */
+
+                $hasHoliday = count($holidayDates) > 0;
+
+                $holidayTitle = null;
+
+                if ($hasHoliday) {
+                    $holidayTitle = $holidayDates[0]['title'];
+                }
+
+
+                /*
+            |--------------------------------------------------------------------------
             | ADD LEAVE TO PAYSLIP
             |--------------------------------------------------------------------------
             */
 
                 $paidLeaveRecords[] = [
+
                     'leave_id' =>
                     $leave->id,
 
@@ -3216,6 +3236,21 @@ class PayrollController extends Controller
 
                     'status' =>
                     $leave->status,
+
+                    /*
+                |--------------------------------------------------------------------------
+                | HOLIDAY DETAILS
+                |--------------------------------------------------------------------------
+                */
+
+                    'holiday' =>
+                    $hasHoliday,
+
+                    'holiday_title' =>
+                    $holidayTitle,
+
+                    'holidays' =>
+                    $holidayDates,
                 ];
             }
 
