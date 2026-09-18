@@ -2979,8 +2979,6 @@ class PayrollController extends Controller
         }
     }
 
-
-
     /**
      *  Get payroll summary stats
      */
