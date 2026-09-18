@@ -2839,6 +2839,38 @@ class PayrollController extends Controller
 
             /*
         |--------------------------------------------------------------------------
+        | SEPARATE HOLIDAY RESPONSE
+        |--------------------------------------------------------------------------
+        */
+
+            $holidayRecords = $holidays
+                ->map(function ($holiday) {
+
+                    $holidayTitle =
+                        $holiday->holiday_name
+                        ?? $holiday->title
+                        ?? $holiday->name
+                        ?? (
+                            $holiday->holidayType->type_name
+                            ?? null
+                        );
+
+                    return [
+                        'holiday_id' => $holiday->id,
+                        'date' => Carbon::parse(
+                            $holiday->holiday_date
+                        )->toDateString(),
+                        'title' => $holidayTitle,
+                        'holiday_type' =>
+                        $holiday->holidayType->type_name
+                            ?? null,
+                    ];
+                })
+                ->values();
+
+
+            /*
+        |--------------------------------------------------------------------------
         | GET PAID APPROVED LEAVES
         |--------------------------------------------------------------------------
         */
@@ -2912,6 +2944,7 @@ class PayrollController extends Controller
                     'leaves.status',
                     'leaves.is_paid',
                 ])
+
                 ->orderBy('leaves.start_date')
                 ->get();
 
@@ -3016,9 +3049,7 @@ class PayrollController extends Controller
             $paidLeaveRecords = [];
 
             $totalPaidLeaveDays = 0;
-
             $totalPaidLeaveAmount = 0;
-
 
             foreach ($paidLeaves as $leave) {
 
@@ -3077,14 +3108,13 @@ class PayrollController extends Controller
             |
             | Holidays are NOT excluded.
             |
-            | Therefore a paid approved leave on a holiday
-            | still receives the daily rate.
+            | Therefore, if an employee takes paid leave
+            | on a holiday, that day still receives the
+            | normal daily rate.
             |
             */
 
                 $leaveDays = 0;
-
-                $holidayDates = [];
 
                 $leavePeriod = CarbonPeriod::create(
                     $leaveStart,
@@ -3101,45 +3131,6 @@ class PayrollController extends Controller
 
                     if ($leaveDate->isWeekend()) {
                         continue;
-                    }
-
-                    $dateString = $leaveDate->toDateString();
-
-
-                    /*
-                |--------------------------------------------------------------------------
-                | CHECK IF THIS LEAVE DATE IS A HOLIDAY
-                |--------------------------------------------------------------------------
-                */
-
-                    if ($holidays->has($dateString)) {
-
-                        $holiday = $holidays->get($dateString);
-
-                        /*
-                    |--------------------------------------------------------------------------
-                    | GET HOLIDAY TITLE
-                    |--------------------------------------------------------------------------
-                    |
-                    | Uses holiday_name first.
-                    | Falls back to title/name if your Holiday model
-                    | uses a different naming column.
-                    |--------------------------------------------------------------------------
-                    */
-
-                        $holidayTitle =
-                            $holiday->holiday_name
-                            ?? $holiday->title
-                            ?? $holiday->name
-                            ?? (
-                                $holiday->holidayType->type_name
-                                ?? null
-                            );
-
-                        $holidayDates[] = [
-                            'date' => $dateString,
-                            'title' => $holidayTitle,
-                        ];
                     }
 
 
@@ -3174,25 +3165,8 @@ class PayrollController extends Controller
                     (float) $record->daily_rate
                     * $leaveDays;
 
-
                 $totalPaidLeaveDays += $leaveDays;
-
                 $totalPaidLeaveAmount += $leaveAmount;
-
-
-                /*
-            |--------------------------------------------------------------------------
-            | HOLIDAY INFORMATION
-            |--------------------------------------------------------------------------
-            */
-
-                $hasHoliday = count($holidayDates) > 0;
-
-                $holidayTitle = null;
-
-                if ($hasHoliday) {
-                    $holidayTitle = $holidayDates[0]['title'];
-                }
 
 
                 /*
@@ -3202,7 +3176,6 @@ class PayrollController extends Controller
             */
 
                 $paidLeaveRecords[] = [
-
                     'leave_id' =>
                     $leave->id,
 
@@ -3236,21 +3209,6 @@ class PayrollController extends Controller
 
                     'status' =>
                     $leave->status,
-
-                    /*
-                |--------------------------------------------------------------------------
-                | HOLIDAY DETAILS
-                |--------------------------------------------------------------------------
-                */
-
-                    'holiday' =>
-                    $hasHoliday,
-
-                    'holiday_title' =>
-                    $holidayTitle,
-
-                    'holidays' =>
-                    $holidayDates,
                 ];
             }
 
@@ -3528,6 +3486,16 @@ class PayrollController extends Controller
 
                     'paid_leaves' =>
                     $paidLeaveRecords,
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | HOLIDAYS
+                |--------------------------------------------------------------------------
+                */
+
+                    'holidays' =>
+                    $holidayRecords,
 
 
                     /*
