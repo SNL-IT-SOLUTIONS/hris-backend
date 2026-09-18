@@ -2743,11 +2743,18 @@ class PayrollController extends Controller
                 'deductions.benefitType',
                 'deductions.loan.loanType',
                 'allowances.allowanceType',
-                'payrollPeriod'
+                'payrollPeriod',
             ])
                 ->where('is_archived', false)
                 ->findOrFail($recordId);
 
+            /*
+        |--------------------------------------------------------------------------
+        | Payroll Period
+        |--------------------------------------------------------------------------
+        */
+
+            $payrollPeriod = $record->payrollPeriod;
 
             /*
         |--------------------------------------------------------------------------
@@ -2757,16 +2764,17 @@ class PayrollController extends Controller
 
             $holidays = collect();
 
-            if ($record->payrollPeriod) {
+            if ($payrollPeriod) {
 
-                $holidays = Holiday::whereBetween('holiday_date', [
-                    $record->payrollPeriod->cutoff_start_date,
-                    $record->payrollPeriod->cutoff_end_date,
-                ])
+                $holidays = Holiday::with('holidayType')
+                    ->whereBetween('holiday_date', [
+                        $payrollPeriod->cutoff_start_date,
+                        $payrollPeriod->cutoff_end_date,
+                    ])
+                    ->where('is_archived', 0)
                     ->orderBy('holiday_date', 'asc')
                     ->get();
             }
-
 
             /*
         |--------------------------------------------------------------------------
@@ -2784,11 +2792,17 @@ class PayrollController extends Controller
                     'holiday_name' => $holiday->holiday_name
                         ?? 'Holiday',
 
-                    'holiday_type' => $holiday->holiday_type
+                    'holiday_type' => $holiday->holidayType->type_name
+                        ?? $holiday->holiday_type
                         ?? 'Holiday',
+
+                    'country' => $holiday->holidayType->country
+                        ?? null,
+
+                    'rate' => $holiday->holidayType->rate
+                        ?? null,
                 ];
             })->values();
-
 
             /*
         |--------------------------------------------------------------------------
@@ -2796,19 +2810,19 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         */
 
-            $allowances = $record->allowances->map(function ($a) {
+            $allowances = $record->allowances->map(function ($allowance) {
 
                 return [
-                    'allowance_type' => $a->allowanceType->type_name
+                    'allowance_type' =>
+                    $allowance->allowanceType->type_name
                         ?? 'Other Allowance',
 
                     'allowance_amount' => number_format(
-                        $a->allowance_amount,
+                        $allowance->amount ?? 0,
                         2
                     ),
                 ];
-            });
-
+            })->values();
 
             /*
         |--------------------------------------------------------------------------
@@ -2816,45 +2830,119 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         */
 
-            $deductions = $record->deductions->map(function ($ded) {
+            $deductions = $record->deductions->map(function ($deduction) {
 
-                if ($ded->loan_id) {
+                /*
+            |--------------------------------------------------------------------------
+            | Loan Deduction
+            |--------------------------------------------------------------------------
+            */
+
+                if ($deduction->loan_id) {
 
                     return [
                         'deduction_type' => 'Loan Payment',
 
-                        'loan_name' => $ded->loan->loanType->type_name
+                        'loan_name' =>
+                        $deduction->loan->loanType->type_name
                             ?? 'Loan',
 
                         'deduction_amount' => number_format(
-                            $ded->deduction_amount,
-                            2
-                        ),
-                    ];
-                } elseif ($ded->benefit_type_id) {
-
-                    return [
-                        'deduction_type' => $ded->benefitType->benefit_name
-                            ?? 'Other Deduction',
-
-                        'deduction_amount' => number_format(
-                            $ded->deduction_amount,
+                            $deduction->amount ?? 0,
                             2
                         ),
                     ];
                 }
 
+                /*
+            |--------------------------------------------------------------------------
+            | Benefit Deduction
+            |--------------------------------------------------------------------------
+            */
+
+                if ($deduction->benefit_type_id) {
+
+                    return [
+                        'deduction_type' =>
+                        $deduction->benefitType->benefit_name
+                            ?? 'Other Deduction',
+
+                        'deduction_amount' => number_format(
+                            $deduction->amount ?? 0,
+                            2
+                        ),
+                    ];
+                }
+
+                /*
+            |--------------------------------------------------------------------------
+            | Other Deduction
+            |--------------------------------------------------------------------------
+            */
+
                 return [
-                    'deduction_type' => $ded->deduction_name
+                    'deduction_type' =>
+                    $deduction->deduction_name
                         ?? 'Other Deduction',
 
                     'deduction_amount' => number_format(
-                        $ded->deduction_amount,
+                        $deduction->amount ?? 0,
                         2
                     ),
                 ];
-            });
+            })->values();
 
+            /*
+        |--------------------------------------------------------------------------
+        | Base Pay
+        |--------------------------------------------------------------------------
+        |
+        | days_worked is already calculated by createPayrollPeriod()
+        | using:
+        |
+        | normal worked days
+        | + paid leave days
+        | + PH holiday worked days
+        |
+        */
+
+            $basePay =
+                (float) $record->daily_rate
+                * (float) $record->days_worked;
+
+            /*
+        |--------------------------------------------------------------------------
+        | Employee Name
+        |--------------------------------------------------------------------------
+        */
+
+            $employeeName = $record->employee
+                ? trim(
+                    ($record->employee->first_name ?? '') .
+                        ' ' .
+                        ($record->employee->last_name ?? '')
+                )
+                : 'N/A';
+
+            /*
+        |--------------------------------------------------------------------------
+        | Payroll Period Range
+        |--------------------------------------------------------------------------
+        */
+
+            $periodRange = 'N/A';
+
+            if ($payrollPeriod) {
+
+                $periodRange =
+                    Carbon::parse(
+                        $payrollPeriod->cutoff_start_date
+                    )->format('F d, Y')
+                    . ' - ' .
+                    Carbon::parse(
+                        $payrollPeriod->cutoff_end_date
+                    )->format('F d, Y');
+            }
 
             /*
         |--------------------------------------------------------------------------
@@ -2866,6 +2954,8 @@ class PayrollController extends Controller
 
                 'isSuccess' => true,
 
+                'message' => 'Payslip generated successfully.',
+
                 'payslip' => [
 
                     /*
@@ -2874,9 +2964,7 @@ class PayrollController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                    'employee_name' =>
-                    "{$record->employee->first_name} {$record->employee->last_name}",
-
+                    'employee_name' => $employeeName,
 
                     /*
                 |--------------------------------------------------------------------------
@@ -2885,12 +2973,10 @@ class PayrollController extends Controller
                 */
 
                     'period' =>
-                    $record->payrollPeriod->period_name ?? 'N/A',
+                    $payrollPeriod->period_name
+                        ?? 'N/A',
 
-                    'period_range' => ($record->payrollPeriod->cutoff_start_date ?? '') .
-                        ' - ' .
-                        ($record->payrollPeriod->cutoff_end_date ?? ''),
-
+                    'period_range' => $periodRange,
 
                     /*
                 |--------------------------------------------------------------------------
@@ -2898,25 +2984,26 @@ class PayrollController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                    'remarks' => $record->remarks,
+                    'remarks' =>
+                    $record->remarks,
 
                     'daily_rate' => number_format(
-                        $record->daily_rate,
+                        $record->daily_rate ?? 0,
                         2
                     ),
 
                     'days_worked' => number_format(
-                        $record->days_worked,
+                        $record->days_worked ?? 0,
                         2
                     ),
 
                     'overtime_hours' => number_format(
-                        $record->overtime_hours,
+                        $record->overtime_hours ?? 0,
                         2
                     ),
 
-                    'absences' => $record->absences,
-
+                    'absences' =>
+                    $record->absences ?? 0,
 
                     /*
                 |--------------------------------------------------------------------------
@@ -2925,20 +3012,19 @@ class PayrollController extends Controller
                 */
 
                     'base_pay' => number_format(
-                        $record->daily_rate * $record->days_worked,
+                        $basePay,
                         2
                     ),
 
                     'gross_base' => number_format(
-                        $record->gross_base,
+                        $record->gross_base ?? 0,
                         2
                     ),
 
                     'gross_pay' => number_format(
-                        $record->gross_pay,
+                        $record->gross_pay ?? 0,
                         2
                     ),
-
 
                     /*
                 |--------------------------------------------------------------------------
@@ -2951,17 +3037,17 @@ class PayrollController extends Controller
                         2
                     ),
 
-
                     /*
                 |--------------------------------------------------------------------------
                 | Holidays
                 |--------------------------------------------------------------------------
                 */
 
-                    'holidays' => $holidayData,
+                    'holidays' =>
+                    $holidayData,
 
-                    'total_holidays' => $holidayData->count(),
-
+                    'total_holidays' =>
+                    $holidayData->count(),
 
                     /*
                 |--------------------------------------------------------------------------
@@ -2969,13 +3055,13 @@ class PayrollController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                    'allowances' => $allowances,
+                    'allowances' =>
+                    $allowances,
 
                     'total_allowances' => number_format(
                         $record->total_allowances ?? 0,
                         2
                     ),
-
 
                     /*
                 |--------------------------------------------------------------------------
@@ -2983,7 +3069,8 @@ class PayrollController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                    'deductions' => $deductions,
+                    'deductions' =>
+                    $deductions,
 
                     'total_loan_deductions' => number_format(
                         $record->total_loan_deductions ?? 0,
@@ -2996,10 +3083,9 @@ class PayrollController extends Controller
                     ),
 
                     'total_deductions' => number_format(
-                        $record->total_deductions,
+                        $record->total_deductions ?? 0,
                         2
                     ),
-
 
                     /*
                 |--------------------------------------------------------------------------
@@ -3008,10 +3094,9 @@ class PayrollController extends Controller
                 */
 
                     'net_pay' => number_format(
-                        $record->net_pay,
+                        $record->net_pay ?? 0,
                         2
                     ),
-
 
                     /*
                 |--------------------------------------------------------------------------
@@ -3025,24 +3110,31 @@ class PayrollController extends Controller
                         )
                         : null,
                 ],
-            ]);
+            ], 200);
         } catch (\Exception $e) {
 
             Log::error(
-                'Error generating payslip: ' . $e->getMessage()
+                'Error generating payslip: ' .
+                    $e->getMessage(),
+                [
+                    'payroll_record_id' => $recordId,
+                    'trace' => $e->getTraceAsString(),
+                ]
             );
 
             return response()->json([
-
                 'isSuccess' => false,
 
-                'message' => 'Failed to generate payslip.',
+                'message' =>
+                'Failed to generate payslip.',
 
-                'error' => $e->getMessage(),
-
+                'error' =>
+                $e->getMessage(),
             ], 500);
         }
     }
+
+
 
 
 
