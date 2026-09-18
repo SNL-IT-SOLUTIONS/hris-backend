@@ -2850,7 +2850,7 @@ class PayrollController extends Controller
         */
 
             $paidLeaves = DB::table('leaves')
-                ->leftJoin(
+                ->join(
                     'leave_types',
                     'leaves.leave_type_id',
                     '=',
@@ -2872,70 +2872,49 @@ class PayrollController extends Controller
                     'leaves.is_archived',
                     0
                 )
-                ->where(function ($query) use (
-                    $cutoffStart,
-                    $cutoffEnd
-                ) {
-
-                    /*
-                |--------------------------------------------------------------------------
-                | LEAVE STARTS INSIDE CUTOFF
-                |--------------------------------------------------------------------------
-                */
+                ->where(
+                    'leave_types.is_archived',
+                    0
+                )
+                ->where(function ($query) use ($record) {
 
                     $query->whereBetween(
                         'leaves.start_date',
                         [
-                            $cutoffStart->toDateString(),
-                            $cutoffEnd->toDateString(),
+                            $record->payrollPeriod->cutoff_start_date,
+                            $record->payrollPeriod->cutoff_end_date,
                         ]
                     )
-
-                        /*
-                |--------------------------------------------------------------------------
-                | LEAVE ENDS INSIDE CUTOFF
-                |--------------------------------------------------------------------------
-                */
-
                         ->orWhereBetween(
                             'leaves.end_date',
                             [
-                                $cutoffStart->toDateString(),
-                                $cutoffEnd->toDateString(),
+                                $record->payrollPeriod->cutoff_start_date,
+                                $record->payrollPeriod->cutoff_end_date,
                             ]
                         )
-
-                        /*
-                |--------------------------------------------------------------------------
-                | LEAVE COMPLETELY COVERS CUTOFF
-                |--------------------------------------------------------------------------
-                */
-
-                        ->orWhere(function ($q) use (
-                            $cutoffStart,
-                            $cutoffEnd
-                        ) {
+                        ->orWhere(function ($q) use ($record) {
 
                             $q->where(
                                 'leaves.start_date',
                                 '<=',
-                                $cutoffStart->toDateString()
+                                $record->payrollPeriod->cutoff_start_date
                             )
                                 ->where(
                                     'leaves.end_date',
                                     '>=',
-                                    $cutoffEnd->toDateString()
+                                    $record->payrollPeriod->cutoff_end_date
                                 );
                         });
                 })
                 ->select(
                     'leaves.id',
                     'leaves.leave_type_id',
+                    'leave_types.leave_name',
                     'leaves.start_date',
                     'leaves.end_date',
                     'leaves.total_days',
                     'leaves.reason',
-                    'leave_types.leave_name'
+                    'leaves.is_paid'
                 )
                 ->get();
 
