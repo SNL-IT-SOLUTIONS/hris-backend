@@ -1266,14 +1266,6 @@ class PayrollController extends Controller
 
 
 
-
-
-
-
-
-
-
-
     /**
      * Get list of active employees for payroll generation
      */
@@ -2258,6 +2250,8 @@ class PayrollController extends Controller
 
 
 
+
+
     /**
      *  Get individual employee payslip
      */
@@ -3137,6 +3131,31 @@ class PayrollController extends Controller
                 'current_page' => $pays->currentPage(),
                 'last_page' => $pays->lastPage(),
             ],
+        ]);
+    }
+
+    public function archivePayrollPeriod($id)
+    {
+        $period = PayrollPeriod::find($id);
+
+        if (!$period) {
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Payroll period not found.',
+            ], 404);
+        }
+
+        // Archive the payroll period
+        $period->update(['is_archived' => true]);
+
+        // Archive all payroll records under this period
+        PayrollRecord::where('payroll_period_id', $id)
+            ->update(['is_archived' => true]);
+
+        return response()->json([
+            'isSuccess' => true,
+            'message'   => 'Payroll period and related records archived successfully.',
+            'data'      => $period->load('payrollRecords:id,payroll_period_id,is_archived'),
         ]);
     }
 }
