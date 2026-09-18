@@ -2734,19 +2734,15 @@ class PayrollController extends Controller
     /**
      *  Get individual employee payslip
      */
-
     public function getPayslip($recordId)
     {
         try {
 
-            /*
-        |--------------------------------------------------------------------------
-        | Get Payroll Record
-        |--------------------------------------------------------------------------
-        */
-
             $record = PayrollRecord::with([
                 'employee',
+                'deductions.benefitType',
+                'deductions.loan.loanType',
+                'allowances.allowanceType',
                 'payrollPeriod',
             ])
                 ->where('is_archived', false)
@@ -2793,57 +2789,20 @@ class PayrollController extends Controller
                         $holiday->holiday_date
                     )->format('F d, Y'),
 
-                    'holiday_name' =>
-                    $holiday->holiday_name
+                    'holiday_name' => $holiday->holiday_name
                         ?? 'Holiday',
 
-                    'holiday_type' =>
-                    $holiday->holidayType->type_name
+                    'holiday_type' => $holiday->holidayType->type_name
                         ?? $holiday->holiday_type
                         ?? 'Holiday',
 
-                    'country' =>
-                    $holiday->holidayType->country
+                    'country' => $holiday->holidayType->country
                         ?? null,
 
-                    'rate' =>
-                    $holiday->holidayType->rate
+                    'rate' => $holiday->holidayType->rate
                         ?? null,
                 ];
             })->values();
-
-            /*
-        |--------------------------------------------------------------------------
-        | Get Payroll Allowances DIRECTLY FROM DATABASE
-        |--------------------------------------------------------------------------
-        |
-        | Actual table:
-        | payroll_allowances
-        |
-        | Actual amount column:
-        | allowance_amount
-        |
-        */
-
-            $allowanceRows = DB::table('payroll_allowances')
-                ->leftJoin(
-                    'allowance_types',
-                    'payroll_allowances.allowance_type_id',
-                    '=',
-                    'allowance_types.id'
-                )
-                ->where(
-                    'payroll_allowances.payroll_record_id',
-                    $record->id
-                )
-                ->select(
-                    'payroll_allowances.id',
-                    'payroll_allowances.allowance_type_id',
-                    'payroll_allowances.allowance_amount',
-                    'allowance_types.type_name'
-                )
-                ->orderBy('payroll_allowances.id')
-                ->get();
 
             /*
         |--------------------------------------------------------------------------
@@ -2851,15 +2810,15 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         */
 
-            $allowances = $allowanceRows->map(function ($allowance) {
+            $allowances = $record->allowances->map(function ($allowance) {
 
                 return [
                     'allowance_type' =>
-                    $allowance->type_name
+                    $allowance->allowanceType->type_name
                         ?? 'Other Allowance',
 
                     'allowance_amount' => number_format(
-                        (float) $allowance->allowance_amount,
+                        $allowance->amount ?? 0,
                         2
                     ),
                 ];
@@ -2867,46 +2826,11 @@ class PayrollController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Get Payroll Deductions DIRECTLY FROM DATABASE
-        |--------------------------------------------------------------------------
-        |
-        | Actual table:
-        | payroll_deductions
-        |
-        | Actual amount column:
-        | deduction_amount
-        |
-        */
-
-            $deductionRows = DB::table('payroll_deductions')
-                ->leftJoin(
-                    'benefit_types',
-                    'payroll_deductions.benefit_type_id',
-                    '=',
-                    'benefit_types.id'
-                )
-                ->where(
-                    'payroll_deductions.payroll_record_id',
-                    $record->id
-                )
-                ->select(
-                    'payroll_deductions.id',
-                    'payroll_deductions.benefit_type_id',
-                    'payroll_deductions.loan_id',
-                    'payroll_deductions.deduction_name',
-                    'payroll_deductions.deduction_amount',
-                    'benefit_types.benefit_name'
-                )
-                ->orderBy('payroll_deductions.id')
-                ->get();
-
-            /*
-        |--------------------------------------------------------------------------
         | Map Deductions
         |--------------------------------------------------------------------------
         */
 
-            $deductions = $deductionRows->map(function ($deduction) {
+            $deductions = $record->deductions->map(function ($deduction) {
 
                 /*
             |--------------------------------------------------------------------------
@@ -2916,30 +2840,15 @@ class PayrollController extends Controller
 
                 if ($deduction->loan_id) {
 
-                    $loanName = 'Loan';
-
-                    $loan = Loan::with('loanType')
-                        ->find($deduction->loan_id);
-
-                    if (
-                        $loan &&
-                        $loan->loanType
-                    ) {
-
-                        $loanName =
-                            $loan->loanType->type_name
-                            ?? 'Loan';
-                    }
-
                     return [
-                        'deduction_type' =>
-                        'Loan Payment',
+                        'deduction_type' => 'Loan Payment',
 
                         'loan_name' =>
-                        $loanName,
+                        $deduction->loan->loanType->type_name
+                            ?? 'Loan',
 
                         'deduction_amount' => number_format(
-                            (float) $deduction->deduction_amount,
+                            $deduction->amount ?? 0,
                             2
                         ),
                     ];
@@ -2955,11 +2864,11 @@ class PayrollController extends Controller
 
                     return [
                         'deduction_type' =>
-                        $deduction->benefit_name
+                        $deduction->benefitType->benefit_name
                             ?? 'Other Deduction',
 
                         'deduction_amount' => number_format(
-                            (float) $deduction->deduction_amount,
+                            $deduction->amount ?? 0,
                             2
                         ),
                     ];
@@ -2977,7 +2886,7 @@ class PayrollController extends Controller
                         ?? 'Other Deduction',
 
                     'deduction_amount' => number_format(
-                        (float) $deduction->deduction_amount,
+                        $deduction->amount ?? 0,
                         2
                     ),
                 ];
@@ -2985,20 +2894,35 @@ class PayrollController extends Controller
 
             /*
         |--------------------------------------------------------------------------
+        | Base Pay
+        |--------------------------------------------------------------------------
+        |
+        | days_worked is already calculated by createPayrollPeriod()
+        | using:
+        |
+        | normal worked days
+        | + paid leave days
+        | + PH holiday worked days
+        |
+        */
+
+            $basePay =
+                (float) $record->daily_rate
+                * (float) $record->days_worked;
+
+            /*
+        |--------------------------------------------------------------------------
         | Employee Name
         |--------------------------------------------------------------------------
         */
 
-            $employeeName = 'N/A';
-
-            if ($record->employee) {
-
-                $employeeName = trim(
+            $employeeName = $record->employee
+                ? trim(
                     ($record->employee->first_name ?? '') .
                         ' ' .
                         ($record->employee->last_name ?? '')
-                );
-            }
+                )
+                : 'N/A';
 
             /*
         |--------------------------------------------------------------------------
@@ -3022,16 +2946,6 @@ class PayrollController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Base Pay
-        |--------------------------------------------------------------------------
-        */
-
-            $basePay =
-                (float) ($record->daily_rate ?? 0)
-                * (float) ($record->days_worked ?? 0);
-
-            /*
-        |--------------------------------------------------------------------------
         | Return Payslip
         |--------------------------------------------------------------------------
         */
@@ -3040,8 +2954,7 @@ class PayrollController extends Controller
 
                 'isSuccess' => true,
 
-                'message' =>
-                'Payslip generated successfully.',
+                'message' => 'Payslip generated successfully.',
 
                 'payslip' => [
 
@@ -3051,8 +2964,7 @@ class PayrollController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                    'employee_name' =>
-                    $employeeName,
+                    'employee_name' => $employeeName,
 
                     /*
                 |--------------------------------------------------------------------------
@@ -3064,8 +2976,7 @@ class PayrollController extends Controller
                     $payrollPeriod->period_name
                         ?? 'N/A',
 
-                    'period_range' =>
-                    $periodRange,
+                    'period_range' => $periodRange,
 
                     /*
                 |--------------------------------------------------------------------------
@@ -3206,16 +3117,12 @@ class PayrollController extends Controller
                 'Error generating payslip: ' .
                     $e->getMessage(),
                 [
-                    'payroll_record_id' =>
-                    $recordId,
-
-                    'trace' =>
-                    $e->getTraceAsString(),
+                    'payroll_record_id' => $recordId,
+                    'trace' => $e->getTraceAsString(),
                 ]
             );
 
             return response()->json([
-
                 'isSuccess' => false,
 
                 'message' =>
@@ -3223,12 +3130,9 @@ class PayrollController extends Controller
 
                 'error' =>
                 $e->getMessage(),
-
             ], 500);
         }
     }
-
-
 
 
 
