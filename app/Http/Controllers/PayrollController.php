@@ -2761,6 +2761,12 @@ class PayrollController extends Controller
     {
         try {
 
+            /*
+        |--------------------------------------------------------------------------
+        | GET PAYROLL RECORD
+        |--------------------------------------------------------------------------
+        */
+
             $record = PayrollRecord::with([
                 'employee',
                 'deductions.benefitType',
@@ -2768,204 +2774,596 @@ class PayrollController extends Controller
                 'allowances.allowanceType',
                 'payrollPeriod',
             ])
-                ->where('is_archived', false)
-                ->findOrFail($recordId);
+                ->where('id', $recordId)
+                ->where('is_archived', 0)
+                ->first();
 
-
-            /*
-        |--------------------------------------------------------------------------
-        | Payroll Period
-        |--------------------------------------------------------------------------
-        */
-
-            $payrollPeriod = $record->payrollPeriod;
-
-
-            /*
-        |--------------------------------------------------------------------------
-        | Get Holidays Within Payroll Period
-        |--------------------------------------------------------------------------
-        */
-
-            $holidays = collect();
-
-            if ($payrollPeriod) {
-
-                $holidays = Holiday::with('holidayType')
-                    ->whereBetween('holiday_date', [
-                        $payrollPeriod->cutoff_start_date,
-                        $payrollPeriod->cutoff_end_date,
-                    ])
-                    ->where('is_archived', 0)
-                    ->orderBy('holiday_date', 'asc')
-                    ->get();
+            if (!$record) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Payroll record not found.',
+                ], 404);
             }
 
 
             /*
         |--------------------------------------------------------------------------
-        | Map Holidays
+        | PAYROLL PERIOD
         |--------------------------------------------------------------------------
         */
 
-            $holidayData = $holidays->map(function ($holiday) {
+            $payrollPeriod = $record->payrollPeriod;
 
-                return [
-                    'holiday_date' => Carbon::parse(
-                        $holiday->holiday_date
-                    )->format('F d, Y'),
-
-                    'holiday_name' =>
-                    $holiday->holiday_name
-                        ?? 'Holiday',
-
-                    'holiday_type' =>
-                    $holiday->holidayType->type_name
-                        ?? $holiday->holiday_type
-                        ?? 'Holiday',
-
-                    'country' =>
-                    $holiday->holidayType->country
-                        ?? null,
-
-                    'rate' =>
-                    $holiday->holidayType->rate
-                        ?? null,
-                ];
-            })->values();
+            if (!$payrollPeriod) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Payroll period not found.',
+                ], 404);
+            }
 
 
             /*
         |--------------------------------------------------------------------------
-        | Map Allowances
+        | CUTOFF DATES
         |--------------------------------------------------------------------------
         */
 
-            $allowances = $record->allowances->map(function ($allowance) {
+            $cutoffStart = Carbon::parse(
+                $payrollPeriod->cutoff_start_date
+            )->startOfDay();
 
-                return [
-                    'allowance_type' =>
-                    $allowance->allowanceType->type_name
-                        ?? 'Other Allowance',
+            $cutoffEnd = Carbon::parse(
+                $payrollPeriod->cutoff_end_date
+            )->endOfDay();
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | GET HOLIDAYS WITHIN CUTOFF
+        |--------------------------------------------------------------------------
+        */
+
+            $holidays = Holiday::with('holidayType')
+                ->whereBetween('holiday_date', [
+                    $cutoffStart->toDateString(),
+                    $cutoffEnd->toDateString(),
+                ])
+                ->where('is_archived', 0)
+                ->get()
+                ->keyBy(function ($holiday) {
+                    return Carbon::parse(
+                        $holiday->holiday_date
+                    )->toDateString();
+                });
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | GET PAID APPROVED LEAVES
+        |--------------------------------------------------------------------------
+        |
+        | Only:
+        | - Approved
+        | - Paid
+        | - Not archived
+        |
+        */
+
+            $paidLeaves = DB::table('leaves')
+                ->leftJoin(
+                    'leave_types',
+                    'leaves.leave_type_id',
+                    '=',
+                    'leave_types.id'
+                )
+                ->where(
+                    'leaves.employee_id',
+                    $record->employee_id
+                )
+                ->where(
+                    'leaves.status',
+                    'Approved'
+                )
+                ->where(
+                    'leaves.is_paid',
+                    1
+                )
+                ->where(
+                    'leaves.is_archived',
+                    0
+                )
+                ->where(function ($query) use (
+                    $cutoffStart,
+                    $cutoffEnd
+                ) {
 
                     /*
                 |--------------------------------------------------------------------------
-                | FIX:
-                | payroll_allowances uses allowance_amount
+                | LEAVE STARTS INSIDE CUTOFF
                 |--------------------------------------------------------------------------
                 */
 
-                    'allowance_amount' => number_format(
-                        $allowance->allowance_amount ?? 0,
-                        2
-                    ),
-                ];
-            })->values();
+                    $query->whereBetween(
+                        'leaves.start_date',
+                        [
+                            $cutoffStart->toDateString(),
+                            $cutoffEnd->toDateString(),
+                        ]
+                    )
+
+                        /*
+                |--------------------------------------------------------------------------
+                | LEAVE ENDS INSIDE CUTOFF
+                |--------------------------------------------------------------------------
+                */
+
+                        ->orWhereBetween(
+                            'leaves.end_date',
+                            [
+                                $cutoffStart->toDateString(),
+                                $cutoffEnd->toDateString(),
+                            ]
+                        )
+
+                        /*
+                |--------------------------------------------------------------------------
+                | LEAVE COMPLETELY COVERS CUTOFF
+                |--------------------------------------------------------------------------
+                */
+
+                        ->orWhere(function ($q) use (
+                            $cutoffStart,
+                            $cutoffEnd
+                        ) {
+
+                            $q->where(
+                                'leaves.start_date',
+                                '<=',
+                                $cutoffStart->toDateString()
+                            )
+                                ->where(
+                                    'leaves.end_date',
+                                    '>=',
+                                    $cutoffEnd->toDateString()
+                                );
+                        });
+                })
+                ->select(
+                    'leaves.id',
+                    'leaves.leave_type_id',
+                    'leaves.start_date',
+                    'leaves.end_date',
+                    'leaves.total_days',
+                    'leaves.reason',
+                    'leave_types.leave_name'
+                )
+                ->get();
 
 
             /*
         |--------------------------------------------------------------------------
-        | Map Deductions
+        | GET ATTENDANCE DATES
+        |--------------------------------------------------------------------------
+        |
+        | This is used so that if attendance and leave happen on the same
+        | date, attendance remains the source of truth.
+        |
+        */
+
+            $attendanceRecords = Attendance::where(
+                'employee_id',
+                $record->employee_id
+            )
+                ->whereIn('status', [
+                    'Present',
+                    'Late',
+                ])
+                ->where(function ($query) use (
+                    $cutoffStart,
+                    $cutoffEnd
+                ) {
+
+                    $query->whereBetween(
+                        DB::raw('DATE(clock_in)'),
+                        [
+                            $cutoffStart->toDateString(),
+                            $cutoffEnd->toDateString(),
+                        ]
+                    )
+                        ->orWhereBetween(
+                            DB::raw('DATE(clock_out)'),
+                            [
+                                $cutoffStart->toDateString(),
+                                $cutoffEnd->toDateString(),
+                            ]
+                        );
+                })
+                ->get()
+                ->unique('id')
+                ->values();
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | BUILD ATTENDANCE DATES
         |--------------------------------------------------------------------------
         */
 
-            $deductions = $record->deductions->map(function ($deduction) {
+            $attendanceDates = collect();
+
+            foreach ($attendanceRecords as $attendance) {
+
+                $attendanceDateValue =
+                    $attendance->clock_in
+                    ?? $attendance->clock_out;
+
+                if (!$attendanceDateValue) {
+                    continue;
+                }
+
+                $attendanceDate = Carbon::parse(
+                    $attendanceDateValue
+                )->startOfDay();
+
 
                 /*
             |--------------------------------------------------------------------------
-            | Loan Deduction
+            | CUTOFF SAFETY
             |--------------------------------------------------------------------------
             */
 
-                if ($deduction->loan_id) {
+                if (
+                    $attendanceDate->lt(
+                        $cutoffStart->copy()->startOfDay()
+                    )
+                ) {
+                    continue;
+                }
 
-                    return [
-                        'deduction_type' => 'Loan Payment',
-
-                        'loan_name' =>
-                        $deduction->loan->loanType->type_name
-                            ?? 'Loan',
-
-                        /*
-                    |--------------------------------------------------------------------------
-                    | FIX:
-                    | payroll_deductions uses deduction_amount
-                    |--------------------------------------------------------------------------
-                    */
-
-                        'deduction_amount' => number_format(
-                            $deduction->deduction_amount ?? 0,
-                            2
-                        ),
-                    ];
+                if (
+                    $attendanceDate->gt(
+                        $cutoffEnd->copy()->startOfDay()
+                    )
+                ) {
+                    continue;
                 }
 
 
                 /*
             |--------------------------------------------------------------------------
-            | Benefit Deduction
+            | IGNORE WEEKENDS
             |--------------------------------------------------------------------------
             */
 
-                if ($deduction->benefit_type_id) {
+                if ($attendanceDate->isWeekend()) {
+                    continue;
+                }
+
+                $attendanceDates->push(
+                    $attendanceDate->toDateString()
+                );
+            }
+
+            $attendanceDates = $attendanceDates
+                ->unique()
+                ->values();
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | BUILD PAID LEAVE RECORDS
+        |--------------------------------------------------------------------------
+        */
+
+            $paidLeaveRecords = [];
+
+            $totalPaidLeaveDays = 0;
+            $totalPaidLeaveAmount = 0;
+
+            foreach ($paidLeaves as $leave) {
+
+                $leaveStart = Carbon::parse(
+                    $leave->start_date
+                )->startOfDay();
+
+                $leaveEnd = Carbon::parse(
+                    $leave->end_date
+                )->startOfDay();
+
+
+                /*
+            |--------------------------------------------------------------------------
+            | LIMIT LEAVE TO CUTOFF
+            |--------------------------------------------------------------------------
+            */
+
+                if (
+                    $leaveStart->lt(
+                        $cutoffStart->copy()->startOfDay()
+                    )
+                ) {
+                    $leaveStart = $cutoffStart
+                        ->copy()
+                        ->startOfDay();
+                }
+
+                if (
+                    $leaveEnd->gt(
+                        $cutoffEnd->copy()->startOfDay()
+                    )
+                ) {
+                    $leaveEnd = $cutoffEnd
+                        ->copy()
+                        ->startOfDay();
+                }
+
+                if ($leaveStart->gt($leaveEnd)) {
+                    continue;
+                }
+
+
+                /*
+            |--------------------------------------------------------------------------
+            | COUNT PAID LEAVE DAYS
+            |--------------------------------------------------------------------------
+            |
+            | Same rules as payroll:
+            | - No weekends
+            | - No holidays
+            | - Attendance takes priority
+            |
+            */
+
+                $leaveDays = 0;
+
+                $leavePeriod = CarbonPeriod::create(
+                    $leaveStart,
+                    $leaveEnd
+                );
+
+                foreach ($leavePeriod as $leaveDate) {
+
+                    /*
+                |--------------------------------------------------------------------------
+                | WEEKENDS
+                |--------------------------------------------------------------------------
+                */
+
+                    if ($leaveDate->isWeekend()) {
+                        continue;
+                    }
+
+                    $dateString = $leaveDate->toDateString();
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | HOLIDAYS ARE NOT LEAVE DAYS
+                |--------------------------------------------------------------------------
+                */
+
+                    if ($holidays->has($dateString)) {
+                        continue;
+                    }
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | ATTENDANCE TAKES PRIORITY
+                |--------------------------------------------------------------------------
+                */
+
+                    if (
+                        $attendanceDates->contains(
+                            $dateString
+                        )
+                    ) {
+                        continue;
+                    }
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | COUNT PAID LEAVE DAY
+                |--------------------------------------------------------------------------
+                */
+
+                    $leaveDays++;
+                }
+
+                if ($leaveDays <= 0) {
+                    continue;
+                }
+
+
+                /*
+            |--------------------------------------------------------------------------
+            | LEAVE PAY
+            |--------------------------------------------------------------------------
+            */
+
+                $leaveAmount =
+                    (float) $record->daily_rate
+                    * $leaveDays;
+
+
+                $totalPaidLeaveDays += $leaveDays;
+
+                $totalPaidLeaveAmount += $leaveAmount;
+
+
+                /*
+            |--------------------------------------------------------------------------
+            | SAVE LEAVE FOR PAYSLIP
+            |--------------------------------------------------------------------------
+            */
+
+                $paidLeaveRecords[] = [
+                    'leave_type' =>
+                    $leave->leave_name
+                        ?? 'Paid Leave',
+
+                    'start_date' =>
+                    $leaveStart->toDateString(),
+
+                    'end_date' =>
+                    $leaveEnd->toDateString(),
+
+                    'days' =>
+                    $leaveDays,
+
+                    'amount' =>
+                    number_format(
+                        $leaveAmount,
+                        2
+                    ),
+
+                    'reason' =>
+                    $leave->reason,
+                ];
+            }
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | ALLOWANCES
+        |--------------------------------------------------------------------------
+        */
+
+            $allowances = $record->allowances
+                ->map(function ($allowance) {
+
+                    return [
+                        'allowance_type' =>
+                        $allowance->allowanceType->type_name
+                            ?? 'Other Allowance',
+
+                        'allowance_amount' =>
+                        number_format(
+                            $allowance->allowance_amount ?? 0,
+                            2
+                        ),
+                    ];
+                })
+                ->values();
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | DEDUCTIONS
+        |--------------------------------------------------------------------------
+        */
+
+            $deductions = $record->deductions
+                ->map(function ($deduction) {
+
+                    /*
+                |--------------------------------------------------------------------------
+                | LOAN
+                |--------------------------------------------------------------------------
+                */
+
+                    if ($deduction->loan_id) {
+
+                        return [
+                            'deduction_type' =>
+                            'Loan Payment',
+
+                            'loan_name' =>
+                            $deduction->loan->loanType->type_name
+                                ?? 'Loan',
+
+                            'deduction_amount' =>
+                            number_format(
+                                $deduction->deduction_amount ?? 0,
+                                2
+                            ),
+                        ];
+                    }
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | BENEFIT
+                |--------------------------------------------------------------------------
+                */
+
+                    if ($deduction->benefit_type_id) {
+
+                        return [
+                            'deduction_type' =>
+                            $deduction->benefitType->benefit_name
+                                ?? 'Other Deduction',
+
+                            'deduction_amount' =>
+                            number_format(
+                                $deduction->deduction_amount ?? 0,
+                                2
+                            ),
+                        ];
+                    }
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | OTHER DEDUCTION
+                |--------------------------------------------------------------------------
+                */
 
                     return [
                         'deduction_type' =>
-                        $deduction->benefitType->benefit_name
+                        $deduction->deduction_name
                             ?? 'Other Deduction',
 
-                        /*
-                    |--------------------------------------------------------------------------
-                    | FIX:
-                    | payroll_deductions uses deduction_amount
-                    |--------------------------------------------------------------------------
-                    */
-
-                        'deduction_amount' => number_format(
+                        'deduction_amount' =>
+                        number_format(
                             $deduction->deduction_amount ?? 0,
                             2
                         ),
                     ];
-                }
-
-
-                /*
-            |--------------------------------------------------------------------------
-            | Other Deduction
-            |--------------------------------------------------------------------------
-            */
-
-                return [
-                    'deduction_type' =>
-                    $deduction->deduction_name
-                        ?? 'Other Deduction',
-
-                    /*
-                |--------------------------------------------------------------------------
-                | FIX:
-                | payroll_deductions uses deduction_amount
-                |--------------------------------------------------------------------------
-                */
-
-                    'deduction_amount' => number_format(
-                        $deduction->deduction_amount ?? 0,
-                        2
-                    ),
-                ];
-            })->values();
+                })
+                ->values();
 
 
             /*
         |--------------------------------------------------------------------------
-        | Base Pay
+        | EMPLOYEE NAME
+        |--------------------------------------------------------------------------
+        */
+
+            $employee = $record->employee;
+
+            $employeeName = trim(
+                ($employee->first_name ?? '') . ' ' .
+                    ($employee->middle_name ?? '') . ' ' .
+                    ($employee->last_name ?? '')
+            );
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | PERIOD RANGE
+        |--------------------------------------------------------------------------
+        */
+
+            $periodRange =
+                Carbon::parse(
+                    $payrollPeriod->cutoff_start_date
+                )->format('M d, Y')
+                . ' - ' .
+                Carbon::parse(
+                    $payrollPeriod->cutoff_end_date
+                )->format('M d, Y');
+
+
+            /*
+        |--------------------------------------------------------------------------
+        | BASE PAY
         |--------------------------------------------------------------------------
         |
-        | days_worked is already calculated by createPayrollPeriod()
-        | using:
+        | Keep existing payroll logic:
         |
-        | normal worked days
-        | + paid leave days
-        | + PH holiday worked days
+        | daily_rate x days_worked
         |
         */
 
@@ -2976,238 +3374,239 @@ class PayrollController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Employee Name
-        |--------------------------------------------------------------------------
-        */
-
-            $employeeName = $record->employee
-                ? trim(
-                    ($record->employee->first_name ?? '') .
-                        ' ' .
-                        ($record->employee->last_name ?? '')
-                )
-                : 'N/A';
-
-
-            /*
-        |--------------------------------------------------------------------------
-        | Payroll Period Range
-        |--------------------------------------------------------------------------
-        */
-
-            $periodRange = 'N/A';
-
-            if ($payrollPeriod) {
-
-                $periodRange =
-                    Carbon::parse(
-                        $payrollPeriod->cutoff_start_date
-                    )->format('F d, Y')
-                    . ' - ' .
-                    Carbon::parse(
-                        $payrollPeriod->cutoff_end_date
-                    )->format('F d, Y');
-            }
-
-
-            /*
-        |--------------------------------------------------------------------------
-        | Return Payslip
+        | RESPONSE
         |--------------------------------------------------------------------------
         */
 
             return response()->json([
-
                 'isSuccess' => true,
 
                 'message' =>
-                'Payslip generated successfully.',
+                'Payslip retrieved successfully.',
 
-                'payslip' => [
+                'data' => [
 
                     /*
                 |--------------------------------------------------------------------------
-                | Employee
+                | EMPLOYEE
                 |--------------------------------------------------------------------------
                 */
 
-                    'employee_name' =>
-                    $employeeName,
+                    'employee' => [
+                        'id' =>
+                        $employee->id,
+
+                        'employee_id' =>
+                        $employee->employee_id,
+
+                        'name' =>
+                        $employeeName,
+                    ],
 
 
                     /*
                 |--------------------------------------------------------------------------
-                | Payroll Period
+                | PAYROLL PERIOD
                 |--------------------------------------------------------------------------
                 */
 
-                    'period' =>
-                    $payrollPeriod->period_name
-                        ?? 'N/A',
+                    'payroll_period' => [
 
-                    'period_range' =>
-                    $periodRange,
+                        'id' =>
+                        $payrollPeriod->id,
+
+                        'period_name' =>
+                        $payrollPeriod->period_name,
+
+                        'pay_date' =>
+                        $payrollPeriod->pay_date,
+
+                        'cutoff_start_date' =>
+                        $payrollPeriod->cutoff_start_date,
+
+                        'cutoff_end_date' =>
+                        $payrollPeriod->cutoff_end_date,
+
+                        'period_range' =>
+                        $periodRange,
+
+                        'status' =>
+                        $payrollPeriod->status,
+                    ],
 
 
                     /*
                 |--------------------------------------------------------------------------
-                | Basic Payroll Information
+                | PAY
+                |--------------------------------------------------------------------------
+                */
+
+                    'pay' => [
+
+                        'daily_rate' =>
+                        number_format(
+                            $record->daily_rate ?? 0,
+                            2
+                        ),
+
+                        'days_worked' =>
+                        $record->days_worked,
+
+                        'base_pay' =>
+                        number_format(
+                            $basePay,
+                            2
+                        ),
+
+                        'overtime_hours' =>
+                        $record->overtime_hours,
+
+                        'overtime_pay' =>
+                        number_format(
+                            (
+                                (float) $record->overtime_hours
+                                * (
+                                    ((float) $record->daily_rate / 8)
+                                    * 1.25
+                                )
+                            ),
+                            2
+                        ),
+
+                        'holiday_pay' =>
+                        number_format(
+                            $record->holiday_pay ?? 0,
+                            2
+                        ),
+
+                        'night_diff_pay' =>
+                        number_format(
+                            $record->night_diff_pay ?? 0,
+                            2
+                        ),
+                    ],
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | PAID LEAVES
+                |--------------------------------------------------------------------------
+                */
+
+                    'paid_leaves' => $paidLeaveRecords,
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | ALLOWANCES
+                |--------------------------------------------------------------------------
+                */
+
+                    'allowances' => $allowances,
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | DEDUCTIONS
+                |--------------------------------------------------------------------------
+                */
+
+                    'deductions' => $deductions,
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | SUMMARY
+                |--------------------------------------------------------------------------
+                */
+
+                    'summary' => [
+
+                        'gross_base' =>
+                        number_format(
+                            $record->gross_base ?? 0,
+                            2
+                        ),
+
+                        'paid_leave_days' =>
+                        $totalPaidLeaveDays,
+
+                        'paid_leave_amount' =>
+                        number_format(
+                            $totalPaidLeaveAmount,
+                            2
+                        ),
+
+                        'total_allowances' =>
+                        number_format(
+                            $record->total_allowances ?? 0,
+                            2
+                        ),
+
+                        'gross_pay' =>
+                        number_format(
+                            $record->gross_pay ?? 0,
+                            2
+                        ),
+
+                        'total_loan_deductions' =>
+                        number_format(
+                            $record->total_loan_deductions ?? 0,
+                            2
+                        ),
+
+                        'total_late_deductions' =>
+                        number_format(
+                            $record->total_late_deductions ?? 0,
+                            2
+                        ),
+
+                        'total_deductions' =>
+                        number_format(
+                            $record->total_deductions ?? 0,
+                            2
+                        ),
+
+                        'net_pay' =>
+                        number_format(
+                            $record->net_pay ?? 0,
+                            2
+                        ),
+                    ],
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | REMARKS
                 |--------------------------------------------------------------------------
                 */
 
                     'remarks' =>
                     $record->remarks,
-
-                    'daily_rate' => number_format(
-                        $record->daily_rate ?? 0,
-                        2
-                    ),
-
-                    'days_worked' => number_format(
-                        $record->days_worked ?? 0,
-                        2
-                    ),
-
-                    'overtime_hours' => number_format(
-                        $record->overtime_hours ?? 0,
-                        2
-                    ),
-
-                    'absences' =>
-                    $record->absences ?? 0,
-
-
-                    /*
-                |--------------------------------------------------------------------------
-                | Base Pay
-                |--------------------------------------------------------------------------
-                */
-
-                    'base_pay' => number_format(
-                        $basePay,
-                        2
-                    ),
-
-                    'gross_base' => number_format(
-                        $record->gross_base ?? 0,
-                        2
-                    ),
-
-                    'gross_pay' => number_format(
-                        $record->gross_pay ?? 0,
-                        2
-                    ),
-
-
-                    /*
-                |--------------------------------------------------------------------------
-                | Night Differential
-                |--------------------------------------------------------------------------
-                */
-
-                    'night_diff_pay' => number_format(
-                        $record->night_diff_pay ?? 0,
-                        2
-                    ),
-
-
-                    /*
-                |--------------------------------------------------------------------------
-                | Holidays
-                |--------------------------------------------------------------------------
-                */
-
-                    'holidays' =>
-                    $holidayData,
-
-                    'total_holidays' =>
-                    $holidayData->count(),
-
-
-                    /*
-                |--------------------------------------------------------------------------
-                | Allowances
-                |--------------------------------------------------------------------------
-                */
-
-                    'allowances' =>
-                    $allowances,
-
-                    'total_allowances' => number_format(
-                        $record->total_allowances ?? 0,
-                        2
-                    ),
-
-
-                    /*
-                |--------------------------------------------------------------------------
-                | Deductions
-                |--------------------------------------------------------------------------
-                */
-
-                    'deductions' =>
-                    $deductions,
-
-                    'total_loan_deductions' => number_format(
-                        $record->total_loan_deductions ?? 0,
-                        2
-                    ),
-
-                    'total_late_deductions' => number_format(
-                        $record->total_late_deductions ?? 0,
-                        2
-                    ),
-
-                    'total_deductions' => number_format(
-                        $record->total_deductions ?? 0,
-                        2
-                    ),
-
-
-                    /*
-                |--------------------------------------------------------------------------
-                | Net Pay
-                |--------------------------------------------------------------------------
-                */
-
-                    'net_pay' => number_format(
-                        $record->net_pay ?? 0,
-                        2
-                    ),
-
-
-                    /*
-                |--------------------------------------------------------------------------
-                | Generated At
-                |--------------------------------------------------------------------------
-                */
-
-                    'generated_at' =>
-                    $record->created_at
-                        ? $record->created_at->format(
-                            'F d, Y h:i A'
-                        )
-                        : null,
                 ],
 
             ], 200);
         } catch (\Exception $e) {
 
+            /*
+        |--------------------------------------------------------------------------
+        | ERROR
+        |--------------------------------------------------------------------------
+        */
+
             Log::error(
-                'Error generating payslip: ' .
-                    $e->getMessage(),
+                'Get Payslip Error: ' . $e->getMessage(),
                 [
-                    'payroll_record_id' => $recordId,
+                    'record_id' => $recordId,
                     'trace' => $e->getTraceAsString(),
                 ]
             );
 
             return response()->json([
-
                 'isSuccess' => false,
 
                 'message' =>
-                'Failed to generate payslip.',
+                'Failed to retrieve payslip.',
 
                 'error' =>
                 $e->getMessage(),
