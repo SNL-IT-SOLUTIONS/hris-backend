@@ -32,6 +32,7 @@ class PayrollController extends Controller
 
 
 
+
     public function createPayrollPeriod(Request $request)
     {
         $validated = $request->validate([
@@ -39,24 +40,9 @@ class PayrollController extends Controller
             'pay_date' => 'required|date',
             'cutoff_start_date' => 'required|date',
             'cutoff_end_date' => 'required|date|after_or_equal:cutoff_start_date',
-
             'employees' => 'required|array|min:1',
-
             'employees.*.employee_id' => 'required|integer|exists:employees,id',
             'employees.*.remarks' => 'nullable|string',
-
-            /*
-        |--------------------------------------------------------------------------
-        | MANUAL VALUES
-        |--------------------------------------------------------------------------
-        |
-        | If these are supplied, they override the automatically calculated
-        | days worked / absences.
-        |
-        | If omitted or null, the existing automatic attendance calculation
-        | will be used.
-        |
-        */
             'employees.*.days_worked' => 'nullable|numeric|min:0',
             'employees.*.absences' => 'nullable|numeric|min:0',
             'employees.*.overtime_hours' => 'nullable|numeric|min:0',
@@ -120,10 +106,6 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         | CALCULATE TOTAL WORKING DAYS
         |--------------------------------------------------------------------------
-        |
-        | Weekdays only.
-        | All holidays are excluded.
-        |
         */
 
             $cutoffDays = 0;
@@ -193,10 +175,6 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             | DAILY / HOURLY RATE
             |--------------------------------------------------------------------------
-            |
-            | Current system rule:
-            | employee base_salary = daily rate
-            |
             */
 
                 $daily = (float) $employee->base_salary;
@@ -222,7 +200,6 @@ class PayrollController extends Controller
                         $cutoffStart,
                         $cutoffEnd
                     ) {
-
                         $query->whereBetween(
                             DB::raw('DATE(clock_in)'),
                             [
@@ -371,7 +348,6 @@ class PayrollController extends Controller
                                 $cutoffStart,
                                 $cutoffEnd
                             ) {
-
                                 $q->where(
                                     'start_date',
                                     '<=',
@@ -417,7 +393,6 @@ class PayrollController extends Controller
                             $cutoffStart->copy()->startOfDay()
                         )
                     ) {
-
                         $leaveStart = $cutoffStart
                             ->copy()
                             ->startOfDay();
@@ -428,7 +403,6 @@ class PayrollController extends Controller
                             $cutoffEnd->copy()->startOfDay()
                         )
                     ) {
-
                         $leaveEnd = $cutoffEnd
                             ->copy()
                             ->startOfDay();
@@ -527,7 +501,6 @@ class PayrollController extends Controller
 
                 $normalPay = 0;
                 $holidayPay = 0;
-
                 $actualNormalWorkedDays = 0;
                 $phHolidayWorkedDays = 0;
                 $usHolidayPresentDays = 0;
@@ -619,9 +592,7 @@ class PayrollController extends Controller
                                 $holiday->holidayType->country ?? ''
                             ) === 'US'
                         ) {
-
                             $usHolidayPresentDays++;
-
                             continue;
                         }
 
@@ -709,14 +680,6 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             | MANUAL DAYS WORKED / ABSENCES
             |--------------------------------------------------------------------------
-            |
-            | IMPORTANT:
-            |
-            | The existing calculation remains the default.
-            |
-            | Manual values only override the automatically calculated
-            | days_worked / absences when the frontend actually sends them.
-            |
             */
 
                 $hasManualDaysWorked =
@@ -773,54 +736,28 @@ class PayrollController extends Controller
             | MANUAL DAYS WORKED PAY ADJUSTMENT
             |--------------------------------------------------------------------------
             |
-            | IMPORTANT:
+            | PAID LEAVE IS ADDED SEPARATELY.
             |
-            | We do NOT replace the holiday calculation.
-            | We do NOT replace the paid leave calculation.
-            |
-            | We only adjust the NORMAL WORKING DAY component.
+            | Manual days_worked represents the actual/manual
+            | worked days and is NOT reduced by paid leave.
             |
             | Example:
             |
-            | Manual days_worked = 10
-            | Paid leave = 1
-            | PH holiday worked = 1
+            | days_worked = 10
+            | paid_leave = 1
+            | daily_rate = ₱600
             |
-            | Normal working days paid manually:
-            |
-            | 10 - 1 - 1 = 8
-            |
-            | Then:
-            |
-            | Normal pay = 8 * daily
-            | Paid leave = 1 * daily
-            | Holiday pay = existing holiday calculation
-            |
-            | This prevents double-paying leave or holidays.
+            | Normal pay    = 10 × ₱600 = ₱6,000
+            | Paid leave    = 1 × ₱600  = ₱600
+            | Total         = ₱6,600
             |
             */
 
                 if ($hasManualDaysWorked) {
 
-                    $manualNormalWorkedDays = max(
-                        $paidDays
-                            - $paidLeaveDays
-                            - $phHolidayWorkedDays,
-                        0
-                    );
-
                     $normalPay =
-                        ($daily * $manualNormalWorkedDays)
+                        ($daily * $paidDays)
                         + $paidLeavePay;
-
-                    /*
-                |--------------------------------------------------------------------------
-                | KEEP THE SAME HOLIDAY PAY
-                |--------------------------------------------------------------------------
-                |
-                | Holiday pay is still calculated from actual holiday attendance.
-                |
-                */
                 }
 
 
@@ -841,21 +778,21 @@ class PayrollController extends Controller
                     * ($nightRate / 100)
                     * $nightHours;
 
+
                 /*
             |--------------------------------------------------------------------------
-            | IMPORTANT:
-            |
-            | Keep existing calculation based on actual normal worked days.
+            | NIGHT DIFFERENTIAL DAYS
             |--------------------------------------------------------------------------
+            |
+            | Manual days_worked is used directly.
+            |
+            | Paid leave is NOT subtracted because night
+            | differential is based on the entered/worked days.
+            |
             */
 
                 $nightDiffDays = $hasManualDaysWorked
-                    ? max(
-                        $paidDays
-                            - $paidLeaveDays
-                            - $phHolidayWorkedDays,
-                        0
-                    )
+                    ? $paidDays
                     : $actualNormalWorkedDays;
 
                 $totalNightDiff =
@@ -863,6 +800,7 @@ class PayrollController extends Controller
                     * ($nightRate / 100)
                     * $nightHours
                     * $nightDiffDays;
+
 
                 /*
             |--------------------------------------------------------------------------
@@ -905,7 +843,6 @@ class PayrollController extends Controller
                         $cutoffStart,
                         $cutoffEnd
                     ) {
-
                         $query->whereBetween(
                             DB::raw('DATE(clock_in)'),
                             [
@@ -1119,7 +1056,6 @@ class PayrollController extends Controller
                         $cutoffStart,
                         $cutoffEnd
                     ) {
-
                         $query->whereBetween(
                             DB::raw('DATE(clock_in)'),
                             [
@@ -1436,10 +1372,8 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-
                 'message' =>
                 'Payroll period created and processed successfully.',
-
                 'data' =>
                 $payrollPeriod,
             ], 201);
@@ -1455,15 +1389,14 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => false,
-
                 'message' =>
                 'Failed to create payroll period.',
-
                 'error' =>
                 $e->getMessage(),
             ], 500);
         }
     }
+
 
 
 
