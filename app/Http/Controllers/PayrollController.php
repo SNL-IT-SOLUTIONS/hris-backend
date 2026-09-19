@@ -847,10 +847,20 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             */
 
-                $totalNightDiff =
-                    $nightDiffPerDay
-                    * $actualNormalWorkedDays;
+                $nightDiffDays = $hasManualDaysWorked
+                    ? max(
+                        $paidDays
+                            - $paidLeaveDays
+                            - $phHolidayWorkedDays,
+                        0
+                    )
+                    : $actualNormalWorkedDays;
 
+                $totalNightDiff =
+                    $hourlyRate
+                    * ($nightRate / 100)
+                    * $nightHours
+                    * $nightDiffDays;
 
                 /*
             |--------------------------------------------------------------------------
