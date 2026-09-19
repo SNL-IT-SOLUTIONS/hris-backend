@@ -29,6 +29,7 @@ class PayrollController extends Controller
 
 
 
+
     public function createPayrollPeriod(Request $request)
     {
         $validated = $request->validate([
@@ -36,11 +37,16 @@ class PayrollController extends Controller
             'pay_date' => 'required|date',
             'cutoff_start_date' => 'required|date',
             'cutoff_end_date' => 'required|date|after_or_equal:cutoff_start_date',
+
             'employees' => 'required|array|min:1',
+
             'employees.*.employee_id' => 'required|integer|exists:employees,id',
             'employees.*.remarks' => 'nullable|string',
+
+            // Manual input is allowed
             'employees.*.days_worked' => 'nullable|numeric|min:0',
             'employees.*.absences' => 'nullable|numeric|min:0',
+
             'employees.*.overtime_hours' => 'nullable|numeric|min:0',
         ]);
 
@@ -596,9 +602,7 @@ class PayrollController extends Controller
                                 $holiday->holidayType->country ?? ''
                             ) === 'US'
                         ) {
-
                             $usHolidayPresentDays++;
-
                             continue;
                         }
 
@@ -657,11 +661,11 @@ class PayrollController extends Controller
 
                 /*
             |--------------------------------------------------------------------------
-            | TOTAL PAID DAYS
+            | CALCULATED TOTAL PAID DAYS
             |--------------------------------------------------------------------------
             */
 
-                $paidDays =
+                $calculatedPaidDays =
                     $actualNormalWorkedDays
                     + $paidLeaveDays
                     + $phHolidayWorkedDays;
@@ -669,25 +673,47 @@ class PayrollController extends Controller
 
                 /*
             |--------------------------------------------------------------------------
-            | ABSENCES
+            | CALCULATED ABSENCES
             |--------------------------------------------------------------------------
-            |
-            | IMPORTANT:
-            | We calculate this from the same values used by
-            | getEmployees().
-            |
-            | We intentionally do NOT use the frontend's
-            | days_worked / absences values here.
-            |
             */
 
-                $absences = max(
+                $calculatedAbsences = max(
                     $cutoffDays
                         - $actualNormalWorkedDays
                         - $paidLeaveDays
                         - $phHolidayWorkedDays,
                     0
                 );
+
+
+                /*
+            |--------------------------------------------------------------------------
+            | MANUAL DAYS WORKED / ABSENCES
+            |--------------------------------------------------------------------------
+            |
+            | Manual values are used if supplied by the frontend.
+            |
+            | IMPORTANT:
+            | This does NOT change the existing payroll calculations.
+            |
+            | The automatic values above are still calculated exactly
+            | the same way as before.
+            |
+            */
+
+                $paidDays = array_key_exists(
+                    'days_worked',
+                    $employeeInput
+                ) && $employeeInput['days_worked'] !== null
+                    ? (float) $employeeInput['days_worked']
+                    : $calculatedPaidDays;
+
+                $absences = array_key_exists(
+                    'absences',
+                    $employeeInput
+                ) && $employeeInput['absences'] !== null
+                    ? (float) $employeeInput['absences']
+                    : $calculatedAbsences;
 
 
                 /*
@@ -834,11 +860,9 @@ class PayrollController extends Controller
                             $absences == 0 &&
                             !$hasLate
                         ) {
-
                             $allowanceAmount =
                                 $allowance->amount;
                         } else {
-
                             $allowanceAmount = 0;
                         }
                     } else {
@@ -1099,6 +1123,7 @@ class PayrollController extends Controller
 
                 $payrollRecord =
                     PayrollRecord::create([
+
                         'payroll_period_id' =>
                         $payrollPeriod->id,
 
@@ -1107,6 +1132,12 @@ class PayrollController extends Controller
 
                         'daily_rate' =>
                         $daily,
+
+                        /*
+                    |--------------------------------------------------------------------------
+                    | MANUAL OVERRIDE / AUTOMATIC FALLBACK
+                    |--------------------------------------------------------------------------
+                    */
 
                         'days_worked' =>
                         $paidDays,
@@ -1160,6 +1191,7 @@ class PayrollController extends Controller
                 ) {
 
                     PayrollDeduction::create([
+
                         'payroll_record_id' =>
                         $payrollRecord->id,
 
@@ -1203,6 +1235,7 @@ class PayrollController extends Controller
                 */
 
                     PayrollDeduction::create([
+
                         'payroll_record_id' =>
                         $payrollRecord->id,
 
@@ -1262,6 +1295,7 @@ class PayrollController extends Controller
                 ) {
 
                     PayrollAllowance::create([
+
                         'payroll_record_id' =>
                         $payrollRecord->id,
 
@@ -1318,6 +1352,7 @@ class PayrollController extends Controller
             DB::rollBack();
 
             return response()->json([
+
                 'isSuccess' => false,
 
                 'message' =>
@@ -1329,6 +1364,8 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
+
 
 
     /**
