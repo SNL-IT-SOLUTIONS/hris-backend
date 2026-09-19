@@ -12,8 +12,7 @@ use App\Models\{
     ThirteenthMonth,
     ThirteenthMonthPeriod,
     Attendance,
-    Holiday,
-    Leave
+    Holiday
 };
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log};
@@ -1111,646 +1110,13 @@ class PayrollController extends Controller
      */
 
 
-    // public function getEmployees(Request $request)
-    // {
-    //     try {
-
-    //         $request->validate([
-    //             'cutoff_start_date' => 'nullable|date',
-    //             'cutoff_end_date'   => 'nullable|date|after_or_equal:cutoff_start_date',
-    //         ]);
-
-    //         /*
-    //     |--------------------------------------------------------------------------
-    //     | CUTOFF DATES
-    //     |--------------------------------------------------------------------------
-    //     */
-
-    //         $start = $request->cutoff_start_date
-    //             ? Carbon::parse($request->cutoff_start_date)->startOfDay()
-    //             : null;
-
-    //         $end = $request->cutoff_end_date
-    //             ? Carbon::parse($request->cutoff_end_date)->endOfDay()
-    //             : null;
-
-
-    //         /*
-    //     |--------------------------------------------------------------------------
-    //     | GET HOLIDAYS
-    //     |--------------------------------------------------------------------------
-    //     */
-
-    //         $holidays = collect();
-
-    //         if ($start && $end) {
-
-    //             $holidays = Holiday::with('holidayType')
-    //                 ->whereBetween('holiday_date', [
-    //                     $start->toDateString(),
-    //                     $end->toDateString()
-    //                 ])
-    //                 ->where('is_archived', 0)
-    //                 ->get()
-    //                 ->keyBy(function ($holiday) {
-    //                     return Carbon::parse(
-    //                         $holiday->holiday_date
-    //                     )->toDateString();
-    //                 });
-    //         }
-
-
-    //         /*
-    //     |--------------------------------------------------------------------------
-    //     | CALCULATE TOTAL WORKING DAYS
-    //     |--------------------------------------------------------------------------
-    //     |
-    //     | Weekdays only.
-    //     | All holidays are excluded.
-    //     |
-    //     */
-
-    //         $totalWorkingDays = 0;
-
-    //         if ($start && $end) {
-
-    //             $period = CarbonPeriod::create(
-    //                 $start->copy()->startOfDay(),
-    //                 $end->copy()->startOfDay()
-    //             );
-
-    //             foreach ($period as $date) {
-
-    //                 // Saturday / Sunday
-    //                 if ($date->isWeekend()) {
-    //                     continue;
-    //                 }
-
-    //                 $dateString = $date->toDateString();
-
-    //                 // Holiday
-    //                 if ($holidays->has($dateString)) {
-    //                     continue;
-    //                 }
-
-    //                 $totalWorkingDays++;
-    //             }
-    //         }
-
-
-    //         /*
-    //     |--------------------------------------------------------------------------
-    //     | GET ACTIVE EMPLOYEES
-    //     |--------------------------------------------------------------------------
-    //     */
-
-    //         $employees = Employee::with([
-    //             'department:id,department_name',
-    //             'position:id,position_name'
-    //         ])
-    //             ->where('is_active', 1)
-    //             ->where('is_archived', 0)
-    //             ->get();
-
-
-    //         /*
-    //     |--------------------------------------------------------------------------
-    //     | GET ATTENDANCE
-    //     |--------------------------------------------------------------------------
-    //     */
-
-    //         $attendanceData = collect();
-
-    //         if ($start && $end) {
-
-    //             $attendanceData = DB::table('attendances')
-    //                 ->whereIn('status', [
-    //                     'Present',
-    //                     'Late'
-    //                 ])
-    //                 ->where(function ($query) use ($start, $end) {
-
-    //                     $query->whereBetween(
-    //                         'clock_in',
-    //                         [$start, $end]
-    //                     )
-    //                         ->orWhereBetween(
-    //                             'clock_out',
-    //                             [$start, $end]
-    //                         );
-    //                 })
-    //                 ->select(
-    //                     'employee_id',
-    //                     DB::raw(
-    //                         'DATE(COALESCE(clock_in, clock_out)) as work_date'
-    //                     )
-    //                 )
-    //                 ->get()
-    //                 ->groupBy('employee_id');
-    //         }
-
-
-    //         /*
-    //     |--------------------------------------------------------------------------
-    //     | GET APPROVED LEAVES
-    //     |--------------------------------------------------------------------------
-    //     |
-    //     | ALL APPROVED LEAVES ARE PAID.
-    //     |
-    //     | We do not check is_paid because your business rule says
-    //     | every approved leave is guaranteed paid.
-    //     |
-    //     */
-
-    //         $leaveData = collect();
-
-    //         if ($start && $end) {
-
-    //             $leaveData = DB::table('leaves')
-    //                 ->where('status', 'Approved')
-    //                 ->where('is_archived', 0)
-    //                 ->where(function ($query) use ($start, $end) {
-
-    //                     /*
-    //                 | Leave starts inside cutoff
-    //                 */
-
-    //                     $query->whereBetween('start_date', [
-    //                         $start->toDateString(),
-    //                         $end->toDateString()
-    //                     ])
-
-    //                         /*
-    //                 | Leave ends inside cutoff
-    //                 */
-
-    //                         ->orWhereBetween('end_date', [
-    //                             $start->toDateString(),
-    //                             $end->toDateString()
-    //                         ])
-
-    //                         /*
-    //                 | Leave completely covers cutoff
-    //                 */
-
-    //                         ->orWhere(function ($q) use ($start, $end) {
-
-    //                             $q->where(
-    //                                 'start_date',
-    //                                 '<=',
-    //                                 $start->toDateString()
-    //                             )
-    //                                 ->where(
-    //                                     'end_date',
-    //                                     '>=',
-    //                                     $end->toDateString()
-    //                                 );
-    //                         });
-    //                 })
-    //                 ->select(
-    //                     'employee_id',
-    //                     'start_date',
-    //                     'end_date',
-    //                     'total_days'
-    //                 )
-    //                 ->get()
-    //                 ->groupBy('employee_id');
-    //         }
-
-
-    //         /*
-    //     |--------------------------------------------------------------------------
-    //     | BUILD EMPLOYEE DATA
-    //     |--------------------------------------------------------------------------
-    //     */
-
-    //         $employeeData = $employees->map(
-    //             function ($employee) use (
-    //                 $attendanceData,
-    //                 $leaveData,
-    //                 $holidays,
-    //                 $totalWorkingDays,
-    //                 $start,
-    //                 $end
-    //             ) {
-
-    //                 /*
-    //             |--------------------------------------------------------------------------
-    //             | DATE COLLECTIONS
-    //             |--------------------------------------------------------------------------
-    //             */
-
-    //                 $actualWorkedDates = collect();
-
-    //                 $paidLeaveDates = collect();
-
-    //                 $usHolidayPresentDays = 0;
-
-    //                 $phHolidayWorkedDays = 0;
-
-
-    //                 /*
-    //             |--------------------------------------------------------------------------
-    //             | PROCESS ATTENDANCE
-    //             |--------------------------------------------------------------------------
-    //             */
-
-    //                 $employeeAttendance = $attendanceData->get(
-    //                     $employee->id,
-    //                     collect()
-    //                 );
-
-    //                 foreach ($employeeAttendance as $attendance) {
-
-    //                     $workDate = Carbon::parse(
-    //                         $attendance->work_date
-    //                     );
-
-    //                     /*
-    //                 | Make sure attendance is inside cutoff
-    //                 */
-
-    //                     if (
-    //                         $start &&
-    //                         $workDate->lt(
-    //                             $start->copy()->startOfDay()
-    //                         )
-    //                     ) {
-    //                         continue;
-    //                     }
-
-    //                     if (
-    //                         $end &&
-    //                         $workDate->gt(
-    //                             $end->copy()->endOfDay()
-    //                         )
-    //                     ) {
-    //                         continue;
-    //                     }
-
-
-    //                     /*
-    //                 | Ignore weekends
-    //                 */
-
-    //                     if ($workDate->isWeekend()) {
-    //                         continue;
-    //                     }
-
-
-    //                     $dateString = $workDate->toDateString();
-
-
-    //                     /*
-    //                 |--------------------------------------------------------------------------
-    //                 | HOLIDAY ATTENDANCE
-    //                 |--------------------------------------------------------------------------
-    //                 */
-
-    //                     if ($holidays->has($dateString)) {
-
-    //                         $holiday = $holidays->get($dateString);
-
-
-    //                         /*
-    //                     | US HOLIDAY
-    //                     |
-    //                     | Employee can be present, but payroll pays ₱0.
-    //                     */
-
-    //                         if (
-    //                             $holiday->holidayType &&
-    //                             strtoupper(
-    //                                 $holiday->holidayType->country ?? ''
-    //                             ) === 'US'
-    //                         ) {
-
-    //                             $usHolidayPresentDays++;
-
-    //                             continue;
-    //                         }
-
-
-    //                         /*
-    //                     | PH HOLIDAY
-    //                     |
-    //                     | Employee worked on PH holiday.
-    //                     */
-
-    //                         $phHolidayWorkedDays++;
-
-    //                         continue;
-    //                     }
-
-
-    //                     /*
-    //                 |--------------------------------------------------------------------------
-    //                 | NORMAL WORK DAY
-    //                 |--------------------------------------------------------------------------
-    //                 */
-
-    //                     $actualWorkedDates->push(
-    //                         $dateString
-    //                     );
-    //                 }
-
-
-    //                 /*
-    //             |--------------------------------------------------------------------------
-    //             | PROCESS APPROVED PAID LEAVES
-    //             |--------------------------------------------------------------------------
-    //             */
-
-    //                 $employeeLeaves = $leaveData->get(
-    //                     $employee->id,
-    //                     collect()
-    //                 );
-
-    //                 foreach ($employeeLeaves as $leave) {
-
-    //                     $leaveStart = Carbon::parse(
-    //                         $leave->start_date
-    //                     )->startOfDay();
-
-    //                     $leaveEnd = Carbon::parse(
-    //                         $leave->end_date
-    //                     )->startOfDay();
-
-
-    //                     /*
-    //                 |--------------------------------------------------------------------------
-    //                 | LIMIT LEAVE TO CUTOFF
-    //                 |--------------------------------------------------------------------------
-    //                 */
-
-    //                     if (
-    //                         $start &&
-    //                         $leaveStart->lt(
-    //                             $start->copy()->startOfDay()
-    //                         )
-    //                     ) {
-
-    //                         $leaveStart = $start
-    //                             ->copy()
-    //                             ->startOfDay();
-    //                     }
-
-    //                     if (
-    //                         $end &&
-    //                         $leaveEnd->gt(
-    //                             $end->copy()->startOfDay()
-    //                         )
-    //                     ) {
-
-    //                         $leaveEnd = $end
-    //                             ->copy()
-    //                             ->startOfDay();
-    //                     }
-
-
-    //                     if ($leaveStart->gt($leaveEnd)) {
-    //                         continue;
-    //                     }
-
-
-    //                     /*
-    //                 |--------------------------------------------------------------------------
-    //                 | LOOP EACH LEAVE DATE
-    //                 |--------------------------------------------------------------------------
-    //                 */
-
-    //                     $leavePeriod = CarbonPeriod::create(
-    //                         $leaveStart,
-    //                         $leaveEnd
-    //                     );
-
-    //                     foreach ($leavePeriod as $leaveDate) {
-
-    //                         /*
-    //                     | Leave on weekend = not a working day
-    //                     */
-
-    //                         if ($leaveDate->isWeekend()) {
-    //                             continue;
-    //                         }
-
-
-    //                         $dateString = $leaveDate->toDateString();
-
-
-    //                         /*
-    //                     |--------------------------------------------------------------------------
-    //                     | HOLIDAYS
-    //                     |--------------------------------------------------------------------------
-    //                     |
-    //                     | Holiday handling stays separate.
-    //                     | Do not count holiday as another leave day.
-    //                     |
-    //                     */
-
-    //                         if ($holidays->has($dateString)) {
-    //                             continue;
-    //                         }
-
-
-    //                         /*
-    //                     |--------------------------------------------------------------------------
-    //                     | DON'T DOUBLE COUNT ATTENDANCE + LEAVE
-    //                     |--------------------------------------------------------------------------
-    //                     */
-
-    //                         if (
-    //                             $actualWorkedDates->contains(
-    //                                 $dateString
-    //                             )
-    //                         ) {
-    //                             continue;
-    //                         }
-
-
-    //                         /*
-    //                     |--------------------------------------------------------------------------
-    //                     | APPROVED PAID LEAVE = PAID/PRESENT
-    //                     |--------------------------------------------------------------------------
-    //                     */
-
-    //                         $paidLeaveDates->push(
-    //                             $dateString
-    //                         );
-    //                     }
-    //                 }
-
-
-    //                 /*
-    //             |--------------------------------------------------------------------------
-    //             | REMOVE DUPLICATES
-    //             |--------------------------------------------------------------------------
-    //             */
-
-    //                 $actualWorkedDates = $actualWorkedDates
-    //                     ->unique()
-    //                     ->values();
-
-    //                 $paidLeaveDates = $paidLeaveDates
-    //                     ->unique()
-    //                     ->values();
-
-
-    //                 /*
-    //             |--------------------------------------------------------------------------
-    //             | DAY COUNTS
-    //             |--------------------------------------------------------------------------
-    //             */
-
-    //                 $actualWorkedDays =
-    //                     $actualWorkedDates->count();
-
-    //                 $paidLeaveDays =
-    //                     $paidLeaveDates->count();
-
-
-    //                 /*
-    //             |--------------------------------------------------------------------------
-    //             | TOTAL PAID/PRESENT DAYS
-    //             |--------------------------------------------------------------------------
-    //             |
-    //             | Paid leave is treated as present.
-    //             |
-    //             */
-
-    //                 $paidPresentDays =
-    //                     $actualWorkedDays
-    //                     + $paidLeaveDays
-    //                     + $phHolidayWorkedDays;
-
-
-    //                 /*
-    //             |--------------------------------------------------------------------------
-    //             | ABSENCES
-    //             |--------------------------------------------------------------------------
-    //             |
-    //             | Paid leave is NOT an absence.
-    //             |--------------------------------------------------------------------------
-    //             */
-
-    //                 $absences = max(
-    //                     $totalWorkingDays
-    //                         - $actualWorkedDays
-    //                         - $paidLeaveDays
-    //                         - $phHolidayWorkedDays,
-    //                     0
-    //                 );
-
-
-    //                 /*
-    //             |--------------------------------------------------------------------------
-    //             | DISPLAY DAYS WORKED
-    //             |--------------------------------------------------------------------------
-    //             |
-    //             | This represents total paid/present days.
-    //             |--------------------------------------------------------------------------
-    //             */
-
-    //                 $displayDaysWorked =
-    //                     $actualWorkedDays
-    //                     + $paidLeaveDays
-    //                     + $phHolidayWorkedDays;
-
-
-    //                 return [
-    //                     'id' => $employee->id,
-
-    //                     'employee_id' => $employee->employee_id,
-
-    //                     'first_name' => $employee->first_name,
-
-    //                     'last_name' => $employee->last_name,
-
-    //                     'department' => $employee->department,
-
-    //                     'position' => $employee->position,
-
-    //                     'base_salary' => $employee->base_salary,
-
-    //                     /*
-    // |--------------------------------------------------------------------------
-    // | Total paid/present days
-    // |--------------------------------------------------------------------------
-    // */
-    //                     'days_worked' => $displayDaysWorked,
-
-    //                     /*
-    // |--------------------------------------------------------------------------
-    // | Actual physical attendance
-    // |--------------------------------------------------------------------------
-    // */
-    //                     'actual_worked_days' => $actualWorkedDays,
-
-    //                     /*
-    // |--------------------------------------------------------------------------
-    // | Approved paid leave
-    // |--------------------------------------------------------------------------
-    // */
-    //                     'paid_leave_days' => $paidLeaveDays,
-
-    //                     /*
-    // |--------------------------------------------------------------------------
-    // | PH holiday actually worked
-    // |--------------------------------------------------------------------------
-    // */
-    //                     'ph_holiday_worked_days' => $phHolidayWorkedDays,
-
-    //                     /*
-    // |--------------------------------------------------------------------------
-    // | US holiday attendance
-    // |--------------------------------------------------------------------------
-    // */
-    //                     'us_holiday_present_days' => $usHolidayPresentDays,
-
-    //                     /*
-    // |--------------------------------------------------------------------------
-    // | Final absence count
-    // |--------------------------------------------------------------------------
-    // */
-    //                     'absences' => $absences,
-    //                 ];
-    //             }
-    //         );
-
-
-    //         /*
-    //     |--------------------------------------------------------------------------
-    //     | RESPONSE
-    //     |--------------------------------------------------------------------------
-    //     */
-
-    //         return response()->json([
-    //             'isSuccess' => true,
-    //             'message' => 'Employees retrieved successfully.',
-    //             'employees' => $employeeData,
-    //             'summary' => [
-    //                 'total_working_days' => $totalWorkingDays,
-    //             ],
-    //         ], 200);
-    //     } catch (\Exception $e) {
-
-    //         return response()->json([
-    //             'isSuccess' => false,
-    //             'message' => 'Failed to retrieve employees.',
-    //             'error' => $e->getMessage(),
-    //         ], 500);
-    //     }
-    // }
-
-
-
     public function getEmployees(Request $request)
     {
         try {
 
             $request->validate([
                 'cutoff_start_date' => 'nullable|date',
-                'cutoff_end_date' => 'nullable|date|after_or_equal:cutoff_start_date',
+                'cutoff_end_date'   => 'nullable|date|after_or_equal:cutoff_start_date',
             ]);
 
             /*
@@ -1759,146 +1125,187 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         */
 
-            $startDate = $request->filled('cutoff_start_date')
+            $start = $request->cutoff_start_date
                 ? Carbon::parse($request->cutoff_start_date)->startOfDay()
                 : null;
 
-            $endDate = $request->filled('cutoff_end_date')
+            $end = $request->cutoff_end_date
                 ? Carbon::parse($request->cutoff_end_date)->endOfDay()
                 : null;
 
+
             /*
         |--------------------------------------------------------------------------
-        | HOLIDAYS
+        | GET HOLIDAYS
         |--------------------------------------------------------------------------
         */
 
             $holidays = collect();
 
-            if ($startDate && $endDate) {
+            if ($start && $end) {
 
                 $holidays = Holiday::with('holidayType')
-                    ->where('is_archived', 0)
-                    ->whereBetween('date', [
-                        $startDate->toDateString(),
-                        $endDate->toDateString()
+                    ->whereBetween('holiday_date', [
+                        $start->toDateString(),
+                        $end->toDateString()
                     ])
+                    ->where('is_archived', 0)
                     ->get()
                     ->keyBy(function ($holiday) {
                         return Carbon::parse(
-                            $holiday->date
+                            $holiday->holiday_date
                         )->toDateString();
                     });
             }
 
+
             /*
         |--------------------------------------------------------------------------
-        | TOTAL WORKING DAYS
+        | CALCULATE TOTAL WORKING DAYS
         |--------------------------------------------------------------------------
+        |
+        | Weekdays only.
+        | All holidays are excluded.
+        |
         */
 
             $totalWorkingDays = 0;
 
-            if ($startDate && $endDate) {
+            if ($start && $end) {
 
-                $cursor =
-                    $startDate->copy()->startOfDay();
+                $period = CarbonPeriod::create(
+                    $start->copy()->startOfDay(),
+                    $end->copy()->startOfDay()
+                );
 
-                $lastDate =
-                    $endDate->copy()->startOfDay();
+                foreach ($period as $date) {
 
-                while ($cursor->lte($lastDate)) {
-
-                    if (!$cursor->isWeekend()) {
-
-                        $dateString =
-                            $cursor->toDateString();
-
-                        if (!$holidays->has($dateString)) {
-                            $totalWorkingDays++;
-                        }
+                    // Saturday / Sunday
+                    if ($date->isWeekend()) {
+                        continue;
                     }
 
-                    $cursor->addDay();
+                    $dateString = $date->toDateString();
+
+                    // Holiday
+                    if ($holidays->has($dateString)) {
+                        continue;
+                    }
+
+                    $totalWorkingDays++;
                 }
             }
 
+
             /*
         |--------------------------------------------------------------------------
-        | EMPLOYEES
+        | GET ACTIVE EMPLOYEES
         |--------------------------------------------------------------------------
         */
 
             $employees = Employee::with([
-                'department',
-                'position'
+                'department:id,department_name',
+                'position:id,position_name'
             ])
-                ->where('is_archived', 0)
                 ->where('is_active', 1)
+                ->where('is_archived', 0)
                 ->get();
+
 
             /*
         |--------------------------------------------------------------------------
-        | ATTENDANCE DATA
+        | GET ATTENDANCE
         |--------------------------------------------------------------------------
         */
 
             $attendanceData = collect();
 
-            if ($startDate && $endDate) {
+            if ($start && $end) {
 
-                $attendanceData = Attendance::whereIn(
-                    'status',
-                    ['Present', 'Late']
-                )
-                    ->whereBetween(
-                        'clock_in',
-                        [
-                            $startDate,
-                            $endDate
-                        ]
-                    )
+                $attendanceData = DB::table('attendances')
+                    ->whereIn('status', [
+                        'Present',
+                        'Late'
+                    ])
+                    ->where(function ($query) use ($start, $end) {
+
+                        $query->whereBetween(
+                            'clock_in',
+                            [$start, $end]
+                        )
+                            ->orWhereBetween(
+                                'clock_out',
+                                [$start, $end]
+                            );
+                    })
                     ->select(
                         'employee_id',
                         DB::raw(
                             'DATE(COALESCE(clock_in, clock_out)) as work_date'
                         )
                     )
-                    ->groupBy(
-                        'employee_id',
-                        DB::raw(
-                            'DATE(COALESCE(clock_in, clock_out))'
-                        )
-                    )
                     ->get()
                     ->groupBy('employee_id');
             }
 
+
             /*
         |--------------------------------------------------------------------------
-        | LEAVE DATA
+        | GET APPROVED LEAVES
         |--------------------------------------------------------------------------
+        |
+        | ALL APPROVED LEAVES ARE PAID.
+        |
+        | We do not check is_paid because your business rule says
+        | every approved leave is guaranteed paid.
+        |
         */
 
             $leaveData = collect();
 
-            if ($startDate && $endDate) {
+            if ($start && $end) {
 
-                $leaveData = Leave::where(
-                    'status',
-                    'Approved'
-                )
+                $leaveData = DB::table('leaves')
+                    ->where('status', 'Approved')
                     ->where('is_archived', 0)
-                    ->whereDate(
-                        'start_date',
-                        '<=',
-                        $endDate->toDateString()
-                    )
-                    ->whereDate(
-                        'end_date',
-                        '>=',
-                        $startDate->toDateString()
-                    )
+                    ->where(function ($query) use ($start, $end) {
+
+                        /*
+                    | Leave starts inside cutoff
+                    */
+
+                        $query->whereBetween('start_date', [
+                            $start->toDateString(),
+                            $end->toDateString()
+                        ])
+
+                            /*
+                    | Leave ends inside cutoff
+                    */
+
+                            ->orWhereBetween('end_date', [
+                                $start->toDateString(),
+                                $end->toDateString()
+                            ])
+
+                            /*
+                    | Leave completely covers cutoff
+                    */
+
+                            ->orWhere(function ($q) use ($start, $end) {
+
+                                $q->where(
+                                    'start_date',
+                                    '<=',
+                                    $start->toDateString()
+                                )
+                                    ->where(
+                                        'end_date',
+                                        '>=',
+                                        $end->toDateString()
+                                    );
+                            });
+                    })
                     ->select(
                         'employee_id',
                         'start_date',
@@ -1909,21 +1316,28 @@ class PayrollController extends Controller
                     ->groupBy('employee_id');
             }
 
+
             /*
         |--------------------------------------------------------------------------
-        | MAP EMPLOYEES
+        | BUILD EMPLOYEE DATA
         |--------------------------------------------------------------------------
         */
 
-            $employeeList = $employees->map(
+            $employeeData = $employees->map(
                 function ($employee) use (
                     $attendanceData,
                     $leaveData,
                     $holidays,
-                    $startDate,
-                    $endDate,
-                    $totalWorkingDays
+                    $totalWorkingDays,
+                    $start,
+                    $end
                 ) {
+
+                    /*
+                |--------------------------------------------------------------------------
+                | DATE COLLECTIONS
+                |--------------------------------------------------------------------------
+                */
 
                     $actualWorkedDates = collect();
 
@@ -1933,56 +1347,58 @@ class PayrollController extends Controller
 
                     $phHolidayWorkedDays = 0;
 
+
                     /*
                 |--------------------------------------------------------------------------
-                | ATTENDANCE
+                | PROCESS ATTENDANCE
                 |--------------------------------------------------------------------------
                 */
 
-                    $employeeAttendance =
-                        $attendanceData->get(
-                            $employee->id,
-                            collect()
-                        );
+                    $employeeAttendance = $attendanceData->get(
+                        $employee->id,
+                        collect()
+                    );
 
                     foreach ($employeeAttendance as $attendance) {
 
-                        if (!$attendance->work_date) {
-                            continue;
-                        }
+                        $workDate = Carbon::parse(
+                            $attendance->work_date
+                        );
 
-                        $date =
-                            Carbon::parse(
-                                $attendance->work_date
-                            );
+                        /*
+                    | Make sure attendance is inside cutoff
+                    */
 
                         if (
-                            $startDate &&
-                            $date->lt(
-                                $startDate->copy()->startOfDay()
+                            $start &&
+                            $workDate->lt(
+                                $start->copy()->startOfDay()
                             )
                         ) {
                             continue;
                         }
 
                         if (
-                            $endDate &&
-                            $date->gt(
-                                $endDate->copy()->endOfDay()
+                            $end &&
+                            $workDate->gt(
+                                $end->copy()->endOfDay()
                             )
                         ) {
                             continue;
                         }
 
-                        if ($date->isWeekend()) {
+
+                        /*
+                    | Ignore weekends
+                    */
+
+                        if ($workDate->isWeekend()) {
                             continue;
                         }
 
-                        $dateString =
-                            $date->toDateString();
 
-                        $holiday =
-                            $holidays->get($dateString);
+                        $dateString = $workDate->toDateString();
+
 
                         /*
                     |--------------------------------------------------------------------------
@@ -1990,49 +1406,45 @@ class PayrollController extends Controller
                     |--------------------------------------------------------------------------
                     */
 
-                        if ($holiday && $holiday->holidayType) {
+                        if ($holidays->has($dateString)) {
 
-                            $country = strtoupper(
-                                trim(
-                                    (string) (
-                                        $holiday
-                                        ->holidayType
-                                        ->country
-                                        ?? ''
-                                    )
-                                )
-                            );
+                            $holiday = $holidays->get($dateString);
+
 
                             /*
-                        |--------------------------------------------------------------------------
                         | US HOLIDAY
-                        |--------------------------------------------------------------------------
+                        |
+                        | Employee can be present, but payroll pays ₱0.
                         */
 
-                            if ($country === 'US') {
+                            if (
+                                $holiday->holidayType &&
+                                strtoupper(
+                                    $holiday->holidayType->country ?? ''
+                                ) === 'US'
+                            ) {
 
                                 $usHolidayPresentDays++;
 
                                 continue;
                             }
 
+
                             /*
-                        |--------------------------------------------------------------------------
                         | PH HOLIDAY
-                        |--------------------------------------------------------------------------
+                        |
+                        | Employee worked on PH holiday.
                         */
 
-                            if ($country === 'PH') {
+                            $phHolidayWorkedDays++;
 
-                                $phHolidayWorkedDays++;
-
-                                continue;
-                            }
+                            continue;
                         }
+
 
                         /*
                     |--------------------------------------------------------------------------
-                    | NORMAL WORKED DAY
+                    | NORMAL WORK DAY
                     |--------------------------------------------------------------------------
                     */
 
@@ -2041,119 +1453,151 @@ class PayrollController extends Controller
                         );
                     }
 
-                    $actualWorkedDates =
-                        $actualWorkedDates
-                        ->unique()
-                        ->values();
 
                     /*
                 |--------------------------------------------------------------------------
-                | APPROVED LEAVES
+                | PROCESS APPROVED PAID LEAVES
                 |--------------------------------------------------------------------------
                 */
 
-                    $employeeLeaves =
-                        $leaveData->get(
-                            $employee->id,
-                            collect()
-                        );
+                    $employeeLeaves = $leaveData->get(
+                        $employee->id,
+                        collect()
+                    );
 
                     foreach ($employeeLeaves as $leave) {
 
-                        $leaveStart =
-                            Carbon::parse(
-                                $leave->start_date
-                            )->startOfDay();
+                        $leaveStart = Carbon::parse(
+                            $leave->start_date
+                        )->startOfDay();
 
-                        $leaveEnd =
-                            Carbon::parse(
-                                $leave->end_date
-                            )->startOfDay();
+                        $leaveEnd = Carbon::parse(
+                            $leave->end_date
+                        )->startOfDay();
+
+
+                        /*
+                    |--------------------------------------------------------------------------
+                    | LIMIT LEAVE TO CUTOFF
+                    |--------------------------------------------------------------------------
+                    */
 
                         if (
-                            $startDate &&
+                            $start &&
                             $leaveStart->lt(
-                                $startDate->copy()->startOfDay()
+                                $start->copy()->startOfDay()
                             )
                         ) {
 
-                            $leaveStart =
-                                $startDate->copy()->startOfDay();
+                            $leaveStart = $start
+                                ->copy()
+                                ->startOfDay();
                         }
 
                         if (
-                            $endDate &&
+                            $end &&
                             $leaveEnd->gt(
-                                $endDate->copy()->startOfDay()
+                                $end->copy()->startOfDay()
                             )
                         ) {
 
-                            $leaveEnd =
-                                $endDate->copy()->startOfDay();
+                            $leaveEnd = $end
+                                ->copy()
+                                ->startOfDay();
                         }
 
-                        $leaveCursor =
-                            $leaveStart->copy();
 
-                        while (
-                            $leaveCursor->lte($leaveEnd)
-                        ) {
+                        if ($leaveStart->gt($leaveEnd)) {
+                            continue;
+                        }
 
-                            if ($leaveCursor->isWeekend()) {
 
-                                $leaveCursor->addDay();
+                        /*
+                    |--------------------------------------------------------------------------
+                    | LOOP EACH LEAVE DATE
+                    |--------------------------------------------------------------------------
+                    */
 
+                        $leavePeriod = CarbonPeriod::create(
+                            $leaveStart,
+                            $leaveEnd
+                        );
+
+                        foreach ($leavePeriod as $leaveDate) {
+
+                            /*
+                        | Leave on weekend = not a working day
+                        */
+
+                            if ($leaveDate->isWeekend()) {
                                 continue;
                             }
 
-                            $dateString =
-                                $leaveCursor->toDateString();
+
+                            $dateString = $leaveDate->toDateString();
+
 
                             /*
                         |--------------------------------------------------------------------------
-                        | ATTENDANCE TAKES PRIORITY
+                        | HOLIDAYS
+                        |--------------------------------------------------------------------------
+                        |
+                        | Holiday handling stays separate.
+                        | Do not count holiday as another leave day.
+                        |
+                        */
+
+                            if ($holidays->has($dateString)) {
+                                continue;
+                            }
+
+
+                            /*
+                        |--------------------------------------------------------------------------
+                        | DON'T DOUBLE COUNT ATTENDANCE + LEAVE
                         |--------------------------------------------------------------------------
                         */
 
                             if (
-                                $actualWorkedDates
-                                ->contains($dateString)
+                                $actualWorkedDates->contains(
+                                    $dateString
+                                )
                             ) {
-
-                                $leaveCursor->addDay();
-
                                 continue;
                             }
+
 
                             /*
                         |--------------------------------------------------------------------------
-                        | KEEP EXISTING HOLIDAY LOGIC
+                        | APPROVED PAID LEAVE = PAID/PRESENT
                         |--------------------------------------------------------------------------
                         */
-
-                            if ($holidays->has($dateString)) {
-
-                                $leaveCursor->addDay();
-
-                                continue;
-                            }
 
                             $paidLeaveDates->push(
                                 $dateString
                             );
-
-                            $leaveCursor->addDay();
                         }
                     }
 
-                    $paidLeaveDates =
-                        $paidLeaveDates
-                        ->unique()
-                        ->values();
 
                     /*
                 |--------------------------------------------------------------------------
-                | COUNTS
+                | REMOVE DUPLICATES
+                |--------------------------------------------------------------------------
+                */
+
+                    $actualWorkedDates = $actualWorkedDates
+                        ->unique()
+                        ->values();
+
+                    $paidLeaveDates = $paidLeaveDates
+                        ->unique()
+                        ->values();
+
+
+                    /*
+                |--------------------------------------------------------------------------
+                | DAY COUNTS
                 |--------------------------------------------------------------------------
                 */
 
@@ -2163,12 +1607,13 @@ class PayrollController extends Controller
                     $paidLeaveDays =
                         $paidLeaveDates->count();
 
+
                     /*
                 |--------------------------------------------------------------------------
-                | PAID DAYS
+                | TOTAL PAID/PRESENT DAYS
                 |--------------------------------------------------------------------------
                 |
-                | This remains separate from actual worked days.
+                | Paid leave is treated as present.
                 |
                 */
 
@@ -2177,9 +1622,13 @@ class PayrollController extends Controller
                         + $paidLeaveDays
                         + $phHolidayWorkedDays;
 
+
                     /*
                 |--------------------------------------------------------------------------
                 | ABSENCES
+                |--------------------------------------------------------------------------
+                |
+                | Paid leave is NOT an absence.
                 |--------------------------------------------------------------------------
                 */
 
@@ -2191,97 +1640,82 @@ class PayrollController extends Controller
                         0
                     );
 
+
                     /*
                 |--------------------------------------------------------------------------
-                | RETURN EMPLOYEE
+                | DISPLAY DAYS WORKED
                 |--------------------------------------------------------------------------
                 |
-                | IMPORTANT:
-                |
-                | days_worked = ACTUAL WORKED DAYS
-                |
-                | paid_leave_days = PAID LEAVE
-                |
-                | They are not merged together.
-                |
+                | This represents total paid/present days.
+                |--------------------------------------------------------------------------
                 */
 
+                    $displayDaysWorked =
+                        $actualWorkedDays
+                        + $paidLeaveDays
+                        + $phHolidayWorkedDays;
+
+
                     return [
-                        'id' =>
-                        $employee->id,
+                        'id' => $employee->id,
 
-                        'employee_id' =>
-                        $employee->employee_id,
+                        'employee_id' => $employee->employee_id,
 
-                        'first_name' =>
-                        $employee->first_name,
+                        'first_name' => $employee->first_name,
 
-                        'last_name' =>
-                        $employee->last_name,
+                        'last_name' => $employee->last_name,
 
-                        'department' =>
-                        $employee->department
-                            ? $employee->department->name
-                            : null,
+                        'department' => $employee->department,
 
-                        'position' =>
-                        $employee->position
-                            ? $employee->position->name
-                            : null,
+                        'position' => $employee->position,
 
-                        'base_salary' =>
-                        (float) $employee->base_salary,
+                        'base_salary' => $employee->base_salary,
 
                         /*
-                    |--------------------------------------------------------------------------
-                    | ACTUAL DAYS WORKED
-                    |--------------------------------------------------------------------------
-                    */
-
-                        'days_worked' =>
-                        $actualWorkedDays,
-
-                        'actual_worked_days' =>
-                        $actualWorkedDays,
+    |--------------------------------------------------------------------------
+    | Total paid/present days
+    |--------------------------------------------------------------------------
+    */
+                        'days_worked' => $displayDaysWorked,
 
                         /*
-                    |--------------------------------------------------------------------------
-                    | PAID LEAVE
-                    |--------------------------------------------------------------------------
-                    */
-
-                        'paid_leave_days' =>
-                        $paidLeaveDays,
+    |--------------------------------------------------------------------------
+    | Actual physical attendance
+    |--------------------------------------------------------------------------
+    */
+                        'actual_worked_days' => $actualWorkedDays,
 
                         /*
-                    |--------------------------------------------------------------------------
-                    | PH HOLIDAY
-                    |--------------------------------------------------------------------------
-                    */
-
-                        'ph_holiday_worked_days' =>
-                        $phHolidayWorkedDays,
+    |--------------------------------------------------------------------------
+    | Approved paid leave
+    |--------------------------------------------------------------------------
+    */
+                        'paid_leave_days' => $paidLeaveDays,
 
                         /*
-                    |--------------------------------------------------------------------------
-                    | US HOLIDAY
-                    |--------------------------------------------------------------------------
-                    */
-
-                        'us_holiday_present_days' =>
-                        $usHolidayPresentDays,
+    |--------------------------------------------------------------------------
+    | PH holiday actually worked
+    |--------------------------------------------------------------------------
+    */
+                        'ph_holiday_worked_days' => $phHolidayWorkedDays,
 
                         /*
-                    |--------------------------------------------------------------------------
-                    | ABSENCES
-                    |--------------------------------------------------------------------------
-                    */
+    |--------------------------------------------------------------------------
+    | US holiday attendance
+    |--------------------------------------------------------------------------
+    */
+                        'us_holiday_present_days' => $usHolidayPresentDays,
 
-                        'absences' =>
-                        $absences,
+                        /*
+    |--------------------------------------------------------------------------
+    | Final absence count
+    |--------------------------------------------------------------------------
+    */
+                        'absences' => $absences,
                     ];
                 }
-            )->values();
+            );
+
 
             /*
         |--------------------------------------------------------------------------
@@ -2291,34 +1725,25 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-
-                'message' =>
-                'Employees retrieved successfully.',
-
-                'employees' =>
-                $employeeList,
-
+                'message' => 'Employees retrieved successfully.',
+                'employees' => $employeeData,
                 'summary' => [
-                    'total_working_days' =>
-                    $totalWorkingDays,
-
-                    'total_employees' =>
-                    $employeeList->count(),
+                    'total_working_days' => $totalWorkingDays,
                 ],
             ], 200);
-        } catch (\Throwable $e) {
+        } catch (\Exception $e) {
 
             return response()->json([
                 'isSuccess' => false,
-
-                'message' =>
-                'Failed to retrieve employees.',
-
-                'error' =>
-                $e->getMessage(),
+                'message' => 'Failed to retrieve employees.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
+
+
+
 
 
 
