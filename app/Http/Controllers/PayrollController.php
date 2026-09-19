@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log};
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
+use Exception;
 
 use function PHPUnit\Framework\isNull;
 
