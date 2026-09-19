@@ -12,7 +12,8 @@ use App\Models\{
     ThirteenthMonth,
     ThirteenthMonthPeriod,
     Attendance,
-    Holiday
+    Holiday,
+    Leave
 };
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log};
