@@ -522,6 +522,129 @@ class LeaveTypeController extends Controller
 
 
 
+
+
+    // ================================
+    // Get All Employees Leave Balances
+    // ================================
+
+    public function getAllEmployeeLeaveBalances(Request $request)
+    {
+        try {
+
+            $perPage = $request->input('per_page', 10);
+
+            // ========================================
+            // GET ACTIVE EMPLOYEES WITH LEAVE BALANCES
+            // ========================================
+
+            $employees = Employee::where('is_archived', 0)
+                ->where('is_active', 1)
+                ->with([
+                    'employeeLeaveTypes' => function ($query) {
+                        $query->where('is_archived', 0)
+                            ->where('is_active', 1)
+                            ->with([
+                                'leaveType'
+                            ]);
+                    }
+                ])
+                ->paginate($perPage);
+
+
+            // ========================================
+            // FORMAT EMPLOYEE DATA
+            // ========================================
+
+            $employees->getCollection()->transform(function ($employee) {
+
+                $leaveBalances = $employee->employeeLeaveTypes
+                    ->map(function ($employeeLeaveType) {
+
+                        return [
+                            'employee_leave_type_id' => $employeeLeaveType->id,
+
+                            'leave_type_id' => $employeeLeaveType->leave_type_id,
+
+                            'leave_name' => $employeeLeaveType->leaveType
+                                ? $employeeLeaveType->leaveType->leave_name
+                                : null,
+
+                            'allocated_days' => (float) $employeeLeaveType->allocated_days,
+
+                            'used_days' => (float) $employeeLeaveType->used_days,
+
+                            'remaining_days' => (float) $employeeLeaveType->remaining_days,
+
+                            'is_paid' => $employeeLeaveType->leaveType
+                                ? (bool) $employeeLeaveType->leaveType->is_paid
+                                : false,
+                        ];
+                    })
+                    ->values();
+
+
+                return [
+                    'id' => $employee->id,
+
+                    'employee_id' => $employee->employee_id,
+
+                    'first_name' => $employee->first_name,
+
+                    'last_name' => $employee->last_name,
+
+                    'leave_balances' => $leaveBalances,
+
+                    'summary' => [
+                        'total_leave_types' => $leaveBalances->count(),
+
+                        'total_allocated_days' => $leaveBalances
+                            ->sum('allocated_days'),
+
+                        'total_used_days' => $leaveBalances
+                            ->sum('used_days'),
+
+                        'total_remaining_days' => $leaveBalances
+                            ->sum('remaining_days'),
+                    ],
+                ];
+            });
+
+
+            // ========================================
+            // RESPONSE
+            // ========================================
+
+            return response()->json([
+                'isSuccess' => true,
+
+                'message' => 'Employee leave balances retrieved successfully.',
+
+                'data' => $employees->items(),
+
+                'pagination' => [
+                    'current_page' => $employees->currentPage(),
+                    'per_page' => $employees->perPage(),
+                    'total' => $employees->total(),
+                    'last_page' => $employees->lastPage(),
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to retrieve employee leave balances.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
+
+
+
+
+
     // ================================
     // Assign Leave Type to Employee
     // ================================

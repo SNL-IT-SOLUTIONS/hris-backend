@@ -200,6 +200,7 @@ Route::controller(LeaveTypeController::class)->group(function () {
     Route::post('create/leave-types', 'createLeaveType');
     Route::post('update/leave-types/{id}', 'updateLeaveType');
     Route::post('leave-types/{id}/archive', 'archiveLeaveType');
+    Route::get('leaves/employee/', 'getAllEmployeeLeaveBalances');
 });
 
 //SETUP - POSITION TYPES
