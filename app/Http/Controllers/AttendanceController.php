@@ -1678,32 +1678,15 @@ class AttendanceController extends Controller
             // Get authenticated employee
             // ---------------------------------------------------------
 
-            // $employee = $request->user();
-
-            // if (!$employee) {
-            //     return response()->json([
-            //         'isSuccess' => false,
-            //         'message'   => 'Unauthenticated.',
-            //     ], 401);
-            // }
-
-            $validated = $request->validate([
-                'employee_id'   => 'required|exists:employees,id',
-                'leave_type_id' => 'required|exists:leave_types,id',
-                // 'start_date'    => 'required|date|after_or_equal:today',
-                'start_date'    => 'required|date',
-                'end_date'      => 'required|date|after_or_equal:start_date',
-                'reason'        => 'nullable|string|max:500',
-            ]);
-
-            $employee = Employee::find($validated['employee_id']);
+            $employee = $request->user();
 
             if (!$employee) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'Employee not found.',
-                ], 404);
+                    'message'   => 'Unauthenticated.',
+                ], 401);
             }
+
             // ---------------------------------------------------------
             // Make sure authenticated employee is active
             // ---------------------------------------------------------
@@ -1721,7 +1704,6 @@ class AttendanceController extends Controller
 
             $validated = $request->validate([
                 'leave_type_id' => 'required|exists:leave_types,id',
-                // 'start_date'    => 'required|date|after_or_equal:today',
                 'start_date'    => 'required|date',
                 'end_date'      => 'required|date|after_or_equal:start_date',
                 'reason'        => 'nullable|string|max:500',
@@ -1765,7 +1747,7 @@ class AttendanceController extends Controller
             }
 
             // ---------------------------------------------------------
-            // Make sure the request contains at least one working day
+            // Make sure request contains at least one working day
             // ---------------------------------------------------------
 
             if ($days <= 0) {
@@ -1778,13 +1760,6 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Fetch employee leave assignment
             // ---------------------------------------------------------
-            //
-            // IMPORTANT:
-            // This uses employee_leave_types directly through
-            // EmployeeLeaveType.
-            //
-            // The authenticated employee ID is used automatically.
-            //
 
             $employeeLeave = EmployeeLeaveType::where(
                 'employee_id',
@@ -1794,15 +1769,10 @@ class AttendanceController extends Controller
                 ->where('is_archived', 0)
                 ->first();
 
-            // ---------------------------------------------------------
-            // Employee does not have this leave type assigned
-            // ---------------------------------------------------------
-
             if (!$employeeLeave) {
                 return response()->json([
                     'isSuccess' => false,
                     'message'   => 'This leave type has not been assigned to your account.',
-                    'employee_id' => $employee->id,
                     'leave_type_id' => $validated['leave_type_id'],
                 ], 422);
             }
@@ -1837,7 +1807,7 @@ class AttendanceController extends Controller
             if ($days > (float) $employeeLeave->remaining_days) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => "You only have {$employeeLeave->remaining_days} day(s) remaining.",
+                    'message' => "You only have {$employeeLeave->remaining_days} day(s) remaining.",
                     'remaining_days' => $employeeLeave->remaining_days,
                     'requested_days' => $days,
                 ], 422);
@@ -1846,13 +1816,6 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Prevent overlapping Pending / Approved leave
             // ---------------------------------------------------------
-            //
-            // This condition covers all overlap scenarios:
-            //
-            // Existing start <= requested end
-            // AND
-            // Existing end >= requested start
-            //
 
             $overlappingLeave = Leave::where(
                 'employee_id',
@@ -1875,12 +1838,6 @@ class AttendanceController extends Controller
             // ---------------------------------------------------------
             // Prepare leave data
             // ---------------------------------------------------------
-            //
-            // All leave is paid.
-            //
-            // Balance is NOT deducted here.
-            // It will only be deducted after approval.
-            //
 
             $leaveData = [
                 'employee_id'   => $employee->id,
@@ -1943,7 +1900,6 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
-
 
 
 
