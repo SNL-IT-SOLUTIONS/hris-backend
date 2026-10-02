@@ -2927,41 +2927,13 @@ class PayrollController extends Controller
                     'leaves.employee_id',
                     $record->employee_id
                 )
-
-                /*
-            |--------------------------------------------------------------------------
-            | APPROVED
-            |--------------------------------------------------------------------------
-            */
-
                 ->whereRaw(
                     'TRIM(LOWER(leaves.status)) = ?',
                     ['approved']
                 )
-
-                /*
-            |--------------------------------------------------------------------------
-            | PAID LEAVE
-            |--------------------------------------------------------------------------
-            */
-
                 ->where('leaves.is_paid', 1)
-
-                /*
-            |--------------------------------------------------------------------------
-            | NOT ARCHIVED
-            |--------------------------------------------------------------------------
-            */
-
                 ->where('leaves.is_archived', 0)
                 ->where('leave_types.is_archived', 0)
-
-                /*
-            |--------------------------------------------------------------------------
-            | LEAVE OVERLAPS CUTOFF
-            |--------------------------------------------------------------------------
-            */
-
                 ->whereDate(
                     'leaves.start_date',
                     '<=',
@@ -3083,16 +3055,12 @@ class PayrollController extends Controller
         */
 
             $paidLeaveRecords = [];
+
             $totalPaidLeaveDays = 0;
+
             $totalPaidLeaveAmount = 0;
 
             foreach ($paidLeaves as $leave) {
-
-                /*
-            |--------------------------------------------------------------------------
-            | LEAVE DATES
-            |--------------------------------------------------------------------------
-            */
 
                 $leaveStart = Carbon::parse(
                     $leave->start_date
@@ -3136,10 +3104,6 @@ class PayrollController extends Controller
             |--------------------------------------------------------------------------
             | COUNT PAID LEAVE DAYS
             |--------------------------------------------------------------------------
-            |
-            | Weekends are excluded.
-            | Holidays are NOT excluded.
-            |
             */
 
                 $leaveDays = 0;
@@ -3151,30 +3115,12 @@ class PayrollController extends Controller
 
                 foreach ($leavePeriod as $leaveDate) {
 
-                    /*
-                |--------------------------------------------------------------------------
-                | WEEKENDS ARE NOT PAID LEAVE DAYS
-                |--------------------------------------------------------------------------
-                */
-
                     if ($leaveDate->isWeekend()) {
                         continue;
                     }
 
-                    /*
-                |--------------------------------------------------------------------------
-                | COUNT THE DAY
-                |--------------------------------------------------------------------------
-                */
-
                     $leaveDays++;
                 }
-
-                /*
-            |--------------------------------------------------------------------------
-            | NO VALID LEAVE DAYS
-            |--------------------------------------------------------------------------
-            */
 
                 if ($leaveDays <= 0) {
                     continue;
@@ -3191,6 +3137,7 @@ class PayrollController extends Controller
                     * $leaveDays;
 
                 $totalPaidLeaveDays += $leaveDays;
+
                 $totalPaidLeaveAmount += $leaveAmount;
 
                 /*
@@ -3200,6 +3147,7 @@ class PayrollController extends Controller
             */
 
                 $paidLeaveRecords[] = [
+
                     'leave_id' =>
                     $leave->id,
 
@@ -3368,22 +3316,59 @@ class PayrollController extends Controller
         |--------------------------------------------------------------------------
         */
 
-            $dailyRate = (float) ($record->daily_rate ?? 0);
+            $dailyRate =
+                (float) ($record->daily_rate ?? 0);
 
             $basePay =
                 $dailyRate
-                * (float) $record->days_worked;
+                * (float) ($record->days_worked ?? 0);
 
             /*
         |--------------------------------------------------------------------------
         | OVERTIME
         |--------------------------------------------------------------------------
+        |
+        | IMPORTANT:
+        | Do NOT rely only on payroll_records.overtime_hours here.
+        |
+        | Get the actual Approved overtime requests for this employee
+        | within this payroll cutoff.
+        |
+        |--------------------------------------------------------------------------
+        */
+
+            $approvedOvertimeRequests = OvertimeRequest::where(
+                'employee_id',
+                $record->employee_id
+            )
+                ->where('is_archived', 0)
+                ->where('status', 'Approved')
+                ->whereBetween('overtime_date', [
+                    $cutoffStart->toDateString(),
+                    $cutoffEnd->toDateString(),
+                ])
+                ->orderBy('overtime_date', 'asc')
+                ->orderBy('start_time', 'asc')
+                ->get();
+
+            /*
+        |--------------------------------------------------------------------------
+        | TOTAL APPROVED OVERTIME HOURS
+        |--------------------------------------------------------------------------
+        */
+
+            $overtimeHours = (float) $approvedOvertimeRequests
+                ->sum(function ($overtime) {
+                    return (float) $overtime->total_hours;
+                });
+
+            /*
+        |--------------------------------------------------------------------------
+        | HOURLY RATE
+        |--------------------------------------------------------------------------
         */
 
             $hourlyRate = $dailyRate / 8;
-
-            $overtimeHours =
-                (float) ($record->overtime_hours ?? 0);
 
             /*
         |--------------------------------------------------------------------------
@@ -3401,6 +3386,49 @@ class PayrollController extends Controller
 
             $overtimePay =
                 $overtimeHours * $overtimeHourlyRate;
+
+            /*
+        |--------------------------------------------------------------------------
+        | OVERTIME REQUEST DETAILS
+        |--------------------------------------------------------------------------
+        */
+
+            $overtimeRecords = $approvedOvertimeRequests
+                ->map(function ($overtime) {
+
+                    return [
+                        'id' =>
+                        $overtime->id,
+
+                        'overtime_date' =>
+                        Carbon::parse(
+                            $overtime->overtime_date
+                        )->format('Y-m-d'),
+
+                        'start_time' =>
+                        Carbon::parse(
+                            $overtime->start_time
+                        )->format('H:i'),
+
+                        'end_time' =>
+                        Carbon::parse(
+                            $overtime->end_time
+                        )->format('H:i'),
+
+                        'hours' =>
+                        number_format(
+                            (float) $overtime->total_hours,
+                            2
+                        ),
+
+                        'reason' =>
+                        $overtime->reason,
+
+                        'status' =>
+                        $overtime->status,
+                    ];
+                })
+                ->values();
 
             /*
         |--------------------------------------------------------------------------
@@ -3521,6 +3549,9 @@ class PayrollController extends Controller
                                 $overtimePay,
                                 2
                             ),
+
+                            'requests' =>
+                            $overtimeRecords,
                         ],
 
                         'holiday_pay' =>
@@ -3641,8 +3672,9 @@ class PayrollController extends Controller
                     'remarks' =>
                     $record->remarks,
                 ],
+
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
 
             Log::error(
                 'Get Payslip Error: ' . $e->getMessage(),
