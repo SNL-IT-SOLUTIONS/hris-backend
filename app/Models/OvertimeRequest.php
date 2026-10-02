@@ -41,6 +41,6 @@ class OvertimeRequest extends Model
     // Employee/admin who approved the overtime
     public function approver()
     {
-        return $this->belongsTo(Employee::class, 'approved_by');
+        return $this->belongsTo(User::class, 'approved_by');
     }
 }
