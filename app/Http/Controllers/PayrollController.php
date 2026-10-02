@@ -13,7 +13,8 @@ use App\Models\{
     ThirteenthMonthPeriod,
     Attendance,
     Holiday,
-    Leave
+    Leave,
+    OvertimeRequest,
 };
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log};
@@ -158,12 +159,47 @@ class PayrollController extends Controller
                 }
 
                 /*
-            |--------------------------------------------------------------------------
-            | OVERTIME
-            |--------------------------------------------------------------------------
-            */
+           /*
+|--------------------------------------------------------------------------
+| OVERTIME
+|--------------------------------------------------------------------------
+| Get approved overtime requests within the payroll cutoff.
+| Only non-archived and Approved overtime will be included.
+|--------------------------------------------------------------------------
+*/
 
-                $overtime = $employeeInput['overtime_hours'] ?? 0;
+                $approvedOvertimeHours = OvertimeRequest::where(
+                    'employee_id',
+                    $employee->id
+                )
+                    ->where('is_archived', 0)
+                    ->where('status', 'Approved')
+                    ->whereBetween('overtime_date', [
+                        $cutoffStart->toDateString(),
+                        $cutoffEnd->toDateString(),
+                    ])
+                    ->sum('total_hours');
+
+                /*
+                |--------------------------------------------------------------------------
+                | MANUAL OVERTIME OVERRIDE
+                |--------------------------------------------------------------------------
+                | If overtime_hours is supplied in the payroll request,
+                | use that value.
+                |
+                | If it is not supplied, automatically use approved OT requests.
+                |--------------------------------------------------------------------------
+                */
+
+                $hasManualOvertime =
+                    array_key_exists('overtime_hours', $employeeInput)
+                    && $employeeInput['overtime_hours'] !== null;
+
+                if ($hasManualOvertime) {
+                    $overtime = (float) $employeeInput['overtime_hours'];
+                } else {
+                    $overtime = (float) $approvedOvertimeHours;
+                }
 
                 /*
             |--------------------------------------------------------------------------
