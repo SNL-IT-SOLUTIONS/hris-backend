@@ -30,6 +30,7 @@ use App\Http\Controllers\TrainingAdminController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\TrainingLessonController;
 use App\Http\Controllers\HolidayTypeController;
+use App\Http\Controllers\OvertimeRequestController;
 
 /*
 |--------------------------------------------------------------------------
@@ -331,6 +332,45 @@ Route::controller(HolidayTypeController::class)->group(function () {
 
     // Archive
     Route::post('archiveHolidayTypes/{id}', 'archiveHolidayType');
+});
+
+
+
+
+
+Route::middleware('auth:sanctum')->group(function () {
+
+    // Employee
+    Route::post(
+        '/overtime/request',
+        [OvertimeRequestController::class, 'createOvertimeRequest']
+    );
+
+    Route::get(
+        '/overtime/my-requests',
+        [OvertimeRequestController::class, 'getMyOvertimeRequests']
+    );
+
+    Route::put(
+        '/overtime/{id}/cancel',
+        [OvertimeRequestController::class, 'cancelOvertimeRequest']
+    );
+
+    // Admin
+    Route::get(
+        '/overtime/requests',
+        [OvertimeRequestController::class, 'getAllOvertimeRequests']
+    );
+
+    Route::put(
+        '/overtime/{id}/approve',
+        [OvertimeRequestController::class, 'approveOvertimeRequest']
+    );
+
+    Route::put(
+        '/overtime/{id}/reject',
+        [OvertimeRequestController::class, 'rejectOvertimeRequest']
+    );
 });
 
 
