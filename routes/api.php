@@ -340,39 +340,53 @@ Route::controller(HolidayTypeController::class)->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
 
-    // Employee
+    // ==========================================
+    // EMPLOYEE
+    // ==========================================
+
+    // Create OT request
     Route::post(
         '/overtime/request',
         [OvertimeRequestController::class, 'createOvertimeRequest']
     );
 
+    // Get authenticated employee's OT requests
     Route::get(
         '/overtime/my-requests',
         [OvertimeRequestController::class, 'getMyOvertimeRequests']
     );
 
-    Route::put(
+    // Cancel own OT request
+    Route::post(
         '/overtime/{id}/cancel',
         [OvertimeRequestController::class, 'cancelOvertimeRequest']
     );
 
-    // Admin
+
+    // ==========================================
+    // ADMIN
+    // ==========================================
+
+    // Get all OT requests
     Route::get(
         '/overtime/requests',
         [OvertimeRequestController::class, 'getAllOvertimeRequests']
     );
 
-    Route::put(
+    // Approve OT request
+    Route::post(
         '/overtime/{id}/approve',
         [OvertimeRequestController::class, 'approveOvertimeRequest']
     );
 
-    Route::put(
+    // Reject OT request
+    Route::post(
         '/overtime/{id}/reject',
         [OvertimeRequestController::class, 'rejectOvertimeRequest']
     );
-});
 
+
+});
 
 //DROPDOWNS
 Route::controller(DropdownController::class)->group(function () {
