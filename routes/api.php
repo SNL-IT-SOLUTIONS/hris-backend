@@ -338,55 +338,59 @@ Route::controller(HolidayTypeController::class)->group(function () {
 
 
 
-Route::middleware('auth:sanctum')->group(function () {
+// ==========================================
+// OVERTIME REQUESTS
+// ==========================================
 
-    // ==========================================
-    // EMPLOYEE
-    // ==========================================
+Route::controller(OvertimeRequestController::class)
+    ->middleware('auth:sanctum')
+    ->group(function () {
 
-    // Create OT request
-    Route::post(
-        '/overtime/request',
-        [OvertimeRequestController::class, 'createOvertimeRequest']
-    );
+        // ==========================================
+        // EMPLOYEE
+        // ==========================================
 
-    // Get authenticated employee's OT requests
-    Route::get(
-        '/overtime/my-requests',
-        [OvertimeRequestController::class, 'getMyOvertimeRequests']
-    );
+        // Create overtime request
+        Route::post(
+            'overtime/request',
+            'createOvertimeRequest'
+        );
 
-    // Cancel own OT request
-    Route::post(
-        '/overtime/{id}/cancel',
-        [OvertimeRequestController::class, 'cancelOvertimeRequest']
-    );
+        // Get my overtime requests
+        Route::get(
+            'overtime/my-requests',
+            'getMyOvertimeRequests'
+        );
 
-
-    // ==========================================
-    // ADMIN
-    // ==========================================
-
-    // Get all OT requests
-    Route::get(
-        '/overtime/requests',
-        [OvertimeRequestController::class, 'getAllOvertimeRequests']
-    );
-
-    // Approve OT request
-    Route::post(
-        '/overtime/{id}/approve',
-        [OvertimeRequestController::class, 'approveOvertimeRequest']
-    );
-
-    // Reject OT request
-    Route::post(
-        '/overtime/{id}/reject',
-        [OvertimeRequestController::class, 'rejectOvertimeRequest']
-    );
+        // Cancel my pending overtime request
+        Route::post(
+            'overtime/{id}/cancel',
+            'cancelOvertimeRequest'
+        );
 
 
-});
+        // ==========================================
+        // ADMIN
+        // ==========================================
+
+        // Get all overtime requests
+        Route::get(
+            'overtime/requests',
+            'getAllOvertimeRequests'
+        );
+
+        // Approve overtime request
+        Route::post(
+            'overtime/{id}/approve',
+            'approveOvertimeRequest'
+        );
+
+        // Reject overtime request
+        Route::post(
+            'overtime/{id}/reject',
+            'rejectOvertimeRequest'
+        );
+    });
 
 //DROPDOWNS
 Route::controller(DropdownController::class)->group(function () {
