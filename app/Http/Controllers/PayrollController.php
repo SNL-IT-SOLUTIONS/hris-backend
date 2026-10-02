@@ -157,13 +157,13 @@ class PayrollController extends Controller
 
                 /*
            /*
-|--------------------------------------------------------------------------
-| OVERTIME
-|--------------------------------------------------------------------------
-| Get approved overtime requests within the payroll cutoff.
-| Only non-archived and Approved overtime will be included.
-|--------------------------------------------------------------------------
-*/
+        |--------------------------------------------------------------------------
+        | OVERTIME
+        |--------------------------------------------------------------------------
+        | Get approved overtime requests within the payroll cutoff.
+        | Only non-archived and Approved overtime will be included.
+        |--------------------------------------------------------------------------
+        */
 
                 $approvedOvertimeHours = OvertimeRequest::where(
                     'employee_id',
@@ -3708,6 +3708,9 @@ class PayrollController extends Controller
     {
         try {
 
+            // =========================================================
+            // GET AUTHENTICATED EMPLOYEE
+            // =========================================================
             $employee = auth()->user();
 
             if (!$employee) {
@@ -3717,12 +3720,9 @@ class PayrollController extends Controller
                 ], 403);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | GET PAYROLL RECORD
-        |--------------------------------------------------------------------------
-        */
-
+            // =========================================================
+            // GET PAYROLL RECORD
+            // =========================================================
             $record = PayrollRecord::with([
                 'payrollPeriod',
                 'employee:id,base_salary',
@@ -3742,24 +3742,17 @@ class PayrollController extends Controller
                 ], 404);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | GET PAYROLL PERIOD
-        |--------------------------------------------------------------------------
-        */
-
+            // =========================================================
+            // PAYROLL PERIOD
+            // =========================================================
             $payrollPeriod = $record->payrollPeriod;
 
-            /*
-        |--------------------------------------------------------------------------
-        | GET HOLIDAYS WITHIN PAYROLL PERIOD
-        |--------------------------------------------------------------------------
-        */
-
+            // =========================================================
+            // HOLIDAYS
+            // =========================================================
             $holidays = collect();
 
             if ($payrollPeriod) {
-
                 $holidays = Holiday::whereBetween('holiday_date', [
                     $payrollPeriod->cutoff_start_date,
                     $payrollPeriod->cutoff_end_date,
@@ -3768,155 +3761,151 @@ class PayrollController extends Controller
                     ->get();
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | MAP ALLOWANCES
-        |--------------------------------------------------------------------------
-        */
+            // =========================================================
+            // OVERTIME REQUESTS
+            // Get approved, non-archived overtime requests
+            // within the payroll cutoff period.
+            // =========================================================
+            $overtimeRequests = collect();
 
-            $allowances = $record->allowances->map(function ($a) {
+            if ($payrollPeriod) {
+                $overtimeRequests = OvertimeRequest::where(
+                    'employee_id',
+                    $employee->id
+                )
+                    ->where('is_archived', 0)
+                    ->where('status', 'Approved')
+                    ->whereBetween('overtime_date', [
+                        $payrollPeriod->cutoff_start_date,
+                        $payrollPeriod->cutoff_end_date,
+                    ])
+                    ->orderBy('overtime_date', 'asc')
+                    ->get();
+            }
 
+            // =========================================================
+            // FORMAT OVERTIME DATA
+            // =========================================================
+            $overtimeData = $overtimeRequests->map(function ($overtime) {
                 return [
-                    'allowance_type' =>
-                    $a->allowanceType->type_name
+                    'overtime_date' => Carbon::parse(
+                        $overtime->overtime_date
+                    )->format('F d, Y'),
+
+                    'start_time' => Carbon::parse(
+                        $overtime->start_time
+                    )->format('h:i A'),
+
+                    'end_time' => Carbon::parse(
+                        $overtime->end_time
+                    )->format('h:i A'),
+
+                    'total_hours' => number_format(
+                        $overtime->total_hours ?? 0,
+                        2
+                    ),
+
+                    'reason' => $overtime->reason,
+
+                    'status' => $overtime->status,
+                ];
+            })->values();
+
+            // =========================================================
+            // ALLOWANCES
+            // =========================================================
+            $allowances = $record->allowances->map(function ($a) {
+                return [
+                    'allowance_type' => $a->allowanceType->type_name
                         ?? 'Other Allowance',
 
-                    'allowance_amount' =>
-                    number_format(
+                    'allowance_amount' => number_format(
                         $a->allowance_amount ?? 0,
                         2
                     ),
                 ];
             })->values();
 
-            /*
-        |--------------------------------------------------------------------------
-        | MAP DEDUCTIONS
-        |--------------------------------------------------------------------------
-        */
-
+            // =========================================================
+            // DEDUCTIONS
+            // =========================================================
             $deductions = $record->deductions->map(function ($ded) {
 
-                /*
-            |--------------------------------------------------------------------------
-            | LOAN DEDUCTION
-            |--------------------------------------------------------------------------
-            */
-
                 if ($ded->loan_id) {
-
                     return [
-                        'deduction_type' =>
-                        'Loan Payment',
+                        'deduction_type' => 'Loan Payment',
 
-                        'loan_name' =>
-                        $ded->loan->loanType->type_name
+                        'loan_name' => $ded->loan->loanType->type_name
                             ?? 'Loan',
 
-                        'deduction_amount' =>
-                        number_format(
+                        'deduction_amount' => number_format(
                             $ded->deduction_amount ?? 0,
                             2
                         ),
                     ];
                 }
 
-                /*
-            |--------------------------------------------------------------------------
-            | BENEFIT DEDUCTION
-            |--------------------------------------------------------------------------
-            */ elseif ($ded->benefit_type_id) {
-
+                if ($ded->benefit_type_id) {
                     return [
-                        'deduction_type' =>
-                        $ded->benefitType->benefit_name
+                        'deduction_type' => $ded->benefitType->benefit_name
                             ?? 'Other Deduction',
 
-                        'deduction_amount' =>
-                        number_format(
+                        'deduction_amount' => number_format(
                             $ded->deduction_amount ?? 0,
                             2
                         ),
                     ];
                 }
 
-                /*
-            |--------------------------------------------------------------------------
-            | OTHER DEDUCTION
-            |--------------------------------------------------------------------------
-            */
-
                 return [
-                    'deduction_type' =>
-                    $ded->deduction_name
+                    'deduction_type' => $ded->deduction_name
                         ?? 'Other Deduction',
 
-                    'deduction_amount' =>
-                    number_format(
+                    'deduction_amount' => number_format(
                         $ded->deduction_amount ?? 0,
                         2
                     ),
                 ];
             })->values();
 
-            /*
-        |--------------------------------------------------------------------------
-        | MAP HOLIDAYS
-        |--------------------------------------------------------------------------
-        */
-
+            // =========================================================
+            // HOLIDAY DATA
+            // =========================================================
             $holidayData = $holidays->map(function ($holiday) {
-
                 return [
-                    'holiday_date' =>
-                    Carbon::parse(
+                    'holiday_date' => Carbon::parse(
                         $holiday->holiday_date
                     )->format('F d, Y'),
 
-                    'holiday_name' =>
-                    $holiday->holiday_name
+                    'holiday_name' => $holiday->holiday_name
                         ?? 'Holiday',
 
-                    'holiday_type' =>
-                    $holiday->holiday_type
+                    'holiday_type' => $holiday->holiday_type
                         ?? 'Holiday',
                 ];
             })->values();
 
-            /*
-        |--------------------------------------------------------------------------
-        | NIGHT DIFFERENTIAL
-        |--------------------------------------------------------------------------
-        |
-        | The night_diff_pay value is already stored
-        | in payroll_records.
-        |
-        */
+            // =========================================================
+            // NIGHT DIFFERENTIAL
+            // =========================================================
+            $nightDiffPay = (float) (
+                $record->night_diff_pay ?? 0
+            );
 
-            $nightDiffPay =
-                (float) ($record->night_diff_pay ?? 0);
+            // =========================================================
+            // OVERTIME PAY CALCULATION
+            // =========================================================
+            $dailyRate = (float) (
+                $record->daily_rate ?? 0
+            );
 
-            /*
-        |--------------------------------------------------------------------------
-        | OVERTIME
-        |--------------------------------------------------------------------------
-        |
-        | Overtime hours and overtime pay are already
-        | stored in payroll_records when payroll is created.
-        |
-        | Regular overtime rate = 125% of hourly rate.
-        |
-        */
+            $hourlyRate = $dailyRate / 8;
 
-            $dailyRate =
-                (float) ($record->daily_rate ?? 0);
+            $overtimeHours = (float) (
+                $record->overtime_hours ?? 0
+            );
 
-            $hourlyRate =
-                $dailyRate / 8;
-
-            $overtimeHours =
-                (float) ($record->overtime_hours ?? 0);
-
+            // 125% overtime rate
             $overtimeMultiplier = 1.25;
 
             $overtimeHourlyRate =
@@ -3925,33 +3914,23 @@ class PayrollController extends Controller
             $overtimePay =
                 $overtimeHours * $overtimeHourlyRate;
 
-            /*
-        |--------------------------------------------------------------------------
-        | RETURN PAYSLIP
-        |--------------------------------------------------------------------------
-        */
-
+            // =========================================================
+            // RESPONSE
+            // =========================================================
             return response()->json([
-
                 'isSuccess' => true,
 
                 'payslip' => [
 
-                    /*
-                |--------------------------------------------------------------------------
-                | EMPLOYEE INFORMATION
-                |--------------------------------------------------------------------------
-                */
-
+                    // =================================================
+                    // EMPLOYEE
+                    // =================================================
                     'employee_name' =>
                     "{$employee->first_name} {$employee->last_name}",
 
-                    /*
-                |--------------------------------------------------------------------------
-                | PAYROLL PERIOD
-                |--------------------------------------------------------------------------
-                */
-
+                    // =================================================
+                    // PAYROLL PERIOD
+                    // =================================================
                     'period' =>
                     $payrollPeriod->period_name ?? 'N/A',
 
@@ -3969,181 +3948,129 @@ class PayrollController extends Controller
                         )->format('F d, Y')
                         : null,
 
-                    /*
-                |--------------------------------------------------------------------------
-                | SALARY
-                |--------------------------------------------------------------------------
-                */
-
-                    'base_salary' =>
-                    number_format(
+                    // =================================================
+                    // SALARY
+                    // =================================================
+                    'base_salary' => number_format(
                         $employee->base_salary ?? 0,
                         2
                     ),
 
-                    'daily_rate' =>
-                    number_format(
+                    'daily_rate' => number_format(
                         $dailyRate,
                         2
                     ),
 
-                    'hourly_rate' =>
-                    number_format(
+                    'hourly_rate' => number_format(
                         $hourlyRate,
                         2
                     ),
 
-                    'days_worked' =>
-                    number_format(
+                    'days_worked' => number_format(
                         $record->days_worked ?? 0,
                         2
                     ),
 
-                    'gross_base' =>
-                    number_format(
+                    'gross_base' => number_format(
                         $record->gross_base ?? 0,
                         2
                     ),
 
-                    /*
-                |--------------------------------------------------------------------------
-                | OVERTIME
-                |--------------------------------------------------------------------------
-                */
-
-                    'overtime_hours' =>
-                    number_format(
+                    // =================================================
+                    // OVERTIME
+                    // =================================================
+                    'overtime_hours' => number_format(
                         $overtimeHours,
                         2
                     ),
 
                     'overtime_rate' => ($overtimeMultiplier * 100) . '%',
 
-                    'overtime_hourly_rate' =>
-                    number_format(
+                    'overtime_hourly_rate' => number_format(
                         $overtimeHourlyRate,
                         2
                     ),
 
-                    'overtime_pay' =>
-                    number_format(
+                    'overtime_pay' => number_format(
                         $overtimePay,
                         2
                     ),
 
-                    /*
-                |--------------------------------------------------------------------------
-                | NIGHT DIFFERENTIAL
-                |--------------------------------------------------------------------------
-                */
+                    // =================================================
+                    // OVERTIME REQUEST DETAILS
+                    // =================================================
+                    'overtime' => $overtimeData,
 
-                    'night_diff_pay' =>
-                    number_format(
+                    'total_overtime_requests' =>
+                    $overtimeData->count(),
+
+                    // =================================================
+                    // NIGHT DIFFERENTIAL
+                    // =================================================
+                    'night_diff_pay' => number_format(
                         $nightDiffPay,
                         2
                     ),
 
-                    /*
-                |--------------------------------------------------------------------------
-                | GROSS PAY
-                |--------------------------------------------------------------------------
-                */
-
-                    'gross_pay' =>
-                    number_format(
+                    // =================================================
+                    // GROSS PAY
+                    // =================================================
+                    'gross_pay' => number_format(
                         $record->gross_pay ?? 0,
                         2
                     ),
 
-                    /*
-                |--------------------------------------------------------------------------
-                | HOLIDAYS
-                |--------------------------------------------------------------------------
-                */
-
-                    'holidays' =>
-                    $holidayData,
+                    // =================================================
+                    // HOLIDAYS
+                    // =================================================
+                    'holidays' => $holidayData,
 
                     'total_holidays' =>
                     $holidayData->count(),
 
-                    /*
-                |--------------------------------------------------------------------------
-                | ALLOWANCES
-                |--------------------------------------------------------------------------
-                */
+                    // =================================================
+                    // ALLOWANCES
+                    // =================================================
+                    'allowances' => $allowances,
 
-                    'allowances' =>
-                    $allowances,
-
-                    'total_allowances' =>
-                    number_format(
+                    'total_allowances' => number_format(
                         $record->allowances->sum(
                             'allowance_amount'
                         ),
                         2
                     ),
 
-                    /*
-                |--------------------------------------------------------------------------
-                | DEDUCTIONS
-                |--------------------------------------------------------------------------
-                */
+                    // =================================================
+                    // DEDUCTIONS
+                    // =================================================
+                    'deductions' => $deductions,
 
-                    'deductions' =>
-                    $deductions,
-
-                    /*
-                |--------------------------------------------------------------------------
-                | LATE DEDUCTIONS
-                |--------------------------------------------------------------------------
-                */
-
-                    'total_late_deductions' =>
-                    number_format(
+                    'total_late_deductions' => number_format(
                         $record->total_late_deductions ?? 0,
                         2
                     ),
 
-                    /*
-                |--------------------------------------------------------------------------
-                | TOTAL DEDUCTIONS
-                |--------------------------------------------------------------------------
-                */
-
-                    'total_deductions' =>
-                    number_format(
+                    'total_deductions' => number_format(
                         $record->total_deductions ?? 0,
                         2
                     ),
 
-                    /*
-                |--------------------------------------------------------------------------
-                | NET PAY
-                |--------------------------------------------------------------------------
-                */
-
-                    'net_pay' =>
-                    number_format(
+                    // =================================================
+                    // NET PAY
+                    // =================================================
+                    'net_pay' => number_format(
                         $record->net_pay ?? 0,
                         2
                     ),
 
-                    /*
-                |--------------------------------------------------------------------------
-                | REMARKS
-                |--------------------------------------------------------------------------
-                */
+                    // =================================================
+                    // REMARKS
+                    // =================================================
+                    'remarks' => $record->remarks,
 
-                    'remarks' =>
-                    $record->remarks,
-
-                    /*
-                |--------------------------------------------------------------------------
-                | GENERATED DATE
-                |--------------------------------------------------------------------------
-                */
-
+                    // =================================================
+                    // GENERATED DATE
+                    // =================================================
                     'generated_at' =>
                     $record->created_at
                         ? $record->created_at->format(
@@ -4155,20 +4082,14 @@ class PayrollController extends Controller
         } catch (\Exception $e) {
 
             Log::error(
-                'Error fetching employee payslip: ' .
-                    $e->getMessage()
+                'Error fetching employee payslip: '
+                    . $e->getMessage()
             );
 
             return response()->json([
-
                 'isSuccess' => false,
-
-                'message' =>
-                'Failed to fetch payslip.',
-
-                'error' =>
-                $e->getMessage(),
-
+                'message'   => 'Failed to fetch payslip.',
+                'error'     => $e->getMessage(),
             ], 500);
         }
     }
