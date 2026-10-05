@@ -22,7 +22,8 @@ use App\Models\AttendanceAdjustment;
 use App\Models\EndOfDayReport;
 use App\Models\EmployeeLeaveType;
 use Illuminate\Support\Facades\DB;
-
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class AttendanceController extends Controller
 {
@@ -773,7 +774,7 @@ class AttendanceController extends Controller
 
             $dateNow = now()->format('Y-m-d H:i:s');
 
-            Mail::to('gimme473@gmail.com')->send(
+            Mail::to('hello@snlvirtualpartner.com')->send(
                 new ClockInNotification($employee, $dateNow)
             );
 
@@ -1673,46 +1674,33 @@ class AttendanceController extends Controller
     public function requestLeave(Request $request)
     {
         try {
-
-            // ---------------------------------------------------------
             // Get authenticated employee
-            // ---------------------------------------------------------
-
             $employee = $request->user();
 
             if (!$employee) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'Unauthenticated.',
+                    'message' => 'Unauthenticated.',
                 ], 401);
             }
 
-            // ---------------------------------------------------------
-            // Make sure authenticated employee is active
-            // ---------------------------------------------------------
-
+            // Make sure employee is not archived
             if ($employee->is_archived) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'Your employee account has been archived.',
+                    'message' => 'Your employee account has been archived.',
                 ], 403);
             }
 
-            // ---------------------------------------------------------
             // Validate input
-            // ---------------------------------------------------------
-
             $validated = $request->validate([
                 'leave_type_id' => 'required|exists:leave_types,id',
-                'start_date'    => 'required|date',
-                'end_date'      => 'required|date|after_or_equal:start_date',
-                'reason'        => 'nullable|string|max:500',
+                'start_date' => 'required|date',
+                'end_date' => 'required|date|after_or_equal:start_date',
+                'reason' => 'nullable|string|max:500',
             ]);
 
-            // ---------------------------------------------------------
             // Fetch active leave type
-            // ---------------------------------------------------------
-
             $leaveType = LeaveType::where('id', $validated['leave_type_id'])
                 ->where('is_active', 1)
                 ->where('is_archived', 0)
@@ -1721,24 +1709,18 @@ class AttendanceController extends Controller
             if (!$leaveType) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'The selected leave type is not available.',
+                    'message' => 'The selected leave type is not available.',
                 ], 422);
             }
 
-            // ---------------------------------------------------------
-            // Calculate working days only
-            // ---------------------------------------------------------
-
-            $startDate = \Carbon\Carbon::parse($validated['start_date']);
-            $endDate   = \Carbon\Carbon::parse($validated['end_date']);
+            // Calculate working days only (Monday to Friday)
+            $startDate = Carbon::parse($validated['start_date']);
+            $endDate = Carbon::parse($validated['end_date']);
 
             $days = 0;
-
             $currentDate = $startDate->copy();
 
             while ($currentDate->lte($endDate)) {
-
-                // Monday = 1 ... Sunday = 7
                 if ($currentDate->isWeekday()) {
                     $days++;
                 }
@@ -1746,21 +1728,15 @@ class AttendanceController extends Controller
                 $currentDate->addDay();
             }
 
-            // ---------------------------------------------------------
-            // Make sure request contains at least one working day
-            // ---------------------------------------------------------
-
+            // Check at least one working day
             if ($days <= 0) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'The selected leave dates contain no working days.',
+                    'message' => 'The selected leave dates contain no working days.',
                 ], 422);
             }
 
-            // ---------------------------------------------------------
             // Fetch employee leave assignment
-            // ---------------------------------------------------------
-
             $employeeLeave = EmployeeLeaveType::where(
                 'employee_id',
                 $employee->id
@@ -1772,38 +1748,29 @@ class AttendanceController extends Controller
             if (!$employeeLeave) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'This leave type has not been assigned to your account.',
+                    'message' => 'This leave type has not been assigned to your account.',
                     'leave_type_id' => $validated['leave_type_id'],
                 ], 422);
             }
 
-            // ---------------------------------------------------------
             // Check leave assignment status
-            // ---------------------------------------------------------
-
             if ((int) $employeeLeave->is_active !== 1) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'This leave type is currently inactive for your account.',
+                    'message' => 'This leave type is currently inactive for your account.',
                 ], 422);
             }
 
-            // ---------------------------------------------------------
             // Check remaining balance
-            // ---------------------------------------------------------
-
             if ((float) $employeeLeave->remaining_days <= 0) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'You have no remaining leave balance for this leave type.',
+                    'message' => 'You have no remaining leave balance for this leave type.',
                     'remaining_days' => $employeeLeave->remaining_days,
                 ], 422);
             }
 
-            // ---------------------------------------------------------
             // Check requested days against remaining balance
-            // ---------------------------------------------------------
-
             if ($days > (float) $employeeLeave->remaining_days) {
                 return response()->json([
                     'isSuccess' => false,
@@ -1813,10 +1780,7 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            // ---------------------------------------------------------
             // Prevent overlapping Pending / Approved leave
-            // ---------------------------------------------------------
-
             $overlappingLeave = Leave::where(
                 'employee_id',
                 $employee->id
@@ -1830,73 +1794,124 @@ class AttendanceController extends Controller
             if ($overlappingLeave) {
                 return response()->json([
                     'isSuccess' => false,
-                    'message'   => 'You already have a pending or approved leave that overlaps with these dates.',
+                    'message' => 'You already have a pending or approved leave that overlaps with these dates.',
                     'existing_leave' => $overlappingLeave,
                 ], 422);
             }
 
-            // ---------------------------------------------------------
             // Prepare leave data
-            // ---------------------------------------------------------
-
             $leaveData = [
-                'employee_id'   => $employee->id,
+                'employee_id' => $employee->id,
                 'leave_type_id' => $validated['leave_type_id'],
-                'start_date'    => $validated['start_date'],
-                'end_date'      => $validated['end_date'],
-                'reason'        => $validated['reason'] ?? null,
-                'total_days'    => $days,
-                'status'        => 'Pending',
-                'is_archived'   => 0,
-                'is_paid'       => 1,
+                'start_date' => $validated['start_date'],
+                'end_date' => $validated['end_date'],
+                'reason' => $validated['reason'] ?? null,
+                'total_days' => $days,
+                'status' => 'Pending',
+                'is_archived' => 0,
+                'is_paid' => 1,
             ];
 
-            // ---------------------------------------------------------
             // Create leave request
-            // ---------------------------------------------------------
-
             $leave = Leave::create($leaveData);
 
-            // ---------------------------------------------------------
-            // Log request
-            // ---------------------------------------------------------
+            // Send email notification
+            try {
+                $employeeName = trim(
+                    ($employee->first_name ?? '') . ' ' .
+                        ($employee->last_name ?? '')
+                );
 
+                if ($employeeName === '') {
+                    $employeeName = $employee->name
+                        ?? "Employee #{$employee->id}";
+                }
+
+                $reason = $validated['reason'] ?? 'No reason provided.';
+
+                $startFormatted = Carbon::parse(
+                    $validated['start_date']
+                )->format('F d, Y');
+
+                $endFormatted = Carbon::parse(
+                    $validated['end_date']
+                )->format('F d, Y');
+
+                $subject = "New Leave Request - {$employeeName}";
+
+                $message = "
+Hello HR Team,
+
+A new leave request has been submitted through the HRIS.
+
+EMPLOYEE DETAILS
+------------------------------
+Employee Name: {$employeeName}
+Employee ID: {$employee->id}
+
+LEAVE DETAILS
+------------------------------
+Leave Type: {$leaveType->leave_name}
+Start Date: {$startFormatted}
+End Date: {$endFormatted}
+Total Working Days: {$days}
+Reason: {$reason}
+Status: Pending
+
+Please log in to the HRIS to review this leave request.
+
+This is an automated notification from the SNL Virtual Partner HRIS.
+
+";
+
+                Mail::raw($message, function ($mail) use ($subject) {
+                    $mail->to('hello@snlvirtualpartner.com')
+                        ->subject($subject);
+                });
+
+                Log::info(
+                    "Leave notification email sent for employee ID {$employee->id}"
+                );
+            } catch (Exception $mailException) {
+                // Do not fail the leave request if email sending fails
+                Log::error(
+                    'Leave notification email failed: ' .
+                        $mailException->getMessage()
+                );
+            }
+
+            // Log request
             Log::info(
                 "Leave request created for employee ID {$employee->id} " .
                     "({$days} working day(s), {$leaveType->leave_name})"
             );
 
-            // ---------------------------------------------------------
             // Return response
-            // ---------------------------------------------------------
-
             return response()->json([
                 'isSuccess' => true,
-                'message'   => 'Leave request submitted successfully.',
-                'leave'     => $leave,
-                'balance'   => [
+                'message' => 'Leave request submitted successfully.',
+                'leave' => $leave,
+                'balance' => [
                     'allocated_days' => $employeeLeave->allocated_days,
-                    'used_days'      => $employeeLeave->used_days,
+                    'used_days' => $employeeLeave->used_days,
                     'remaining_days' => $employeeLeave->remaining_days,
                 ],
             ], 201);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-
+        } catch (ValidationException $e) {
             return response()->json([
                 'isSuccess' => false,
-                'message'   => 'The given data was invalid.',
-                'errors'    => $e->errors(),
+                'message' => 'The given data was invalid.',
+                'errors' => $e->errors(),
             ], 422);
-        } catch (\Exception $e) {
-
+        } catch (Exception $e) {
             Log::error(
                 'Error submitting leave request: ' . $e->getMessage()
             );
 
             return response()->json([
                 'isSuccess' => false,
-                'message'   => 'Failed to submit leave request.',
-                'error'     => $e->getMessage(),
+                'message' => 'Failed to submit leave request.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

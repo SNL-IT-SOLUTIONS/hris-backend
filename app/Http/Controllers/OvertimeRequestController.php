@@ -21,7 +21,6 @@ class OvertimeRequestController extends Controller
             // ---------------------------------------------------------
             // Get authenticated employee
             // ---------------------------------------------------------
-
             $employee = $request->user();
 
             if (!$employee) {
@@ -34,7 +33,6 @@ class OvertimeRequestController extends Controller
             // ---------------------------------------------------------
             // Check employee status
             // ---------------------------------------------------------
-
             if ((int) $employee->is_archived === 1) {
                 return response()->json([
                     'isSuccess' => false,
@@ -52,7 +50,6 @@ class OvertimeRequestController extends Controller
             // ---------------------------------------------------------
             // Validate request
             // ---------------------------------------------------------
-
             $validated = $request->validate([
                 'overtime_date' => 'required|date',
                 'start_time'    => 'required|date_format:H:i',
@@ -63,13 +60,12 @@ class OvertimeRequestController extends Controller
             // ---------------------------------------------------------
             // Calculate overtime hours
             // ---------------------------------------------------------
-
-            $startTime = Carbon::createFromFormat(
+            $startTime = \Carbon\Carbon::createFromFormat(
                 'H:i',
                 $validated['start_time']
             );
 
-            $endTime = Carbon::createFromFormat(
+            $endTime = \Carbon\Carbon::createFromFormat(
                 'H:i',
                 $validated['end_time']
             );
@@ -82,7 +78,6 @@ class OvertimeRequestController extends Controller
             }
 
             $totalMinutes = $startTime->diffInMinutes($endTime);
-
             $totalHours = round($totalMinutes / 60, 2);
 
             if ($totalHours <= 0) {
@@ -95,7 +90,6 @@ class OvertimeRequestController extends Controller
             // ---------------------------------------------------------
             // Prevent duplicate / overlapping OT requests
             // ---------------------------------------------------------
-
             $existingRequest = OvertimeRequest::where(
                 'employee_id',
                 $employee->id
@@ -104,8 +98,17 @@ class OvertimeRequestController extends Controller
                 ->where('is_archived', 0)
                 ->whereIn('status', ['Pending', 'Approved'])
                 ->where(function ($query) use ($validated) {
-                    $query->where('start_time', '<', $validated['end_time'])
-                        ->where('end_time', '>', $validated['start_time']);
+
+                    $query->where(
+                        'start_time',
+                        '<',
+                        $validated['end_time']
+                    )
+                        ->where(
+                            'end_time',
+                            '>',
+                            $validated['start_time']
+                        );
                 })
                 ->first();
 
@@ -120,7 +123,6 @@ class OvertimeRequestController extends Controller
             // ---------------------------------------------------------
             // Create overtime request
             // ---------------------------------------------------------
-
             $overtimeRequest = OvertimeRequest::create([
                 'employee_id'      => $employee->id,
                 'overtime_date'    => $validated['overtime_date'],
@@ -135,17 +137,109 @@ class OvertimeRequestController extends Controller
                 'is_archived'      => 0,
             ]);
 
-            Log::info(
+            // ---------------------------------------------------------
+            // Send email notification
+            // ---------------------------------------------------------
+            try {
+
+                // Get employee name
+                $employeeName = trim(
+                    ($employee->first_name ?? '') . ' ' .
+                        ($employee->last_name ?? '')
+                );
+
+                // Fallback if first_name / last_name are unavailable
+                if (empty($employeeName)) {
+                    $employeeName = $employee->name
+                        ?? "Employee #{$employee->id}";
+                }
+
+                $reason = $validated['reason'] ?? 'No reason provided.';
+
+                // Format date
+                $overtimeDate = \Carbon\Carbon::parse(
+                    $validated['overtime_date']
+                )->format('F d, Y');
+
+                // Format time
+                $startTimeFormatted = \Carbon\Carbon::createFromFormat(
+                    'H:i',
+                    $validated['start_time']
+                )->format('h:i A');
+
+                $endTimeFormatted = \Carbon\Carbon::createFromFormat(
+                    'H:i',
+                    $validated['end_time']
+                )->format('h:i A');
+
+                // Email subject
+                $subject = "New Overtime Request - {$employeeName}";
+
+                // Email body
+                $emailBody = "
+Hello HR Team,
+
+A new overtime request has been submitted through the HRIS.
+
+EMPLOYEE DETAILS
+--------------------------------
+Employee Name: {$employeeName}
+Employee ID: {$employee->id}
+
+OVERTIME DETAILS
+--------------------------------
+Overtime Date: {$overtimeDate}
+Start Time: {$startTimeFormatted}
+End Time: {$endTimeFormatted}
+Total Overtime Hours: {$totalHours}
+Reason: {$reason}
+Status: Pending
+
+Please log in to the HRIS to review this overtime request.
+
+This is an automated notification from the SNL Virtual Partner HRIS.
+";
+
+                \Illuminate\Support\Facades\Mail::raw(
+                    $emailBody,
+                    function ($mail) use ($subject) {
+
+                        $mail->to('hello@snlvirtualpartner.com')
+                            ->subject($subject);
+                    }
+                );
+
+                \Illuminate\Support\Facades\Log::info(
+                    "Overtime notification email sent for employee ID {$employee->id}"
+                );
+            } catch (\Exception $mailException) {
+
+                // -----------------------------------------------------
+                // Email failure should NOT cancel the OT request
+                // -----------------------------------------------------
+                \Illuminate\Support\Facades\Log::error(
+                    'Overtime notification email failed: ' .
+                        $mailException->getMessage()
+                );
+            }
+
+            // ---------------------------------------------------------
+            // Log overtime request
+            // ---------------------------------------------------------
+            \Illuminate\Support\Facades\Log::info(
                 "Overtime request created for employee ID {$employee->id} " .
                     "({$totalHours} hour(s) on {$validated['overtime_date']})"
             );
 
+            // ---------------------------------------------------------
+            // Return response
+            // ---------------------------------------------------------
             return response()->json([
                 'isSuccess' => true,
                 'message'   => 'Overtime request submitted successfully.',
                 'data'      => $overtimeRequest,
             ], 201);
-        } catch (ValidationException $e) {
+        } catch (\Illuminate\Validation\ValidationException $e) {
 
             return response()->json([
                 'isSuccess' => false,
@@ -154,7 +248,7 @@ class OvertimeRequestController extends Controller
             ], 422);
         } catch (\Exception $e) {
 
-            Log::error(
+            \Illuminate\Support\Facades\Log::error(
                 'Error creating overtime request: ' . $e->getMessage()
             );
 
