@@ -204,7 +204,7 @@ This is an automated notification from the SNL Virtual Partner HRIS.
                     $emailBody,
                     function ($mail) use ($subject) {
 
-                        $mail->to('normanparaiso.abm12@gmail.com')
+                        $mail->to('hello@snlvirtualpartner.com')
                             ->subject($subject);
                     }
                 );
