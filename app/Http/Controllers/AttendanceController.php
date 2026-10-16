@@ -576,6 +576,7 @@ class AttendanceController extends Controller
      * Clock In
      */
 
+
     public function clockIn(Request $request)
     {
         try {
@@ -594,7 +595,7 @@ class AttendanceController extends Controller
             if ($validator->fails()) {
                 return response()->json([
                     'message' => 'Invalid image.',
-                    'errors'  => $validator->errors()
+                    'errors' => $validator->errors()
                 ], 422);
             }
 
@@ -602,12 +603,12 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Get Employee Shift
+        | GET EMPLOYEE SHIFT
         |--------------------------------------------------------------------------
         */
 
             $shiftStartTime = $employee->shift_start ?? '08:00:00';
-            $shiftEndTime   = $employee->shift_end ?? '17:00:00';
+            $shiftEndTime = $employee->shift_end ?? '17:00:00';
 
             $clockInTime = now();
 
@@ -621,12 +622,8 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Handle Overnight Shift
+        | HANDLE OVERNIGHT SHIFT
         |--------------------------------------------------------------------------
-        |
-        | Example:
-        | 10:00 PM - 06:00 AM
-        |
         */
 
             if ($shiftEnd->lessThanOrEqualTo($shiftStart)) {
@@ -635,11 +632,14 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Block if there is still an OPEN attendance
+        | BLOCK IF THERE IS STILL AN OPEN ATTENDANCE
         |--------------------------------------------------------------------------
         */
 
-            $openAttendance = Attendance::where('employee_id', $employee->id)
+            $openAttendance = Attendance::where(
+                'employee_id',
+                $employee->id
+            )
                 ->whereNull('clock_out')
                 ->latest('clock_in')
                 ->first();
@@ -652,11 +652,14 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Prevent Accidental Re-Clock-In
+        | PREVENT ACCIDENTAL RE-CLOCK-IN
         |--------------------------------------------------------------------------
         */
 
-            $lastAttendance = Attendance::where('employee_id', $employee->id)
+            $lastAttendance = Attendance::where(
+                'employee_id',
+                $employee->id
+            )
                 ->latest('clock_in')
                 ->first();
 
@@ -677,7 +680,7 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Save Clock-In Image
+        | SAVE CLOCK-IN IMAGE
         |--------------------------------------------------------------------------
         */
 
@@ -695,16 +698,18 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Attendance Status + Late Deduction
+        | ATTENDANCE STATUS + 5-MINUTE GRACE PERIOD
         |--------------------------------------------------------------------------
         |
-        | NO GRACE PERIOD
+        | Example for a 7:00 AM shift:
+        | 7:00 AM = Present
+        | 7:03 AM = Present
+        | 7:05 AM = Present
+        | 7:06 AM = Late (6 minutes)
+        | 7:15 AM = Late (15 minutes)
         |
-        | 08:00 shift
-        | 08:00 clock-in = Present
-        | 08:01 clock-in = 1 minute Late
-        | 08:15 clock-in = 15 minutes Late
-        |
+        | Late minutes are calculated from the original shift start.
+        |--------------------------------------------------------------------------
         */
 
             $status = 'Present';
@@ -712,33 +717,38 @@ class AttendanceController extends Controller
             $lateMinutes = 0;
             $lateDeduction = 0;
 
-            if ($clockInTime->greaterThan($shiftStart)) {
+            $gracePeriodMinutes = 5;
+
+            $gracePeriodEnd = $shiftStart->copy()
+                ->addMinutes($gracePeriodMinutes);
+
+            if ($clockInTime->greaterThan($gracePeriodEnd)) {
 
                 $status = 'Late';
                 $isLate = 1;
 
-                /*
-            |--------------------------------------------------------------------------
-            | Calculate Exact Late Minutes
-            |--------------------------------------------------------------------------
-            */
-
-                $lateMinutes = $shiftStart->diffInMinutes($clockInTime);
+                // Calculate late minutes from the scheduled shift start.
+                $lateMinutes = (int) $shiftStart->diffInMinutes(
+                    $clockInTime
+                );
 
                 /*
             |--------------------------------------------------------------------------
-            | Calculate Late Deduction
+            | CALCULATE LATE DEDUCTION
             |--------------------------------------------------------------------------
             |
-            | Daily Rate / 8 hours = Hourly Rate
-            | Hourly Rate / 60 = Per Minute Rate
-            |
+            | Daily Rate / 8 = Hourly Rate
+            | Hourly Rate / 60 = Per-Minute Rate
+            |--------------------------------------------------------------------------
             */
 
-                $dailyRate = (float) ($employee->daily_rate ?? 0);
+                $dailyRate = (float) (
+                    $employee->base_salary
+                    ?? $employee->daily_rate
+                    ?? 0
+                );
 
                 $hourlyRate = $dailyRate / 8;
-
                 $minuteRate = $hourlyRate / 60;
 
                 $lateDeduction = round(
@@ -749,18 +759,18 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Create Attendance
+        | CREATE ATTENDANCE RECORD
         |--------------------------------------------------------------------------
         */
 
             $attendance = Attendance::create([
-                'employee_id'    => $employee->id,
-                'clock_in'       => $clockInTime,
-                'status'         => $status,
-                'is_late'        => $isLate,
-                'late_minutes'   => $lateMinutes,
+                'employee_id' => $employee->id,
+                'clock_in' => $clockInTime,
+                'status' => $status,
+                'is_late' => $isLate,
+                'late_minutes' => $lateMinutes,
                 'late_deduction' => $lateDeduction,
-                'method'         => $request->hasFile('face_image')
+                'method' => $request->hasFile('face_image')
                     ? 'Facial Recognition'
                     : 'Manual',
                 'clock_in_image' => $imagePath,
@@ -768,7 +778,7 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Send Clock-In Email
+        | SEND CLOCK-IN EMAIL
         |--------------------------------------------------------------------------
         */
 
@@ -780,28 +790,30 @@ class AttendanceController extends Controller
 
             /*
         |--------------------------------------------------------------------------
-        | Response
+        | RESPONSE
         |--------------------------------------------------------------------------
         */
 
             return response()->json([
-                'message'  => 'Clocked in successfully!',
+                'message' => 'Clocked in successfully!',
 
                 'employee' => $employee->first_name . ' ' . $employee->last_name,
 
                 'attendance' => [
-                    'id'              => $attendance->id,
-                    'clock_in'        => $attendance->clock_in,
-                    'status'          => $attendance->status,
+                    'id' => $attendance->id,
+                    'clock_in' => $attendance->clock_in,
+                    'status' => $attendance->status,
 
-                    'shift_start'     => $employee->shift_start,
-                    'shift_end'       => $employee->shift_end,
+                    'shift_start' => $employee->shift_start,
+                    'shift_end' => $employee->shift_end,
 
-                    'late_minutes'    => $attendance->late_minutes,
-                    'late_deduction'  => $attendance->late_deduction,
+                    'grace_period_minutes' => $gracePeriodMinutes,
 
-                    'method'          => $attendance->method,
-                    'clock_in_image'  => $attendance->clock_in_image,
+                    'late_minutes' => $attendance->late_minutes,
+                    'late_deduction' => $attendance->late_deduction,
+
+                    'method' => $attendance->method,
+                    'clock_in_image' => $attendance->clock_in_image,
                 ],
 
             ], 200);
@@ -809,10 +821,11 @@ class AttendanceController extends Controller
 
             return response()->json([
                 'message' => 'Failed to clock in.',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage()
             ], 500);
         }
     }
+
 
     public function clockOut(Request $request)
     {
