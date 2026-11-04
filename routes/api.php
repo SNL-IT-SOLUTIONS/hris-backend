@@ -134,7 +134,6 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::post('adjustment/reject/{adjustmentId}', 'rejectAdjustment');
     Route::get('my-leaves-balance', 'getMyLeaveBalances');
     Route::post('confirm-leave/{leaveId}', 'confirmLeave');
-    Route::get('leave-balance/{employeeId}', 'getEmployeeLeaveBalance');
 });
 
 Route::get('dtr-adjustments', [AttendanceController::class, 'getAdjustments']);
@@ -203,6 +202,7 @@ Route::controller(LeaveTypeController::class)->group(function () {
     Route::post('update/leave-types/{id}', 'updateLeaveType');
     Route::post('leave-types/{id}/archive', 'archiveLeaveType');
     Route::get('leaves/employee/', 'getAllEmployeeLeaveBalances');
+    Route::get('leave-balance/{employeeId}', 'getEmployeeLeaveBalance');
 });
 
 //SETUP - POSITION TYPES
