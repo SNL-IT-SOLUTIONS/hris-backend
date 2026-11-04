@@ -644,6 +644,148 @@ class LeaveTypeController extends Controller
 
 
 
+    public function getEmployeeLeaveBalance(Request $request, $employeeId)
+    {
+        try {
+
+            $employee = Employee::where('id', $employeeId)
+                ->where('is_archived', 0)
+                ->where('is_active', 1)
+                ->with([
+                    'employeeLeaveTypes' => function ($query) {
+                        $query->where('is_archived', 0)
+                            ->where('is_active', 1)
+                            ->with('leaveType');
+                    }
+                ])
+                ->first();
+
+            if (!$employee) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Employee not found.',
+                ], 404);
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | GET EMPLOYEE LEAVE HISTORY
+        |--------------------------------------------------------------------------
+        */
+
+            $leaveHistory = DB::table('leaves')
+                ->where('employee_id', $employee->id)
+                ->where('is_archived', 0)
+                ->orderBy('start_date', 'desc')
+                ->get();
+
+            /*
+        |--------------------------------------------------------------------------
+        | FORMAT LEAVE BALANCES
+        |--------------------------------------------------------------------------
+        */
+
+            $leaveBalances = $employee->employeeLeaveTypes
+                ->map(function ($employeeLeaveType) use ($leaveHistory) {
+
+                    $usedLeaves = $leaveHistory
+                        ->where(
+                            'employee_leave_type_id',
+                            $employeeLeaveType->id
+                        )
+                        ->map(function ($leave) {
+
+                            return [
+                                'leave_id' => $leave->id,
+                                'start_date' => $leave->start_date,
+                                'end_date' => $leave->end_date,
+                                'total_days' => (float) $leave->total_days,
+                                'status' => $leave->status,
+                            ];
+                        })
+                        ->values();
+
+                    return [
+                        'employee_leave_type_id' => $employeeLeaveType->id,
+
+                        'leave_type_id' => $employeeLeaveType->leave_type_id,
+
+                        'leave_name' => $employeeLeaveType->leaveType
+                            ? $employeeLeaveType->leaveType->leave_name
+                            : null,
+
+                        'allocated_days' => (float) $employeeLeaveType->allocated_days,
+
+                        'used_days' => (float) $employeeLeaveType->used_days,
+
+                        'remaining_days' => (float) $employeeLeaveType->remaining_days,
+
+                        'is_paid' => $employeeLeaveType->leaveType
+                            ? (bool) $employeeLeaveType->leaveType->is_paid
+                            : false,
+
+                        'leave_history' => $usedLeaves,
+                    ];
+                })
+                ->values();
+
+            /*
+        |--------------------------------------------------------------------------
+        | RESPONSE
+        |--------------------------------------------------------------------------
+        */
+
+            return response()->json([
+                'isSuccess' => true,
+
+                'message' => 'Employee leave balance retrieved successfully.',
+
+                'data' => [
+                    'id' => $employee->id,
+
+                    'employee_id' => $employee->employee_id,
+
+                    'first_name' => $employee->first_name,
+
+                    'last_name' => $employee->last_name,
+
+                    'leave_balances' => $leaveBalances,
+
+                    'summary' => [
+                        'total_leave_types' => $leaveBalances->count(),
+
+                        'total_allocated_days' => $leaveBalances->sum('allocated_days'),
+
+                        'total_used_days' => $leaveBalances->sum('used_days'),
+
+                        'total_remaining_days' => $leaveBalances->sum('remaining_days'),
+                    ],
+
+                    'leave_history' => $leaveHistory
+                        ->map(function ($leave) {
+                            return [
+                                'leave_id' => $leave->id,
+                                'employee_leave_type_id' => $leave->employee_leave_type_id,
+                                'start_date' => $leave->start_date,
+                                'end_date' => $leave->end_date,
+                                'total_days' => (float) $leave->total_days,
+                                'status' => $leave->status,
+                            ];
+                        })
+                        ->values(),
+                ],
+
+            ], 200);
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to retrieve employee leave balance.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
 
     // ================================
     // Assign Leave Type to Employee
