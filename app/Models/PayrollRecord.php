@@ -29,6 +29,7 @@ class PayrollRecord extends Model
         'remarks',
         'holiday_pay',
         'leave_pay',
+        'present_days'
     ];
 
     // Relationships
