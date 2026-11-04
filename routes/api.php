@@ -134,7 +134,7 @@ Route::controller(AttendanceController::class)->middleware(['auth:sanctum'])->gr
     Route::post('adjustment/reject/{adjustmentId}', 'rejectAdjustment');
     Route::get('my-leaves-balance', 'getMyLeaveBalances');
     Route::post('confirm-leave/{leaveId}', 'confirmLeave');
-    Route::get('leave-balance/{employeeId}', 'getEmployeeLeaveBalances');
+    Route::get('leave-balance/{employeeId}', 'getEmployeeLeaveBalance');
 });
 
 Route::get('dtr-adjustments', [AttendanceController::class, 'getAdjustments']);
