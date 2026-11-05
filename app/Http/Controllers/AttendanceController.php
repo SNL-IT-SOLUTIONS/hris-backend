@@ -1392,7 +1392,7 @@ class AttendanceController extends Controller
         ]);
 
         // Send Email to HR
-        Mail::to('normanparaiso.abm12@gmail.com')
+        Mail::to('hello@snlvirtualpartner.com')
             ->send(new AdjustmentRequestMail($attendance, $employee));
 
         return response()->json([
