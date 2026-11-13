@@ -3775,6 +3775,75 @@ class PayrollController extends Controller
     }
 
 
+    public function processThirteenthMonthDraft($periodId)
+    {
+        try {
+            DB::beginTransaction();
+
+            $period = ThirteenthMonthPeriod::where('id', $periodId)
+                ->where('is_archived', false)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$period) {
+                DB::rollBack();
+
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Thirteenth month period not found.',
+                ], 404);
+            }
+
+            if (!$period->is_draft) {
+                DB::rollBack();
+
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'This period has already been processed.',
+                ], 422);
+            }
+
+            if ($period->is_locked) {
+                DB::rollBack();
+
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'This period is already locked.',
+                ], 422);
+            }
+
+            // Finalize the draft period.
+            $period->update([
+                'is_draft' => false,
+                'is_locked' => true,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'isSuccess' => true,
+                'message' => 'Thirteenth month period successfully processed.',
+                'data' => [
+                    'id' => $period->id,
+                    'period_name' => $period->period_name,
+                    'start_date' => $period->start_date,
+                    'end_date' => $period->end_date,
+                    'is_draft' => $period->is_draft,
+                    'is_locked' => $period->is_locked,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to process thirteenth month period.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
 
     public function viewThirteenthMonthCalculation($periodId, $employeeId)
     {
