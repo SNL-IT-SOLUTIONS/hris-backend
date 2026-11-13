@@ -3480,36 +3480,14 @@ class PayrollController extends Controller
     /**
      *  Get payroll summary stats
      */
-    public function getPayrollSummary()
-    {
-        try {
-            $summary = [
-                'total_periods'    => DB::table('payroll_periods')->where('is_archived', false)->count(),
-                'processed'        => DB::table('payroll_periods')->where('status', 'processed')->where('is_archived', false)->count(),
-                'drafts'           => DB::table('payroll_periods')->where('status', 'draft')->where('is_archived', false)->count(),
-                'active_employees' => DB::table('employees')->where('is_active', 1)->count(),
-            ];
-
-            return response()->json([
-                'isSuccess' => true,
-                'data'      => $summary,
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'isSuccess' => false,
-                'message'   => 'Failed to load payroll summary.',
-                'error'     => $e->getMessage(),
-            ], 500);
-        }
-    }
 
     public function createThirteenthMonthPeriod(Request $request)
     {
         $request->validate([
-            'period_name'   => 'required|string',
-            'start_date'    => 'required|date',
-            'end_date'      => 'required|date|after_or_equal:start_date',
-            'employees'     => 'required|array|min:1',
+            'period_name' => 'required|string',
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after_or_equal:start_date',
+            'employees'   => 'required|array|min:1',
             'employees.*.employee_id' => 'required|integer|exists:employees,id',
         ]);
 
@@ -3518,7 +3496,7 @@ class PayrollController extends Controller
         try {
 
             // ========================================
-            // CREATE THE PERIOD FIRST
+            // CREATE 13TH MONTH PERIOD
             // ========================================
             $period = ThirteenthMonthPeriod::create([
                 'period_name' => $request->period_name,
@@ -3527,25 +3505,39 @@ class PayrollController extends Controller
                 'is_locked'   => false,
             ]);
 
+            // ========================================
+            // GET ONLY PROCESSED, NON-ARCHIVED PAYROLL PERIODS
+            // ========================================
+            $processedPeriodIds = PayrollPeriod::where('status', 'processed')
+                ->where('is_archived', false)
+                ->whereDate('cutoff_start_date', '<=', $period->end_date)
+                ->whereDate('cutoff_end_date', '>=', $period->start_date)
+                ->pluck('id');
+
+            if ($processedPeriodIds->isEmpty()) {
+                throw new \Exception(
+                    'No processed payroll periods found within the selected 13th month period.'
+                );
+            }
+
+            // ========================================
+            // GENERATE 13TH MONTH PAY FOR EACH EMPLOYEE
+            // ========================================
             foreach ($request->employees as $empData) {
 
                 $employeeId = $empData['employee_id'];
 
-                // ========================================
-                // SUM TOTAL BASIC PAY FROM PAYROLL RECORDS
-                // ========================================
+                // Sum basic salary from processed payroll records only
                 $totalBasicSalary = PayrollRecord::where('employee_id', $employeeId)
-                    ->whereBetween('created_at', [
-                        $period->start_date,
-                        $period->end_date
-                    ])
+                    ->whereIn('payroll_period_id', $processedPeriodIds)
+                    ->where('is_archived', false)
                     ->sum('gross_base');
 
-                // 13th month formula
+                // 13th month computation
                 $amount = round($totalBasicSalary / 12, 2);
 
                 // ========================================
-                // INSERT 13TH MONTH PAY ENTRY
+                // INSERT OR UPDATE 13TH MONTH PAY
                 // ========================================
                 ThirteenthMonth::updateOrCreate(
                     [
@@ -3564,12 +3556,16 @@ class PayrollController extends Controller
 
             return response()->json([
                 'isSuccess' => true,
-                'message'   => '13th month period created and pays generated successfully.',
-                'period'    => $period,
+                'message'   => '13th month period created using processed payroll periods only.',
+                'data'      => [
+                    'period' => $period,
+                    'processed_payroll_periods' => $processedPeriodIds->count(),
+                ],
             ], 201);
         } catch (\Exception $e) {
 
             DB::rollBack();
+
             Log::error('13th month generation failed: ' . $e->getMessage());
 
             return response()->json([
