@@ -3525,6 +3525,8 @@ class PayrollController extends Controller
                 'start_date'  => $request->start_date,
                 'end_date'    => $request->end_date,
                 'is_locked'   => false,
+                'is_draft'    => true,
+                'is_archived' => false,
             ]);
 
             // ========================================
@@ -3600,11 +3602,14 @@ class PayrollController extends Controller
 
     public function getThirteenthMonthPeriods()
     {
-        $periods = ThirteenthMonthPeriod::orderBy('created_at', 'desc')->get();
+        $periods = ThirteenthMonthPeriod::where('is_archived', false)
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         return response()->json([
             'isSuccess' => true,
-            'data' => $periods
+            'message' => '13th month periods retrieved successfully.',
+            'data' => $periods,
         ]);
     }
 

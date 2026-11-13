@@ -10,7 +10,9 @@ class ThirteenthMonthPeriod extends Model
         'period_name',
         'start_date',
         'end_date',
-        'is_locked'
+        'is_draft',
+        'is_locked',
+        'is_archived'
     ];
 
     public function pays()
