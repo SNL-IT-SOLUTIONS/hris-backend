@@ -3768,4 +3768,167 @@ class PayrollController extends Controller
             'data'      => $period->load('payrollRecords:id,payroll_period_id,is_archived'),
         ]);
     }
+
+
+
+    public function viewThirteenthMonthCalculation($periodId, $employeeId)
+    {
+        try {
+
+            // ========================================
+            // GET 13TH MONTH PERIOD
+            // ========================================
+            $period = ThirteenthMonthPeriod::where('id', $periodId)
+                ->where('is_archived', false)
+                ->first();
+
+            if (!$period) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => '13th month period not found.',
+                ], 404);
+            }
+
+            // ========================================
+            // GET EMPLOYEE
+            // ========================================
+            $employee = Employee::with([
+                'department:id,department_name',
+                'position:id,position_name'
+            ])->find($employeeId);
+
+            if (!$employee) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Employee not found.',
+                ], 404);
+            }
+
+            // ========================================
+            // GET GENERATED 13TH MONTH PAY RECORD
+            // ========================================
+            $thirteenthMonth = ThirteenthMonth::where('period_id', $periodId)
+                ->where('employee_id', $employeeId)
+                ->where('is_archived', false)
+                ->first();
+
+            if (!$thirteenthMonth) {
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => '13th month pay record not found for this employee.',
+                ], 404);
+            }
+
+            // ========================================
+            // GET ONLY PROCESSED PAYROLL PERIODS
+            // ========================================
+            $payrollPeriods = PayrollPeriod::where('status', 'processed')
+                ->where('is_archived', false)
+                ->whereDate('cutoff_start_date', '<=', $period->end_date)
+                ->whereDate('cutoff_end_date', '>=', $period->start_date)
+                ->orderBy('cutoff_start_date', 'asc')
+                ->get();
+
+            $payrollPeriodIds = $payrollPeriods->pluck('id');
+
+            // ========================================
+            // GET EMPLOYEE PAYROLL RECORDS
+            // ========================================
+            $payrollRecords = PayrollRecord::where('employee_id', $employeeId)
+                ->whereIn('payroll_period_id', $payrollPeriodIds)
+                ->where('is_archived', false)
+                ->orderBy('created_at', 'asc')
+                ->get();
+
+            // ========================================
+            // MAP PAYROLL PERIOD INFORMATION
+            // ========================================
+            $periodLookup = $payrollPeriods->keyBy('id');
+
+            $breakdown = $payrollRecords->map(function ($record) use ($periodLookup) {
+
+                $payrollPeriod = $periodLookup->get($record->payroll_period_id);
+
+                return [
+                    'payroll_record_id' => $record->id,
+                    'payroll_period_id' => $record->payroll_period_id,
+
+                    'period_name' => $payrollPeriod?->period_name,
+                    'cutoff_start_date' => $payrollPeriod?->cutoff_start_date,
+                    'cutoff_end_date' => $payrollPeriod?->cutoff_end_date,
+                    'pay_date' => $payrollPeriod?->pay_date,
+
+                    'gross_base' => round((float) $record->gross_base, 2),
+                ];
+            });
+
+            // ========================================
+            // CALCULATE TOTAL BASIC SALARY
+            // ========================================
+            $totalBasicSalary = $payrollRecords->sum('gross_base');
+
+            // ========================================
+            // CALCULATE 13TH MONTH PAY
+            // ========================================
+            $calculatedAmount = round($totalBasicSalary / 12, 2);
+
+            // Saved amount generated previously
+            $savedAmount = round((float) $thirteenthMonth->amount, 2);
+
+            // ========================================
+            // RESPONSE
+            // ========================================
+            return response()->json([
+                'isSuccess' => true,
+                'message' => '13th month calculation retrieved successfully.',
+
+                'employee' => [
+                    'id' => $employee->id,
+                    'employee_id' => $employee->employee_id,
+                    'employee_name' => trim(
+                        $employee->first_name . ' ' . $employee->last_name
+                    ),
+                    'department' => $employee->department?->department_name,
+                    'position' => $employee->position?->position_name,
+                ],
+
+                'thirteenth_month_period' => [
+                    'id' => $period->id,
+                    'period_name' => $period->period_name,
+                    'start_date' => $period->start_date,
+                    'end_date' => $period->end_date,
+                ],
+
+                'calculation' => [
+                    'formula' => 'Total Basic Salary / 12',
+                    'total_payroll_periods' => $payrollRecords->count(),
+                    'total_basic_salary' => round($totalBasicSalary, 2),
+                    'divisor' => 12,
+                    'calculated_amount' => $calculatedAmount,
+                    'saved_amount' => $savedAmount,
+                    'difference' => round($savedAmount - $calculatedAmount, 2),
+                    'is_match' => abs($savedAmount - $calculatedAmount) < 0.01,
+                ],
+
+                'payroll_breakdown' => $breakdown,
+
+                'payslip' => [
+                    'id' => $thirteenthMonth->id,
+                    'amount' => $savedAmount,
+                    'remarks' => $thirteenthMonth->remarks,
+                    'created_at' => $thirteenthMonth->created_at,
+                ],
+
+            ], 200);
+        } catch (\Exception $e) {
+
+            Log::error('View 13th month calculation failed: ' . $e->getMessage());
+
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Failed to retrieve 13th month calculation.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
