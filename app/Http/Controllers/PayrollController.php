@@ -3586,6 +3586,103 @@ class PayrollController extends Controller
         ]);
     }
 
+
+
+public function getMyThirteenthMonthPayslip(Request $request)
+{
+    try {
+
+        // ========================================
+        // GET AUTHENTICATED EMPLOYEE
+        // ========================================
+        $employee = auth()->user();
+
+        if (!$employee) {
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => 'Unauthorized. Please log in.',
+            ], 401);
+        }
+
+        // ========================================
+        // GET EMPLOYEE'S 13TH MONTH PAY RECORDS
+        // ========================================
+        $pays = ThirteenthMonth::where('employee_id', $employee->id)
+            ->where('is_archived', false)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        if ($pays->isEmpty()) {
+            return response()->json([
+                'isSuccess' => true,
+                'message'   => 'No 13th month payslip records found.',
+                'data'      => [],
+                'summary'   => [
+                    'total_records' => 0,
+                    'total_amount'  => 0,
+                ],
+            ]);
+        }
+
+        // ========================================
+        // GET RELATED 13TH MONTH PERIODS
+        // ========================================
+        $periods = ThirteenthMonthPeriod::whereIn(
+            'id',
+            $pays->pluck('period_id')
+        )->get()->keyBy('id');
+
+        // ========================================
+        // FORMAT PAYSLIP DATA
+        // ========================================
+        $data = $pays->map(function ($pay) use ($periods) {
+
+            $period = $periods->get($pay->period_id);
+
+            return [
+                'id'          => $pay->id,
+                'period_id'   => $pay->period_id,
+                'period_name' => $period?->period_name,
+                'start_date'  => $period?->start_date,
+                'end_date'    => $period?->end_date,
+                'amount'      => (float) $pay->amount,
+                'remarks'     => $pay->remarks,
+                'created_at'  => $pay->created_at,
+            ];
+        });
+
+        // ========================================
+        // SUMMARY
+        // ========================================
+        $totalAmount = $pays->sum('amount');
+
+        return response()->json([
+            'isSuccess' => true,
+            'message'   => '13th month payslips retrieved successfully.',
+            'data'      => $data,
+            'summary'   => [
+                'employee_id'   => $employee->employee_id,
+                'employee_name' => trim(
+                    $employee->first_name . ' ' . $employee->last_name
+                ),
+                'total_records' => $pays->count(),
+                'total_amount'  => round($totalAmount, 2),
+            ],
+        ], 200);
+
+    } catch (\Exception $e) {
+
+        Log::error('Get employee 13th month payslip failed: ' . $e->getMessage());
+
+        return response()->json([
+            'isSuccess' => false,
+            'message'   => 'Failed to retrieve 13th month payslips.',
+            'error'     => $e->getMessage(),
+        ], 500);
+    }
+}
+
+
     public function getPaysByPeriod($periodId, Request $request)
     {
         $perPage = $request->input('per_page', 10);
