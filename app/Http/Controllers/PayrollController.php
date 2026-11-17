@@ -886,6 +886,1382 @@ class PayrollController extends Controller
     }
 
 
+    public function updatePayrollPeriod(Request $request, $id)
+    {
+
+        $validated = $request->validate([
+
+            'period_name' => 'required|string|max:255',
+
+            'pay_date' => 'required|date',
+
+            'cutoff_start_date' => 'required|date',
+
+            'cutoff_end_date' => 'required|date|after_or_equal:cutoff_start_date',
+
+            'employees' => 'required|array|min:1',
+
+
+            'employees.*.remarks' => 'nullable|string',
+
+            'employees.*.days_worked' => 'nullable|numeric|min:0',
+
+            'employees.*.absences' => 'nullable|numeric|min:0',
+
+            'employees.*.overtime_hours' => 'nullable|numeric|min:0',
+            'employees.*.employee_id' => 'required|integer|exists:employees,id|distinct',
+
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+
+            // CUTOFF DATES
+
+            $cutoffStart = Carbon::parse($validated['cutoff_start_date'])->startOfDay();
+
+            $cutoffEnd = Carbon::parse($validated['cutoff_end_date'])->endOfDay();
+            // GET EXISTING PAYROLL PERIOD
+            $payrollPeriod = PayrollPeriod::where('id', $id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$payrollPeriod) {
+                DB::rollBack();
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Payroll period not found.',
+                ], 404);
+            }
+
+            if (strtolower($payrollPeriod->status) !== 'draft') {
+                DB::rollBack();
+                return response()->json([
+                    'isSuccess' => false,
+                    'message' => 'Only draft payroll periods can be updated.',
+                ], 422);
+            }
+
+            // UPDATE PAYROLL PERIOD DETAILS
+            $payrollPeriod->update([
+                'period_name' => $validated['period_name'],
+                'pay_date' => $validated['pay_date'],
+                'cutoff_start_date' => $validated['cutoff_start_date'],
+                'cutoff_end_date' => $validated['cutoff_end_date'],
+            ]);
+
+            // GET HOLIDAYS WITHIN CUTOFF
+
+            $holidays = Holiday::with('holidayType')
+
+                ->whereBetween('holiday_date', [
+
+                    $cutoffStart->toDateString(),
+
+                    $cutoffEnd->toDateString(),
+
+                ])
+
+                ->where('is_archived', 0)
+
+                ->get()
+
+                ->keyBy(function ($holiday) {
+
+                    return Carbon::parse($holiday->holiday_date)->toDateString();
+                });
+
+            // CALCULATE TOTAL WORKING DAYS
+
+            $cutoffDays = 0;
+
+            $cutoffPeriod = CarbonPeriod::create(
+
+                $cutoffStart->copy()->startOfDay(),
+
+                $cutoffEnd->copy()->startOfDay()
+
+            );
+
+            foreach ($cutoffPeriod as $date) {
+
+                if ($date->isWeekend()) {
+
+                    continue;
+                }
+
+                $dateString = $date->toDateString();
+
+                if ($holidays->has($dateString)) {
+
+                    continue;
+                }
+
+                $cutoffDays++;
+            }
+
+            // LOOP THROUGH SELECTED EMPLOYEES
+
+            foreach ($validated['employees'] as $employeeInput) {
+
+                // GET EMPLOYEE
+
+                $employee = Employee::where('id', $employeeInput['employee_id'])
+
+                    ->where('is_active', 1)
+
+                    ->where('is_archived', 0)
+
+                    ->first();
+
+                if (!$employee) {
+                    throw new Exception(
+                        'Employee with ID ' . $employeeInput['employee_id'] .
+                            ' was not found or is inactive.'
+                    );
+                }
+
+                // GET EXISTING PAYROLL RECORD FOR THIS EMPLOYEE
+                $existingPayrollRecord = PayrollRecord::where('payroll_period_id', $payrollPeriod->id)
+                    ->where('employee_id', $employee->id)
+                    ->where('is_archived', 0)
+                    ->lockForUpdate()
+                    ->first();
+
+                // RESTORE PREVIOUS LOAN DEDUCTIONS BEFORE RECALCULATING
+                if ($existingPayrollRecord) {
+                    // Keep historical payroll details instead of deleting them.
+                    if (
+                        !\Illuminate\Support\Facades\Schema::hasColumn('payroll_deductions', 'is_archived') ||
+                        !\Illuminate\Support\Facades\Schema::hasColumn('payroll_allowances', 'is_archived')
+                    ) {
+                        throw new Exception(
+                            'Add an is_archived column to payroll_deductions and payroll_allowances before recalculating an existing payroll period.'
+                        );
+                    }
+
+                    $previousLoanDeductions = PayrollDeduction::where(
+                        'payroll_record_id',
+                        $existingPayrollRecord->id
+                    )
+                        ->whereNotNull('loan_id')
+                        ->where('is_archived', 0)
+                        ->get();
+
+                    foreach ($previousLoanDeductions as $previousDeduction) {
+                        $previousLoan = Loan::where('id', $previousDeduction->loan_id)
+                            ->lockForUpdate()
+                            ->first();
+
+                        if ($previousLoan && $previousLoan->remaining_balance !== null) {
+                            $previousLoan->remaining_balance += (float) $previousDeduction->deduction_amount;
+
+                            if ($previousLoan->remaining_balance > 0 && strtolower($previousLoan->status) === 'paid') {
+                                $previousLoan->status = 'active';
+                            }
+
+                            $previousLoan->save();
+                        }
+                    }
+
+                    PayrollDeduction::where('payroll_record_id', $existingPayrollRecord->id)
+                        ->where('is_archived', 0)
+                        ->update(['is_archived' => 1]);
+
+                    PayrollAllowance::where('payroll_record_id', $existingPayrollRecord->id)
+                        ->where('is_archived', 0)
+                        ->update(['is_archived' => 1]);
+                }
+
+                // OVERTIME
+
+                $approvedOvertimeHours = OvertimeRequest::where(
+
+                    'employee_id',
+
+                    $employee->id
+
+                )
+
+                    ->where('is_archived', 0)
+
+                    ->where('status', 'Approved')
+
+                    ->whereBetween('overtime_date', [
+
+                        $cutoffStart->toDateString(),
+
+                        $cutoffEnd->toDateString(),
+
+                    ])
+
+                    ->sum('total_hours');
+
+                // MANUAL OVERTIME OVERRIDE
+
+                $hasManualOvertime =
+
+                    array_key_exists('overtime_hours', $employeeInput)
+
+                    && $employeeInput['overtime_hours'] !== null;
+
+                if ($hasManualOvertime) {
+
+                    $overtime = (float) $employeeInput['overtime_hours'];
+                } else {
+
+                    $overtime = (float) $approvedOvertimeHours;
+                }
+
+                // DAILY / HOURLY RATE
+
+                $daily = (float) $employee->base_salary;
+
+                $hourlyRate = $daily / 8;
+
+                // GET ATTENDANCE RECORDS
+
+                $attendanceRecords = Attendance::where(
+
+                    'employee_id',
+
+                    $employee->id
+
+                )
+
+                    ->whereIn('status', [
+
+                        'Present',
+
+                        'Late',
+
+                    ])
+
+                    ->where(function ($query) use ($cutoffStart, $cutoffEnd) {
+
+                        $query->whereBetween(
+
+                            DB::raw('DATE(clock_in)'),
+
+                            [
+
+                                $cutoffStart->toDateString(),
+
+                                $cutoffEnd->toDateString(),
+
+                            ]
+
+                        )
+
+                            ->orWhereBetween(
+
+                                DB::raw('DATE(clock_out)'),
+
+                                [
+
+                                    $cutoffStart->toDateString(),
+
+                                    $cutoffEnd->toDateString(),
+
+                                ]
+
+                            );
+                    })
+
+                    ->get()
+
+                    ->unique('id')
+
+                    ->values();
+
+                // BUILD ATTENDANCE DATES
+
+                $attendanceDates = collect();
+
+                foreach ($attendanceRecords as $attendance) {
+
+                    $attendanceDateValue =
+
+                        $attendance->clock_in ?? $attendance->clock_out;
+
+                    if (!$attendanceDateValue) {
+
+                        continue;
+                    }
+
+                    $attendanceDate = Carbon::parse($attendanceDateValue)->startOfDay();
+
+                    if ($attendanceDate->lt($cutoffStart->copy()->startOfDay())) {
+
+                        continue;
+                    }
+
+                    if ($attendanceDate->gt($cutoffEnd->copy()->startOfDay())) {
+
+                        continue;
+                    }
+
+                    if ($attendanceDate->isWeekend()) {
+
+                        continue;
+                    }
+
+                    $attendanceDates->push($attendanceDate->toDateString());
+                }
+
+                $attendanceDates = $attendanceDates
+
+                    ->unique()
+
+                    ->values();
+
+                // GET APPROVED LEAVES
+
+                $approvedLeaves = DB::table('leaves')
+
+                    ->where('employee_id', $employee->id)
+
+                    ->where('status', 'Approved')
+
+                    ->where('is_archived', 0)
+
+                    ->where(function ($query) use ($cutoffStart, $cutoffEnd) {
+
+                        $query->whereBetween(
+
+                            'start_date',
+
+                            [
+
+                                $cutoffStart->toDateString(),
+
+                                $cutoffEnd->toDateString(),
+
+                            ]
+
+                        )
+
+                            ->orWhereBetween(
+
+                                'end_date',
+
+                                [
+
+                                    $cutoffStart->toDateString(),
+
+                                    $cutoffEnd->toDateString(),
+
+                                ]
+
+                            )
+
+                            ->orWhere(function ($q) use ($cutoffStart, $cutoffEnd) {
+
+                                $q->where(
+
+                                    'start_date',
+
+                                    '<=',
+
+                                    $cutoffStart->toDateString()
+
+                                )
+
+                                    ->where(
+
+                                        'end_date',
+
+                                        '>=',
+
+                                        $cutoffEnd->toDateString()
+
+                                    );
+                            });
+                    })
+
+                    ->get();
+
+                // BUILD PAID LEAVE DATES
+
+                $paidLeaveDates = collect();
+
+                foreach ($approvedLeaves as $leave) {
+
+                    $leaveStart = Carbon::parse($leave->start_date)->startOfDay();
+
+                    $leaveEnd = Carbon::parse($leave->end_date)->startOfDay();
+
+                    if ($leaveStart->lt($cutoffStart->copy()->startOfDay())) {
+
+                        $leaveStart = $cutoffStart->copy()->startOfDay();
+                    }
+
+                    if ($leaveEnd->gt($cutoffEnd->copy()->startOfDay())) {
+
+                        $leaveEnd = $cutoffEnd->copy()->startOfDay();
+                    }
+
+                    if ($leaveStart->gt($leaveEnd)) {
+
+                        continue;
+                    }
+
+                    $leavePeriod = CarbonPeriod::create(
+
+                        $leaveStart,
+
+                        $leaveEnd
+
+                    );
+
+                    foreach ($leavePeriod as $leaveDate) {
+
+                        if ($leaveDate->isWeekend()) {
+
+                            continue;
+                        }
+
+                        $dateString = $leaveDate->toDateString();
+
+                        // Do not count a leave date if the employee has attendance
+
+                        if ($attendanceDates->contains($dateString)) {
+
+                            continue;
+                        }
+
+                        $paidLeaveDates->push($dateString);
+                    }
+                }
+
+                $paidLeaveDates = $paidLeaveDates
+
+                    ->unique()
+
+                    ->values();
+
+                // PROCESS ATTENDANCE PAY
+
+                $normalPay = 0;
+
+                $holidayPay = 0;
+
+                $actualNormalWorkedDays = 0;
+
+                $phHolidayWorkedDays = 0;
+
+                $usHolidayPresentDays = 0;
+
+                foreach ($attendanceRecords as $attendance) {
+
+                    $attendanceDateValue =
+
+                        $attendance->clock_in ?? $attendance->clock_out;
+
+                    if (!$attendanceDateValue) {
+
+                        continue;
+                    }
+
+                    $attendanceDate = Carbon::parse($attendanceDateValue)->startOfDay();
+
+                    $dateString = $attendanceDate->toDateString();
+
+                    if ($attendanceDate->lt($cutoffStart->copy()->startOfDay())) {
+
+                        continue;
+                    }
+
+                    if ($attendanceDate->gt($cutoffEnd->copy()->startOfDay())) {
+
+                        continue;
+                    }
+
+                    if ($attendanceDate->isWeekend()) {
+
+                        continue;
+                    }
+
+                    if ($holidays->has($dateString)) {
+
+                        $holiday = $holidays->get($dateString);
+
+                        // US HOLIDAY: PRESENT BUT UNPAID
+
+                        if (
+
+                            $holiday->holidayType &&
+
+                            strtoupper($holiday->holidayType->country ?? '') === 'US'
+
+                        ) {
+
+                            $usHolidayPresentDays++;
+
+                            continue;
+                        }
+
+                        // PH HOLIDAY PAY
+
+                        $holidayRate = $holiday->holidayType->rate ?? 1;
+
+                        $holidayPay += $daily * $holidayRate;
+
+                        $phHolidayWorkedDays++;
+
+                        continue;
+                    }
+
+                    // NORMAL WORKDAY
+
+                    $normalPay += $daily;
+
+                    $actualNormalWorkedDays++;
+                }
+
+                // PAID LEAVE DAYS
+
+                $paidLeaveDays = $paidLeaveDates->count();
+
+                // PAID LEAVE PAY
+
+                $paidLeavePay = $daily * $paidLeaveDays;
+
+                // AUTOMATIC DAYS WORKED
+
+                // Approved leave is NOT included in days_worked.
+
+                $automaticDaysWorked =
+
+                    $actualNormalWorkedDays
+
+                    + $phHolidayWorkedDays;
+
+                // AUTOMATIC ABSENCES
+
+                // Approved leave does NOT count as an absence.
+
+                $automaticAbsences = max(
+
+                    $cutoffDays
+
+                        - $actualNormalWorkedDays
+
+                        - $paidLeaveDays
+
+                        - $phHolidayWorkedDays,
+
+                    0
+
+                );
+
+                // MANUAL DAYS WORKED / ABSENCES
+
+                $hasManualDaysWorked =
+
+                    array_key_exists('days_worked', $employeeInput)
+
+                    && $employeeInput['days_worked'] !== null;
+
+                $hasManualAbsences =
+
+                    array_key_exists('absences', $employeeInput)
+
+                    && $employeeInput['absences'] !== null;
+
+                // FINAL DAYS WORKED
+
+                if ($hasManualDaysWorked) {
+
+                    $paidDays = (float) $employeeInput['days_worked'];
+                } else {
+
+                    $paidDays = $automaticDaysWorked;
+                }
+
+                // FINAL ABSENCES
+
+                if ($hasManualAbsences) {
+
+                    $absences = (float) $employeeInput['absences'];
+                } else {
+
+                    $absences = $automaticAbsences;
+                }
+
+                // PRESENT DAYS
+
+                // Worked days + approved leave days + US holiday attendance.
+
+                $presentDays =
+
+                    $paidDays
+
+                    + $paidLeaveDays
+
+                    + $usHolidayPresentDays;
+
+                // MANUAL DAYS WORKED PAY ADJUSTMENT
+
+                if ($hasManualDaysWorked) {
+
+                    $normalPay = $daily * $paidDays;
+                }
+
+                // NIGHT DIFFERENTIAL
+
+                $nightHours = $employee->night_hours ?? 0;
+
+                $nightRate = $employee->night_rate ?? 10;
+
+                $nightDiffPerDay =
+
+                    $hourlyRate
+
+                    * ($nightRate / 100)
+
+                    * $nightHours;
+
+                $nightDiffDays = $hasManualDaysWorked
+
+                    ? $paidDays
+
+                    : $actualNormalWorkedDays;
+
+                $totalNightDiff =
+
+                    $hourlyRate
+
+                    * ($nightRate / 100)
+
+                    * $nightHours
+
+                    * $nightDiffDays;
+
+                // OVERTIME
+
+                $overtimePay = $overtime * ($hourlyRate * 1.25);
+
+                // GROSS BASE
+
+                $grossBase =
+
+                    $normalPay
+
+                    + $holidayPay
+
+                    + $overtimePay;
+
+                // CHECK LATE ATTENDANCE
+
+                // Checks both status and is_late from the attendance table.
+
+                $hasLate = Attendance::where(
+
+                    'employee_id',
+
+                    $employee->id
+
+                )
+
+                    ->where(function ($query) {
+
+                        $query->where('status', 'Late')
+
+                            ->orWhere('is_late', 1);
+                    })
+
+                    ->where(function ($query) use ($cutoffStart, $cutoffEnd) {
+
+                        $query->whereBetween(
+
+                            DB::raw('DATE(clock_in)'),
+
+                            [
+
+                                $cutoffStart->toDateString(),
+
+                                $cutoffEnd->toDateString(),
+
+                            ]
+
+                        )
+
+                            ->orWhereBetween(
+
+                                DB::raw('DATE(clock_out)'),
+
+                                [
+
+                                    $cutoffStart->toDateString(),
+
+                                    $cutoffEnd->toDateString(),
+
+                                ]
+
+                            );
+                    })
+
+                    ->exists();
+
+                // PERFECT ATTENDANCE DEBUG
+
+                $payDate = Carbon::parse($validated['pay_date']);
+
+                Log::info('========== PAYROLL PERFECT ATTENDANCE DEBUG ==========', [
+
+                    'employee_id' => $employee->id,
+
+                    'payroll_period_id' => $payrollPeriod->id,
+
+                    'pay_date' => $validated['pay_date'],
+
+                    'pay_date_day' => $payDate->day,
+
+                    'days_worked' => $paidDays,
+
+                    'present_days' => $presentDays,
+
+                    'paid_leave_days' => $paidLeaveDays,
+
+                    'absences' => $absences,
+
+                    'has_late' => $hasLate,
+
+                    'cutoff_start' => $cutoffStart->toDateString(),
+
+                    'cutoff_end' => $cutoffEnd->toDateString(),
+
+                ]);
+
+                // GET EMPLOYEE ALLOWANCES
+
+                $allowances = DB::table('employee_allowance')
+
+                    ->join(
+
+                        'allowance_types',
+
+                        'employee_allowance.allowance_type_id',
+
+                        '=',
+
+                        'allowance_types.id'
+
+                    )
+
+                    ->where(
+
+                        'employee_allowance.employee_id',
+
+                        $employee->id
+
+                    )
+
+                    ->where('allowance_types.is_archived', 0)
+
+                    ->select(
+
+                        'allowance_types.id as allowance_type_id',
+
+                        'allowance_types.type_name',
+
+                        'employee_allowance.amount'
+
+                    )
+
+                    ->get();
+
+                // DEBUG: RETRIEVED ALLOWANCES
+
+                Log::info('EMPLOYEE ALLOWANCES RETRIEVED', [
+
+                    'employee_id' => $employee->id,
+
+                    'allowances_count' => $allowances->count(),
+
+                    'allowances' => $allowances->toArray(),
+
+                ]);
+
+                // CALCULATE ALLOWANCES
+
+                $totalAllowances = 0;
+
+                $allowanceRecords = [];
+
+                foreach ($allowances as $allowance) {
+
+                    $allowanceAmount = 0;
+
+                    Log::info('PROCESSING PAYROLL ALLOWANCE', [
+
+                        'employee_id' => $employee->id,
+
+                        'allowance_type_id' => $allowance->allowance_type_id,
+
+                        'allowance_name' => $allowance->type_name,
+
+                        'assigned_amount' => $allowance->amount,
+
+                    ]);
+
+                    // PERFECT ATTENDANCE
+
+                    if ((int) $allowance->allowance_type_id === 12) {
+
+                        $isPayDateFifth = $payDate->day === 5;
+
+                        $hasNoAbsences = (float) $absences <= 0;
+
+                        $hasNoLate = !$hasLate;
+
+                        Log::info('PERFECT ATTENDANCE ELIGIBILITY CHECK', [
+
+                            'employee_id' => $employee->id,
+
+                            'pay_date' => $validated['pay_date'],
+
+                            'is_pay_date_fifth' => $isPayDateFifth,
+
+                            'absences' => $absences,
+
+                            'has_no_absences' => $hasNoAbsences,
+
+                            'has_late' => $hasLate,
+
+                            'has_no_late' => $hasNoLate,
+
+                            'assigned_amount' => $allowance->amount,
+
+                        ]);
+
+                        if (
+
+                            $isPayDateFifth &&
+
+                            $hasNoAbsences &&
+
+                            $hasNoLate
+
+                        ) {
+
+                            $allowanceAmount = (float) $allowance->amount;
+
+                            Log::info('PERFECT ATTENDANCE APPROVED', [
+
+                                'employee_id' => $employee->id,
+
+                                'allowance_amount' => $allowanceAmount,
+
+                            ]);
+                        } else {
+
+                            $allowanceAmount = 0;
+
+                            $failedConditions = [];
+
+                            if (!$isPayDateFifth) {
+
+                                $failedConditions[] = 'Pay date is not the 5th.';
+                            }
+
+                            if (!$hasNoAbsences) {
+
+                                $failedConditions[] = 'Employee has absences.';
+                            }
+
+                            if (!$hasNoLate) {
+
+                                $failedConditions[] = 'Employee has Late attendance.';
+                            }
+
+                            Log::warning('PERFECT ATTENDANCE REJECTED', [
+
+                                'employee_id' => $employee->id,
+
+                                'failed_conditions' => $failedConditions,
+
+                            ]);
+                        }
+                    } else {
+
+                        // NORMAL ALLOWANCE: MONTHLY AMOUNT / 2
+
+                        $allowanceAmount = (float) $allowance->amount / 2;
+                    }
+
+                    Log::info('PAYROLL ALLOWANCE CALCULATION RESULT', [
+
+                        'employee_id' => $employee->id,
+
+                        'allowance_type_id' => $allowance->allowance_type_id,
+
+                        'allowance_name' => $allowance->type_name,
+
+                        'assigned_amount' => $allowance->amount,
+
+                        'calculated_amount' => $allowanceAmount,
+
+                    ]);
+
+                    if ($allowanceAmount > 0) {
+
+                        $totalAllowances += $allowanceAmount;
+
+                        $allowanceRecords[] = [
+
+                            'allowance_type_id' => $allowance->allowance_type_id,
+
+                            'amount' => $allowanceAmount,
+
+                        ];
+                    }
+                }
+
+                // FINAL ALLOWANCE SUMMARY
+
+                Log::info('FINAL PAYROLL ALLOWANCE SUMMARY', [
+
+                    'employee_id' => $employee->id,
+
+                    'total_allowances' => $totalAllowances,
+
+                    'allowance_records' => $allowanceRecords,
+
+                ]);
+
+                // GROSS INCLUDING ALLOWANCES
+
+                $grossWithAllowances =
+
+                    $grossBase
+
+                    + $paidLeavePay
+
+                    + $totalAllowances
+
+                    + $totalNightDiff;
+
+                // GET EMPLOYEE BENEFITS
+
+                $benefits = DB::table('employee_benefit')
+
+                    ->join(
+
+                        'benefit_types',
+
+                        'employee_benefit.benefit_type_id',
+
+                        '=',
+
+                        'benefit_types.id'
+
+                    )
+
+                    ->where(
+
+                        'employee_benefit.employee_id',
+
+                        $employee->id
+
+                    )
+
+                    ->where('benefit_types.is_active', 1)
+
+                    ->where('benefit_types.is_archived', 0)
+
+                    ->select(
+
+                        'benefit_types.id as benefit_type_id',
+
+                        'benefit_types.benefit_name',
+
+                        'employee_benefit.amount'
+
+                    )
+
+                    ->get();
+
+                // BENEFIT DEDUCTIONS
+
+                $totalBenefitDeductions = 0;
+
+                $benefitRecords = [];
+
+                foreach ($benefits as $benefit) {
+
+                    $deductionAmount = $benefit->amount / 2;
+
+                    $totalBenefitDeductions += $deductionAmount;
+
+                    $benefitRecords[] = [
+
+                        'benefit_type_id' => $benefit->benefit_type_id,
+
+                        'amount' => $deductionAmount,
+
+                    ];
+                }
+
+                // LATE DEDUCTIONS
+
+                $totalLateDeductions = Attendance::where(
+
+                    'employee_id',
+
+                    $employee->id
+
+                )
+
+                    ->whereIn('status', [
+
+                        'Present',
+
+                        'Late',
+
+                    ])
+
+                    ->where(function ($query) use ($cutoffStart, $cutoffEnd) {
+
+                        $query->whereBetween(
+
+                            DB::raw('DATE(clock_in)'),
+
+                            [
+
+                                $cutoffStart->toDateString(),
+
+                                $cutoffEnd->toDateString(),
+
+                            ]
+
+                        )
+
+                            ->orWhereBetween(
+
+                                DB::raw('DATE(clock_out)'),
+
+                                [
+
+                                    $cutoffStart->toDateString(),
+
+                                    $cutoffEnd->toDateString(),
+
+                                ]
+
+                            );
+                    })
+
+                    ->sum('late_deduction');
+
+                // GET ACTIVE LOANS
+
+                $loans = Loan::where(
+
+                    'employee_id',
+
+                    $employee->id
+
+                )
+
+                    ->where('is_archived', 0)
+
+                    ->whereIn('status', [
+
+                        'active',
+
+                        'Active',
+
+                    ])
+
+                    ->get();
+
+                // LOAN DEDUCTIONS
+
+                $totalLoanDeductions = 0;
+
+                $loanRecords = [];
+
+                foreach ($loans as $loan) {
+
+                    $loanDeduction = $loan->monthly_amortization / 2;
+
+                    if (
+
+                        isset($loan->remaining_balance) &&
+
+                        $loan->remaining_balance !== null
+
+                    ) {
+
+                        $loanDeduction = min(
+
+                            $loanDeduction,
+
+                            $loan->remaining_balance
+
+                        );
+                    }
+
+                    if ($loanDeduction <= 0) {
+
+                        continue;
+                    }
+
+                    $totalLoanDeductions += $loanDeduction;
+
+                    $loanRecords[] = [
+
+                        'loan' => $loan,
+
+                        'amount' => $loanDeduction,
+
+                    ];
+                }
+
+                // TOTAL DEDUCTIONS
+
+                $totalDeductions =
+
+                    $totalBenefitDeductions
+
+                    + $totalLoanDeductions
+
+                    + $totalLateDeductions;
+
+                // NET PAY
+
+                $netPay =
+
+                    $grossWithAllowances
+
+                    - $totalDeductions;
+
+                // CREATE PAYROLL RECORD
+
+                $payrollRecord = PayrollRecord::updateOrCreate([
+                    'payroll_period_id' => $payrollPeriod->id,
+                    'employee_id' => $employee->id,
+                ], [
+
+                    'is_archived' => 0,
+                    'daily_rate' => $daily,
+
+                    'days_worked' => $paidDays,
+
+                    'present_days' => $presentDays,
+
+                    'overtime_hours' => $overtime,
+
+                    'absences' => $absences,
+
+                    'holiday_pay' => $holidayPay,
+
+                    'night_diff_pay' => $totalNightDiff,
+
+                    'gross_base' => $grossBase,
+
+                    'leave_pay' => $paidLeavePay,
+
+                    'gross_pay' => $grossWithAllowances,
+
+                    'total_allowances' => $totalAllowances,
+
+                    'total_loan_deductions' => $totalLoanDeductions,
+
+                    'total_late_deductions' => $totalLateDeductions,
+
+                    'total_deductions' => $totalDeductions,
+
+                    'net_pay' => $netPay,
+
+                    'remarks' => $employeeInput['remarks'] ?? null,
+
+                ]);
+
+                // DEBUG: PAYROLL RECORD CREATED
+
+                Log::info('PAYROLL RECORD CREATED', [
+
+                    'employee_id' => $employee->id,
+
+                    'payroll_record_id' => $payrollRecord->id,
+
+                    'days_worked' => $paidDays,
+
+                    'present_days' => $presentDays,
+
+                    'paid_leave_days' => $paidLeaveDays,
+
+                    'absences' => $absences,
+
+                    'total_allowances' => $totalAllowances,
+
+                    'gross_pay' => $grossWithAllowances,
+
+                    'net_pay' => $netPay,
+
+                ]);
+
+                // SAVE BENEFIT DEDUCTIONS
+
+                foreach ($benefitRecords as $benefitRecord) {
+
+                    PayrollDeduction::create([
+
+                        'payroll_record_id' => $payrollRecord->id,
+
+                        'benefit_type_id' => $benefitRecord['benefit_type_id'],
+
+                        'deduction_amount' => $benefitRecord['amount'],
+
+                    ]);
+                }
+
+                // SAVE LOAN DEDUCTIONS + UPDATE BALANCE
+
+                foreach ($loanRecords as $loanRecord) {
+
+                    $loan = $loanRecord['loan'];
+
+                    $deductionAmount = $loanRecord['amount'];
+
+                    PayrollDeduction::create([
+
+                        'payroll_record_id' => $payrollRecord->id,
+
+                        'loan_id' => $loan->id,
+
+                        'deduction_amount' => $deductionAmount,
+
+                    ]);
+
+                    if (
+
+                        isset($loan->remaining_balance) &&
+
+                        $loan->remaining_balance !== null
+
+                    ) {
+
+                        $newBalance =
+
+                            $loan->remaining_balance - $deductionAmount;
+
+                        if ($newBalance <= 0) {
+
+                            $loan->remaining_balance = 0;
+
+                            $loan->status = 'paid';
+                        } else {
+
+                            $loan->remaining_balance = $newBalance;
+                        }
+
+                        $loan->save();
+                    }
+                }
+
+                // SAVE ALLOWANCES
+
+                foreach ($allowanceRecords as $allowanceRecord) {
+
+                    $savedAllowance = PayrollAllowance::create([
+
+                        'payroll_record_id' => $payrollRecord->id,
+
+                        'allowance_type_id' => $allowanceRecord['allowance_type_id'],
+
+                        'allowance_amount' => $allowanceRecord['amount'],
+
+                    ]);
+
+                    Log::info('PAYROLL ALLOWANCE SAVED', [
+
+                        'employee_id' => $employee->id,
+
+                        'payroll_record_id' => $payrollRecord->id,
+
+                        'payroll_allowance_id' => $savedAllowance->id,
+
+                        'allowance_type_id' => $savedAllowance->allowance_type_id,
+
+                        'allowance_amount' => $savedAllowance->allowance_amount,
+
+                    ]);
+                }
+
+                // VERIFY PERFECT ATTENDANCE IN SAVED RECORDS
+
+                $savedPerfectAttendance = PayrollAllowance::where(
+
+                    'payroll_record_id',
+
+                    $payrollRecord->id
+
+                )
+
+                    ->where('allowance_type_id', 12)
+
+                    ->first();
+
+                Log::info('PERFECT ATTENDANCE SAVE VERIFICATION', [
+
+                    'employee_id' => $employee->id,
+
+                    'payroll_record_id' => $payrollRecord->id,
+
+                    'perfect_attendance_saved' => $savedPerfectAttendance !== null,
+
+                    'saved_amount' => $savedPerfectAttendance->allowance_amount ?? 0,
+
+                ]);
+            }
+
+            // COMMIT
+
+            DB::commit();
+
+            // RESPONSE
+
+            return response()->json([
+
+                'isSuccess' => true,
+
+                'message' => 'Payroll period and employee payroll records updated successfully.',
+
+                'data' => $payrollPeriod,
+
+            ], 200);
+        } catch (Exception $e) {
+
+            // ROLLBACK
+
+            DB::rollBack();
+
+            Log::error('PAYROLL PERIOD UPDATE FAILED', [
+
+                'message' => $e->getMessage(),
+
+                'file' => $e->getFile(),
+
+                'line' => $e->getLine(),
+
+            ]);
+
+            return response()->json([
+
+                'isSuccess' => false,
+
+                'message' => 'Failed to update payroll period.',
+
+                'error' => $e->getMessage(),
+
+            ], 500);
+        }
+    }
 
 
     /**
