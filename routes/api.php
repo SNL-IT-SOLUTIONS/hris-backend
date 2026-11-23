@@ -49,6 +49,7 @@ Route::get('my-profile', [AuthController::class, 'getMyProfile'])->middleware('a
 Route::post('update-profile', [AuthController::class, 'updateProfile'])->middleware('auth:sanctum');
 Route::post('update-profile-picture', [AuthController::class, 'updateProfilePicture'])->middleware('auth:sanctum');
 Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');
+Route::middleware('auth:sanctum')->post('/employees/reset-password',    [AuthController::class, 'resetPassword']);
 
 
 

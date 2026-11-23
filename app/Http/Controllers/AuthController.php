@@ -553,6 +553,42 @@ class AuthController extends Controller
         ]);
     }
 
+
+
+
+    public function resetPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'employee_id' => 'required|exists:employees,id',
+            'new_password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $employee = Employee::find($validated['employee_id']);
+
+        if (!$employee) {
+            return response()->json([
+                'isSuccess' => false,
+                'message' => 'Employee not found.',
+            ], 404);
+        }
+
+        $employee->password = Hash::make($validated['new_password']);
+        $employee->save();
+
+        // Revoke all existing employee login tokens
+        $employee->tokens()->delete();
+
+        return response()->json([
+            'isSuccess' => true,
+            'message' => 'Employee password reset successfully.',
+            'data' => [
+                'employee_id' => $employee->id,
+                'name' => $employee->first_name . ' ' . $employee->last_name,
+            ],
+        ]);
+    }
+
+
     public function changePassword(Request $request)
     {
         $employee = auth()->user(); // Employee model via Sanctum
