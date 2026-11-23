@@ -5151,6 +5151,36 @@ class PayrollController extends Controller
     }
 
 
+    public function archiveThirteenthMonthPeriod($id)
+    {
+        $period = ThirteenthMonthPeriod::find($id);
+
+        if (!$period) {
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => '13th month payroll period not found.',
+            ], 404);
+        }
+
+        if ($period->is_archived) {
+            return response()->json([
+                'isSuccess' => false,
+                'message'   => '13th month payroll period is already archived.',
+            ], 400);
+        }
+
+        $period->update([
+            'is_archived' => true,
+        ]);
+
+        return response()->json([
+            'isSuccess' => true,
+            'message'   => '13th month payroll period archived successfully.',
+            'data'      => $period->fresh(),
+        ]);
+    }
+
+
     public function processThirteenthMonthDraft($periodId)
     {
         try {
